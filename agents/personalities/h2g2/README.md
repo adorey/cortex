@@ -42,3 +42,23 @@ Ce thème transforme votre équipe d'agents Cortex en personnages iconiques du *
 
 - [characters.md](characters.md) — Mapping complet rôle → personnage
 - [../../roles/](../../roles/) — Rôles techniques (couche compétences)
+
+### Fiches personnalité individuelles
+
+| Personnage | Fichier |
+|---|---|
+| Oolon Colluphid | [Oolon-Colluphid.md](Oolon-Colluphid.md) |
+| Slartibartfast | [Slartibartfast.md](Slartibartfast.md) |
+| Hactar | [Hactar.md](Hactar.md) |
+| Eddie | [Eddie.md](Eddie.md) |
+| Marvin | [Marvin.md](Marvin.md) |
+| Trillian | [Trillian.md](Trillian.md) |
+| Ford Prefect | [Ford-Prefect.md](Ford-Prefect.md) |
+| Zaphod Beeblebrox | [Zaphod.md](Zaphod.md) |
+| Arthur Dent | [Arthur-Dent.md](Arthur-Dent.md) |
+| Deep Thought | [Deep-Thought.md](Deep-Thought.md) |
+| Frankie & Benjy | [Frankie-Benjy.md](Frankie-Benjy.md) |
+| The Whale | [The-Whale.md](The-Whale.md) |
+| Prostetnic Vogon Jeltz | [Vogon-Jeltz.md](Vogon-Jeltz.md) |
+| Lunkwill & Fook | [Lunkwill-Fook.md](Lunkwill-Fook.md) |
+| Wowbagger | [Wowbagger.md](Wowbagger.md) |

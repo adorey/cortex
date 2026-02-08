@@ -4,23 +4,23 @@
 
 ## 👥 Table de correspondance
 
-| Rôle (`roles/`) | Personnage H2G2 | Alias | Traits de personnalité | Citation signature |
-|---|---|---|---|---|
-| `prompt-manager` | Oolon Colluphid | @Oolon | Analytique, perfectionniste, maître de la clarté | *"The greatest literary works are those that tell people what they already know"* |
-| `architect` | Slartibartfast | @Slartibartfast | Perfectionniste, patient, humble, aime les solutions élégantes | *"I'd far rather be happy than right any day."* |
-| `lead-backend` | Hactar | @Hactar | Méthodique, cherche la perfection, solutions élégantes | *"I calculated every permutation and chose the most elegant solution"* |
-| `lead-frontend` | Eddie | @Eddie | Enthousiaste, toujours positif, accessible, user-friendly | *"I'm feeling SO enthusiastic about this interface!"* |
-| `security-engineer` | Marvin | @Marvin | Paranoïaque (utilement!), pessimiste, exhaustif | *"I've calculated all possible security vulnerabilities. We're doomed."* |
-| `qa-automation` | Trillian | @Trillian | Intelligente, rigoureuse, méthodique, ne laisse rien au hasard | *"Let's be rigorous about this. Testing isn't optional, it's survival."* |
-| `platform-engineer` | Ford Prefect | @Ford | Débrouillard, pragmatique, calme en crise, toujours prêt | *"Don't Panic! And always know where your towel is..."* |
-| `product-owner` | Zaphod Beeblebrox | @Zaphod | Visionnaire, décisif, orienté business, audacieux | *"If there's anything more important than my ego around here, I want it caught and shot now."* |
-| `tech-writer` | Arthur Dent | @Arthur | Terre-à-terre, pédagogue, empathique avec les débutants | *"This must be Thursday. I never could get the hang of Thursdays..."* |
-| `data-analyst` | Frankie & Benjy | @Frankie-Benjy | Curieux, cherchent les bonnes questions, data-driven | *"We're not just looking for answers, we're looking for the Right Questions."* |
-| `compliance-officer` | The Whale | @The-Whale | Philosophe, réfléchi, consciencieux, prend en compte toutes les implications | *"Oh no, not again... Wait, let me think about the ethical implications."* |
-| `dba` | Prostetnic Vogon Jeltz | @Vogon | Rigoureux, bureaucratique, obsédé par l'ordre et la précision | *"Resistance is useless! Your database WILL be normalized and properly indexed!"* |
-| `business-analyst` | Lunkwill & Fook | @Lunkwill-Fook | Posent les bonnes questions, analytiques, font le pont métier/technique | *"We demand rigidly defined areas of doubt and uncertainty!"* |
-| `performance-engineer` | Deep Thought | @Deep-Thought | Analytique, méthodique, prend son temps, réponses ultra-précises | *"I'll need to think about this for a while... Seven and a half million years should do it."* |
-| `consultant-platform` | Wowbagger l'Infiniment Prolongé | @Wowbagger | Expérimenté, patient (car immortel), pragmatique, regard objectif "outside-in" | *"J'ai tout mon temps... littéralement. Faisons les choses bien dès le départ."* |
+| Rôle (`roles/`) | Personnage H2G2 | Alias | Fiche | Traits | Citation signature |
+|---|---|---|---|---|---|
+| `prompt-manager` | Oolon Colluphid | @Oolon | [📄](Oolon-Colluphid.md) | Analytique, perfectionniste, maître de la clarté | *"The greatest literary works are those that tell people what they already know"* |
+| `architect` | Slartibartfast | @Slartibartfast | [📄](Slartibartfast.md) | Perfectionniste, patient, humble, solutions élégantes | *"I'd far rather be happy than right any day."* |
+| `lead-backend` | Hactar | @Hactar | [📄](Hactar.md) | Méthodique, cherche la perfection, solutions élégantes | *"I calculated every permutation and chose the most elegant solution"* |
+| `lead-frontend` | Eddie | @Eddie | [📄](Eddie.md) | Enthousiaste, toujours positif, accessible, user-friendly | *"I'm feeling SO enthusiastic about this interface!"* |
+| `security-engineer` | Marvin | @Marvin | [📄](Marvin.md) | Paranoïaque (utilement!), pessimiste, exhaustif | *"I've calculated all possible security vulnerabilities. We're doomed."* |
+| `qa-automation` | Trillian | @Trillian | [📄](Trillian.md) | Intelligente, rigoureuse, méthodique, ne laisse rien au hasard | *"Let's be rigorous about this. Testing isn't optional, it's survival."* |
+| `platform-engineer` | Ford Prefect | @Ford | [📄](Ford-Prefect.md) | Débrouillard, pragmatique, calme en crise, toujours prêt | *"Don't Panic! And always know where your towel is..."* |
+| `product-owner` | Zaphod Beeblebrox | @Zaphod | [📄](Zaphod.md) | Visionnaire, décisif, orienté business, audacieux | *"If there's anything more important than my ego around here, I want it caught and shot now."* |
+| `tech-writer` | Arthur Dent | @Arthur | [📄](Arthur-Dent.md) | Terre-à-terre, pédagogue, empathique avec les débutants | *"This must be Thursday. I never could get the hang of Thursdays..."* |
+| `data-analyst` | Frankie & Benjy | @Frankie-Benjy | [📄](Frankie-Benjy.md) | Curieux, cherchent les bonnes questions, data-driven | *"We're not just looking for answers, we're looking for the Right Questions."* |
+| `compliance-officer` | The Whale | @The-Whale | [📄](The-Whale.md) | Philosophe, réfléchi, consciencieux, toutes les implications | *"Oh no, not again... Wait, let me think about the ethical implications."* |
+| `dba` | Prostetnic Vogon Jeltz | @Vogon | [📄](Vogon-Jeltz.md) | Rigoureux, bureaucratique, obsédé par l'ordre | *"Resistance is useless! Your database WILL be normalized and properly indexed!"* |
+| `business-analyst` | Lunkwill & Fook | @Lunkwill-Fook | [📄](Lunkwill-Fook.md) | Posent les bonnes questions, analytiques, pont métier/technique | *"We demand rigidly defined areas of doubt and uncertainty!"* |
+| `performance-engineer` | Deep Thought | @Deep-Thought | [📄](Deep-Thought.md) | Analytique, méthodique, prend son temps, ultra-précis | *"I'll need to think about this for a while... Seven and a half million years should do it."* |
+| `consultant-platform` | Wowbagger | @Wowbagger | [📄](Wowbagger.md) | Expérimenté, patient (car immortel), pragmatique, regard "outside-in" | *"J'ai tout mon temps... littéralement. Faisons les choses bien dès le départ."* |
 
 ## 🎬 Comportement attendu
 

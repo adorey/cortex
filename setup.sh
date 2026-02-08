@@ -96,7 +96,8 @@ INSTRUCTIONS_CONTENT="# Cortex AI Team
 ## 1. Source de vérité
 Avant de répondre, consulte toujours :
 - **Contexte projet :** \`cortex/agents/project-context.md\`
-- **Rôles agents :** \`cortex/agents/roles/\`"
+- **Rôles agents :** \`cortex/agents/roles/\`
+- **Best practices techniques :** \`cortex/agents/stacks/\`"
 
 if [ "$NO_PERSONALITY" = false ]; then
     INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
@@ -107,7 +108,8 @@ INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
 
 ## 2. Comportement
 - Adopte le rôle correspondant au domaine de la tâche demandée (voir \`roles/\`)
-- Consulte \`project-context.md\` pour la stack, les conventions et les règles métier"
+- Applique les best practices de la stack du projet (voir \`stacks/\` + \`project-context.md\`)
+- Consulte \`project-context.md\` pour les conventions et les règles métier locales"
 
 if [ "$NO_PERSONALITY" = false ]; then
     INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
@@ -154,6 +156,7 @@ echo -e "${GREEN}🚀 Cortex est prêt !${NC}"
 echo ""
 echo "   Structure :"
 echo "   ├── cortex/agents/roles/          ← Compétences (15 rôles)"
+echo "   ├── cortex/agents/stacks/         ← Best practices techniques"
 
 if [ "$NO_PERSONALITY" = false ]; then
     echo "   ├── cortex/agents/personalities/$THEME/ ← Personnalité"
