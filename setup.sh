@@ -95,7 +95,7 @@ INSTRUCTIONS_CONTENT="# Cortex AI Team
 
 ## 1. Source de vérité
 Avant de répondre, consulte toujours :
-- **Contexte projet :** \`cortex/agents/project-context.md\`
+- **Contexte projet :** \`project-context.md\` (à la racine du projet)
 - **Rôles agents :** \`cortex/agents/roles/\`
 - **Best practices techniques :** \`cortex/agents/stacks/\`"
 
@@ -109,7 +109,7 @@ INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
 ## 2. Comportement
 - Adopte le rôle correspondant au domaine de la tâche demandée (voir \`roles/\`)
 - Applique les best practices de la stack du projet (voir \`stacks/\` + \`project-context.md\`)
-- Consulte \`project-context.md\` pour les conventions et les règles métier locales"
+- Consulte \`project-context.md\` (racine du projet) pour les conventions et les règles métier locales"
 
 if [ "$NO_PERSONALITY" = false ]; then
     INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
@@ -140,13 +140,27 @@ else
     echo -e "${GREEN}✅${NC} $INSTRUCTIONS_FILE créé"
 fi
 
-# --- 3. Vérifier project-context.md ---
-CONTEXT_FILE="$CORTEX_DIR/agents/project-context.md"
-if grep -q "<!-- ex:" "$CONTEXT_FILE" 2>/dev/null; then
+# --- 3. Copier project-context.md à la racine du projet ---
+TEMPLATE_FILE="$CORTEX_DIR/agents/project-context.md.template"
+CONTEXT_FILE="$TARGET_DIR/project-context.md"
+
+if [ -f "$CONTEXT_FILE" ]; then
     echo ""
-    echo -e "${YELLOW}📝 IMPORTANT :${NC} Le fichier project-context.md est encore un template."
-    echo "   → Remplissez-le avec les informations de votre projet :"
-    echo "   → $CONTEXT_FILE"
+    echo -e "${GREEN}✅${NC} project-context.md existe déjà à la racine du projet"
+    if grep -q "<!-- ex:" "$CONTEXT_FILE" 2>/dev/null; then
+        echo -e "${YELLOW}📝 IMPORTANT :${NC} Le fichier est encore un template."
+        echo "   → Remplissez-le avec les informations de votre projet :"
+        echo "   → $CONTEXT_FILE"
+    fi
+else
+    if [ -f "$TEMPLATE_FILE" ]; then
+        cp "$TEMPLATE_FILE" "$CONTEXT_FILE"
+        echo -e "${GREEN}✅${NC} project-context.md copié à la racine du projet"
+        echo -e "${YELLOW}📝 IMPORTANT :${NC} Remplissez-le avec les informations de votre projet :"
+        echo "   → $CONTEXT_FILE"
+    else
+        echo -e "${RED}❌ Template introuvable : $TEMPLATE_FILE${NC}"
+    fi
 fi
 
 # --- 4. Résumé ---
@@ -162,7 +176,7 @@ if [ "$NO_PERSONALITY" = false ]; then
     echo "   ├── cortex/agents/personalities/$THEME/ ← Personnalité"
 fi
 
-echo "   ├── cortex/agents/project-context.md  ← À REMPLIR"
+echo "   ├── project-context.md                ← À REMPLIR (racine projet)"
 echo "   └── .github/copilot-instructions.md   ← Auto-généré"
 echo ""
 echo "   Invoquez un agent dans votre IDE :"
