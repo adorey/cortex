@@ -1,5 +1,9 @@
 # Cortex
 
+<p align="center">
+  <img src="assets/banner.jpg" alt="Cortex — AI Agent Framework" width="600" height="300" />
+</p>
+
 Cortex est un framework d'agents IA spécialisés, prêts à être intégrés dans n'importe quel projet.
 
 ## 🚀 Concept
