@@ -29,7 +29,7 @@ Chaque agent est composé de **4 couches indépendantes** :
 | `roles/` | **QUOI** faire | "Un lead backend structure, review, mentore" |
 | `stacks/` | **COMMENT** le faire | "En PHP : PSR-12, injection de dépendances..." |
 | `personalities/` | **QUI** tu es | "Hactar, méthodique, élégant" |
-| `project-context.md` | **OÙ** tu travailles | "Ce projet : Symfony 7.2, PHP 8.3, MySQL 8" |
+| `project-context.md` | **OÙ** tu travailles | "Ce projet : Symfony 7.2, PHP 8.3, PostgreSQL 16" |
 
 Cette séparation permet de :
 - Changer de **personnalité** (H2G2, Star Wars, corporate…) sans toucher aux compétences
@@ -44,10 +44,10 @@ cortex/
 ├── README.md                          # Ce fichier
 ├── setup.sh                           # Script d'installation
 ├── templates/
-│   └── copilot-instructions.md        # Template auto-généré à l'install
+│   └── copilot-instructions.md        # Template de référence
 │
 ├── agents/
-│   ├── project-context.md             # Contexte projet (à remplir)
+│   ├── project-context.md.template    # Template project-context
 │   │
 │   ├── roles/                         # Couche 1 : Compétences (agnostique)
 │   │   ├── prompt-manager.md
@@ -84,7 +84,7 @@ cortex/
 │       └── h2g2/                      # Thème H2G2 (Guide du voyageur galactique)
 │           ├── theme.md
 │           ├── characters.md
-│           └── {personnage}.md        # Fiche personnalité individuelle
+│           └── {personnage}.md        # Fiches personnalité individuelles
 │
 └── docs/
     └── creating-a-theme.md            # Guide pour créer un thème
@@ -92,32 +92,202 @@ cortex/
 
 ## 🔧 Installation
 
-### Option 1 : Script automatique (recommandé)
+### Prérequis
+
+- Git
+- Un IDE avec support Copilot (VS Code, Cursor, etc.)
+
+### Étape 1 — Ajouter Cortex au projet
 
 ```bash
-# Ajout en submodule Git
+# En submodule Git (recommandé — partagé entre projets)
 git submodule add <url-cortex> cortex
-
-# Installation avec thème H2G2 (défaut)
-./cortex/setup.sh
-
-# Sans personnalité
-./cortex/setup.sh --no-personality
-
-# Avec un thème spécifique
-./cortex/setup.sh --theme star-wars
+git submodule update --init --recursive
 ```
 
-### Option 2 : Manuel
+### Étape 2 — Lancer le setup
 
-1. Copiez `cortex/templates/copilot-instructions.md` dans `.github/copilot-instructions.md`
-2. Remplissez `cortex/agents/project-context.md`
-3. Invoquez un agent via `@NomAgent` dans votre IDE (Copilot, Cursor, etc.)
+**Chaque développeur** doit lancer le setup sur sa machine :
+
+```bash
+./cortex/setup.sh
+```
+
+C'est tout. Le script fait le reste automatiquement.
+
+> ⚠️ Les fichiers générés (`.github/copilot-instructions.md`, `.vscode/settings.json`) sont **personnels** au développeur — ils dépendent du thème choisi. Ils doivent être dans le `.gitignore` du projet.
+
+### Ce que `setup.sh` fait
+
+Le script effectue **4 actions** :
+
+| # | Action | Fichier généré | Description |
+|---|--------|----------------|-------------|
+| 1 | **Vérifie le thème** | — | Vérifie que le thème existe, résout le personnage `prompt-manager` depuis `characters.md` |
+| 2 | **Génère le bootstrap IA** | `.github/copilot-instructions.md` | Instructions système pour Copilot, avec nommage direct du personnage prompt-manager |
+| 3 | **Copie le contexte projet** | `project-context.md` | Template à remplir avec les infos de votre projet (stack, conventions, domaine) |
+| 4 | **Configure VS Code** | `.vscode/settings.json` | Injecte les fichiers personnalité via `codeGeneration.instructions` pour un chargement automatique |
+
+### Options de `setup.sh`
+
+```bash
+# Thème par défaut (H2G2)
+./cortex/setup.sh
+
+# Thème spécifique
+./cortex/setup.sh --theme star-wars
+
+# Sans personnalité (rôles techniques uniquement)
+./cortex/setup.sh --no-personality
+
+# Projet cible différent
+./cortex/setup.sh /chemin/vers/autre-projet
+
+# Aide
+./cortex/setup.sh --help
+```
+
+### Étape 3 — Remplir le contexte projet
+
+Éditez `project-context.md` à la racine du projet avec :
+- Le nom et la description du projet
+- La stack technique (framework, langage, BDD, infra)
+- Les conventions de code
+- Le domaine métier et les règles importantes
+
+> ⚠️ **Ce fichier est le "Guide du Voyageur Galactique" de votre projet.** C'est la source de vérité que tous les agents consultent. Plus il est complet, meilleures sont les réponses.
+
+### Résultat après setup
+
+```
+mon-projet/
+├── cortex/                            ← Submodule Git (committé)
+├── project-context.md                 ← Committé — rempli une fois pour le projet
+├── .github/
+│   └── copilot-instructions.md        ← Gitignored — généré par setup.sh
+├── .vscode/
+│   └── settings.json                  ← Gitignored — généré par setup.sh
+└── ... (votre code)
+```
+
+### Gitignore recommandé
+
+Ajoutez ces lignes au `.gitignore` du projet :
+
+```gitignore
+# Cortex — Fichiers générés par setup.sh (personnalisés par développeur)
+.github/copilot-instructions.md
+
+# IDE (inclut les settings Cortex)
+.vscode/
+```
+
+### Onboarding d'un nouveau développeur
+
+```bash
+# 1. Cloner le projet
+git clone <url-projet>
+cd mon-projet
+
+# 2. Initialiser le submodule Cortex
+git submodule update --init --recursive
+
+# 3. Lancer le setup (choisir son thème)
+./cortex/setup.sh                    # H2G2 par défaut
+./cortex/setup.sh --theme star-wars  # ou un autre thème
+
+# 4. Ouvrir le projet dans VS Code
+code .
+
+# → Cortex est prêt, la personnalité se charge dès la première conversation Copilot
+```
+
+## 🔄 Workflow au quotidien
+
+### Comment Cortex fonctionne avec Copilot
+
+La personnalité est chargée via **deux mécanismes complémentaires** :
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Mécanisme 1 : .github/copilot-instructions.md         │
+│  → Injecté dans le system prompt à chaque conversation  │
+│  → Ordonne à l'IA de lire les fichiers personnalité    │
+│  → Nomme directement le personnage prompt-manager       │
+├─────────────────────────────────────────────────────────┤
+│  Mécanisme 2 : .vscode/settings.json                   │
+│  → codeGeneration.instructions avec refs fichiers       │
+│  → VS Code injecte le CONTENU des fichiers directement  │
+│  → Fonctionne même si l'IA "oublie" de lire les fichiers│
+└─────────────────────────────────────────────────────────┘
+```
+
+### Invoquer un agent
+
+Mentionnez le personnage par son alias dans votre prompt :
+
+```
+@Hactar : implémente ce service en PHP
+@Slartibartfast : review cette architecture
+@Marvin : audite la sécurité de ce code
+@Trillian : écris les tests pour cette feature
+@Vogon : optimise cette requête SQL
+```
+
+> Voir `cortex/agents/personalities/h2g2/characters.md` pour la table complète des 15 agents.
+
+### Dispatch automatique
+
+Le Prompt Manager (Oolon Colluphid en thème H2G2) analyse votre demande et dispatche automatiquement vers l'expert le plus pertinent :
+
+```
+Vous : "Cette requête SQL est lente en production"
+→ @Oolon analyse → dispatche vers @Deep-Thought (performance) + @Vogon (DBA)
+→ Réponse dans le style des personnages, avec la rigueur technique des rôles
+```
+
+## ⚠️ Points importants
+
+### Ouvrir le projet directement
+
+Cortex est conçu pour que vous ouvriez **le dossier du projet directement** dans VS Code (`code mon-projet/`). Les fichiers `.github/copilot-instructions.md` sont résolus relativement au dossier ouvert.
+
+```
+# ✅ Recommandé : ouvrir le projet directement
+code mon-projet/
+→ VS Code trouve .github/copilot-instructions.md ✅
+→ Les chemins cortex/agents/... se résolvent ✅
+
+# ⚠️ Workspace multi-root : chaque folder doit avoir son propre .github/
+```
+
+> **Pas besoin de fichier `.code-workspace`** — ouvrez simplement le dossier du projet.
+
+### Mise à jour de Cortex
+
+```bash
+# Mettre à jour le submodule
+cd cortex && git pull origin main && cd ..
+
+# Re-run setup si le template a changé
+./cortex/setup.sh
+```
+
+### La personnalité ne s'applique pas ?
+
+Checklist de diagnostic :
+
+1. ✅ `.github/copilot-instructions.md` existe **dans le projet** (pas dans un dossier parent)
+2. ✅ Les chemins dans ce fichier sont relatifs au projet (`cortex/agents/...`)
+3. ✅ `project-context.md` existe à la racine du projet et est rempli
+4. ✅ `.vscode/settings.json` contient `github.copilot.chat.codeGeneration.instructions`
+5. ✅ Le submodule `cortex/` est initialisé (`git submodule update --init`)
+6. ✅ Relancez une **nouvelle conversation** Copilot (les instructions se chargent au début)
 
 ## 🎯 Philosophie
 
 - **Zéro dépendance projet** : les rôles sont agnostiques, la stack est dans `project-context.md`
-- **Plug & Play** : `setup.sh` et c'est prêt
+- **Plug & Play** : `setup.sh` et c'est prêt — triple couche de fiabilité automatique
 - **Composable** : rôle + stack + personnalité + contexte = agent complet
 - **Best practices partagées** : les fiches `stacks/` sont réutilisables d'un projet à l'autre
 - **Évolutif** : ajoutez vos propres rôles, stacks ou thèmes de personnalité
