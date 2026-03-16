@@ -30,6 +30,7 @@ CORTEX_DIR="$(cd "$(dirname "$0")" && pwd)"
 TARGET_DIR=""
 THEME="h2g2"
 NO_PERSONALITY=false
+WORKSPACE_MODE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -42,13 +43,18 @@ while [[ $# -gt 0 ]]; do
             NO_PERSONALITY=true
             shift
             ;;
+        --workspace)
+            WORKSPACE_MODE=true
+            shift
+            ;;
         -h|--help)
-            echo "Usage: ./setup.sh [TARGET_DIR] [--theme THEME] [--no-personality]"
+            echo "Usage: ./setup.sh [TARGET_DIR] [--theme THEME] [--no-personality] [--workspace]"
             echo ""
             echo "Options:"
-            echo "  TARGET_DIR          Répertoire du projet cible (défaut: répertoire parent de cortex)"
+            echo "  TARGET_DIR          Répertoire cible (défaut: répertoire parent de cortex)"
             echo "  --theme THEME       Thème de personnalité à activer (défaut: h2g2)"
             echo "  --no-personality    Désactiver la couche personnalité"
+            echo "  --workspace         Mode workspace multi-projets (structure parent / services)"
             echo "  -h, --help          Afficher cette aide"
             exit 0
             ;;
@@ -202,123 +208,80 @@ else
     echo -e "${GREEN}✅${NC} $INSTRUCTIONS_FILE créé"
 fi
 
-# --- 3. Copier project-context.md à la racine du projet ---
-TEMPLATE_FILE="$CORTEX_DIR/agents/project-context.md.template"
+# --- 3. Copier les fichiers de contexte à la racine ---
+CONTEXT_TEMPLATE="$CORTEX_DIR/templates/project-context.md.template"
+OVERVIEW_TEMPLATE="$CORTEX_DIR/templates/project-overview.md.template"
 CONTEXT_FILE="$TARGET_DIR/project-context.md"
+OVERVIEW_FILE="$TARGET_DIR/project-overview.md"
 
+# project-overview.md
+if [ -f "$OVERVIEW_FILE" ]; then
+    echo -e "${GREEN}✅${NC} project-overview.md existe déjà"
+else
+    if [ -f "$OVERVIEW_TEMPLATE" ]; then
+        cp "$OVERVIEW_TEMPLATE" "$OVERVIEW_FILE"
+        echo -e "${GREEN}✅${NC} project-overview.md créé"
+        echo -e "${YELLOW}📝${NC}  → Remplissez la vision, les acteurs et les flux métier : $OVERVIEW_FILE"
+    fi
+fi
+
+# project-context.md
 if [ -f "$CONTEXT_FILE" ]; then
     echo ""
     echo -e "${GREEN}✅${NC} project-context.md existe déjà à la racine du projet"
     if grep -q "<!-- ex:" "$CONTEXT_FILE" 2>/dev/null; then
         echo -e "${YELLOW}📝 IMPORTANT :${NC} Le fichier est encore un template."
-        echo "   → Remplissez-le avec les informations de votre projet :"
+        echo "   → Remplissez-le avec la stack technique de votre projet :"
         echo "   → $CONTEXT_FILE"
     fi
 else
-    if [ -f "$TEMPLATE_FILE" ]; then
-        cp "$TEMPLATE_FILE" "$CONTEXT_FILE"
-        echo -e "${GREEN}✅${NC} project-context.md copié à la racine du projet"
-        echo -e "${YELLOW}📝 IMPORTANT :${NC} Remplissez-le avec les informations de votre projet :"
+    if [ -f "$CONTEXT_TEMPLATE" ]; then
+        cp "$CONTEXT_TEMPLATE" "$CONTEXT_FILE"
+        echo -e "${GREEN}✅${NC} project-context.md créé à la racine du projet"
+        echo -e "${YELLOW}📝 IMPORTANT :${NC} Remplissez-le avec la stack technique de votre projet :"
         echo "   → $CONTEXT_FILE"
     else
-        echo -e "${RED}❌ Template introuvable : $TEMPLATE_FILE${NC}"
+        echo -e "${RED}❌ Template introuvable : $CONTEXT_TEMPLATE${NC}"
     fi
 fi
 
-# --- 4. Configurer .vscode/settings.json (injection personnalité Copilot) ---
-if [ "$NO_PERSONALITY" = false ]; then
-    VSCODE_DIR="$TARGET_DIR/.vscode"
-    SETTINGS_FILE="$VSCODE_DIR/settings.json"
-
-    mkdir -p "$VSCODE_DIR"
-
-    # Construire les instructions Copilot
-    COPILOT_INSTRUCTIONS_JSON=""
-    if [ -n "$PM_FILE" ]; then
-        COPILOT_INSTRUCTIONS_JSON=$(cat <<JSONEOF
-    "github.copilot.chat.codeGeneration.instructions": [
-        { "file": "cortex/agents/personalities/$THEME/theme.md" },
-        { "file": "cortex/agents/personalities/$THEME/characters.md" },
-        { "file": "cortex/agents/personalities/$THEME/$PM_FILE" },
-        { "file": "cortex/agents/roles/prompt-manager.md" },
-        { "file": "project-context.md" }
-    ]
-JSONEOF
-)
-    else
-        COPILOT_INSTRUCTIONS_JSON=$(cat <<JSONEOF
-    "github.copilot.chat.codeGeneration.instructions": [
-        { "file": "cortex/agents/personalities/$THEME/theme.md" },
-        { "file": "cortex/agents/personalities/$THEME/characters.md" },
-        { "file": "cortex/agents/roles/prompt-manager.md" },
-        { "file": "project-context.md" }
-    ]
-JSONEOF
-)
-    fi
-
-    if [ -f "$SETTINGS_FILE" ]; then
-        # Vérifier si les instructions Copilot existent déjà
-        if grep -q "github.copilot.chat.codeGeneration.instructions" "$SETTINGS_FILE" 2>/dev/null; then
-            # Remplacer le bloc existant (entre la clé et le ] fermant)
-            # On utilise un fichier temporaire pour la sécurité
-            TEMP_FILE=$(mktemp)
-            # Extraire la nouvelle valeur JSON (juste le tableau)
-            NEW_VALUE=$(echo "$COPILOT_INSTRUCTIONS_JSON" | sed -n '/\[/,/\]/p')
-
-            awk -v new_val="$NEW_VALUE" '
-                /github\.copilot\.chat\.codeGeneration\.instructions/ {
-                    # Trouver le début de la clé, imprimer la ligne de clé
-                    print "    \"github.copilot.chat.codeGeneration.instructions\": " new_val
-                    # Sauter jusqu'au ] fermant
-                    skip = 1
-                    next
-                }
-                skip && /\]/ { skip = 0; next }
-                skip { next }
-                { print }
-            ' "$SETTINGS_FILE" > "$TEMP_FILE"
-
-            mv "$TEMP_FILE" "$SETTINGS_FILE"
-            echo -e "${GREEN}✅${NC} .vscode/settings.json mis à jour (codeGeneration.instructions)"
-        else
-            # Injecter avant la dernière accolade fermante
-            TEMP_FILE=$(mktemp)
-            sed -e '$ d' "$SETTINGS_FILE" > "$TEMP_FILE"
-            echo "" >> "$TEMP_FILE"
-            echo "    // === Cortex — Personality layer injection for Copilot ===" >> "$TEMP_FILE"
-            echo "    // Generated/updated by: ./cortex/setup.sh" >> "$TEMP_FILE"
-            echo "$COPILOT_INSTRUCTIONS_JSON" >> "$TEMP_FILE"
-            echo "}" >> "$TEMP_FILE"
-            mv "$TEMP_FILE" "$SETTINGS_FILE"
-            echo -e "${GREEN}✅${NC} .vscode/settings.json mis à jour (codeGeneration.instructions ajouté)"
+# Mode workspace : initialiser les services
+if [ "$WORKSPACE_MODE" = true ]; then
+    echo ""
+    echo -e "${BLUE}ℹ️  Mode workspace — initialisation des services${NC}"
+    echo "   Entrez les noms des services à créer (entrée vide pour terminer) :"
+    while true; do
+        read -p "   Nom du service (ex: api-backend, front-web) : " SERVICE_NAME
+        if [ -z "$SERVICE_NAME" ]; then
+            break
         fi
-    else
-        # Créer un settings.json minimal
-        cat > "$SETTINGS_FILE" <<SETTINGSEOF
-{
-    // === Cortex — Personality layer injection for Copilot ===
-    // Generated/updated by: ./cortex/setup.sh
-$COPILOT_INSTRUCTIONS_JSON
-}
-SETTINGSEOF
-        echo -e "${GREEN}✅${NC} .vscode/settings.json créé avec les instructions Copilot"
-    fi
+        SERVICE_DIR="$TARGET_DIR/$SERVICE_NAME"
+        mkdir -p "$SERVICE_DIR"
+        if [ ! -f "$SERVICE_DIR/project-overview.md" ]; then
+            sed "s/<!-- @alias: mon-projet -->/<!-- @alias: $SERVICE_NAME -->/" "$OVERVIEW_TEMPLATE" > "$SERVICE_DIR/project-overview.md"
+            echo -e "${GREEN}  ✅${NC} $SERVICE_NAME/project-overview.md"
+        fi
+        if [ ! -f "$SERVICE_DIR/project-context.md" ]; then
+            sed "s/<!-- @alias: mon-projet -->/<!-- @alias: $SERVICE_NAME -->/" "$CONTEXT_TEMPLATE" > "$SERVICE_DIR/project-context.md"
+            echo -e "${GREEN}  ✅${NC} $SERVICE_NAME/project-context.md"
+        fi
+    done
 fi
 
-# --- 5. Résumé ---
+# --- 4. Résumé ---
 echo ""
 echo "═══════════════════════════════════════════"
 echo -e "${GREEN}🚀 Cortex est prêt !${NC}"
 echo ""
 echo "   Structure :"
-echo "   ├── cortex/agents/roles/          ← Compétences (15 rôles, 5 catégories)"
-echo "   ├── cortex/agents/capabilities/      ← Capacités techniques chargeables"
+echo "   ├── cortex/agents/roles/            ← Compétences (15 rôles, 5 catégories)"
+echo "   ├── cortex/agents/capabilities/     ← Capacités techniques chargeables"
 
 if [ "$NO_PERSONALITY" = false ]; then
     echo "   ├── cortex/agents/personalities/$THEME/ ← Personnalité"
 fi
 
+<<<<<<< HEAD
 echo "   ├── project-context.md                ← À REMPLIR (racine projet)"
 echo "   ├── .github/copilot-instructions.md   ← Auto-généré (bootstrap IA)"
 echo "   └── .vscode/settings.json             ← Instructions Copilot"
@@ -330,13 +293,33 @@ if [ "$NO_PERSONALITY" = false ] && [ -n "$PM_CHARACTER" ]; then
 fi
 
 echo "   Invoquez un agent dans votre IDE :"
+=======
+if [ "$WORKSPACE_MODE" = true ]; then
+    echo "   ├── project-overview.md            ← Vision globale du workspace (optionnel)"
+    echo "   ├── project-context.md             ← Conventions partagées (optionnel)"
+    echo "   ├── {service}/project-overview.md  ← Vision du service (À REMPLIR)"
+    echo "   ├── {service}/project-context.md   ← Stack du service (À REMPLIR)"
+else
+    echo "   ├── project-overview.md            ← Vision & métier (À REMPLIR)"
+    echo "   ├── project-context.md             ← Stack technique (À REMPLIR)"
+fi
 
-if [ "$NO_PERSONALITY" = false ] && [ "$THEME" = "h2g2" ]; then
+echo "   └── .github/copilot-instructions.md   ← Auto-généré"
+echo ""
+>>>>>>> 0875716 (feat: split project context into overview + context, add workspace mode)
+
+if [ "$WORKSPACE_MODE" = true ]; then
+    echo "   Mode workspace — ciblez un service avec son @alias dans votre prompt :"
+    echo "   → ex: '@backend Ajoute un endpoint de pagination'"
+    echo "   → Ou laissez Cortex déduire depuis les fichiers ouverts dans l'IDE"
+elif [ "$NO_PERSONALITY" = false ] && [ "$THEME" = "h2g2" ]; then
+    echo "   Invoquez un agent dans votre IDE :"
     echo "   → @Hactar pour le backend"
     echo "   → @Eddie pour le frontend"
     echo "   → @Marvin pour la sécurité"
     echo "   → @Slartibartfast pour l'architecture"
 else
+    echo "   Invoquez un agent dans votre IDE :"
     echo "   → Mentionnez le rôle souhaité dans votre prompt"
 fi
 

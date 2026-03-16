@@ -1,0 +1,74 @@
+<!-- @alias: mon-projet -->
+<!--
+  @alias : identifiant court utilisé pour cibler ce projet/service dans un prompt.
+  Exemples : @backend, @frontend, @auth-service, @admin...
+  En mode workspace, mentionnez cet alias dans votre prompt pour cibler ce contexte.
+  Si absent, le Prompt Manager déduit le service depuis les fichiers ouverts dans l'IDE.
+-->
+
+# Vue d'ensemble : [Nom du projet / service]
+
+<!--
+  Ce fichier décrit CE QUE FAIT le projet : vision, acteurs, flux métier, contraintes.
+  Il est lu en PREMIER par le Prompt Manager pour comprendre le domaine avant d'agir.
+  Ne contient PAS de stack technique → voir project-context.md
+-->
+
+## 📋 Informations générales
+
+**Nom :** <!-- ex: API Gateway, Service Authentification, Back-office Admin -->
+**Description :** <!-- Une phrase : ce que fait ce projet/service -->
+**Domaine métier :** <!-- ex: E-commerce, SaaS B2B, Fintech, Santé, Logistique -->
+**Équipe :** <!-- Taille et composition, ex: 3 devs backend, 1 PO -->
+**Statut :** <!-- ex: Production, Beta, En développement -->
+
+## 🎯 Acteurs principaux
+
+<!-- Qui utilise ce projet ? Quels rôles ? Quelles permissions ? -->
+
+| Acteur | Description | Niveau d'accès |
+|--------|-------------|----------------|
+| <!-- ex: Client final --> | <!-- Description --> | <!-- Lecture / Écriture / Admin --> |
+| <!-- ex: Administrateur --> | <!-- Description --> | <!-- Admin --> |
+
+## 🔄 Processus métier clés
+
+<!-- Les grands flux fonctionnels. Ce que le système doit faire, pas comment. -->
+
+### [Processus 1 — ex: Inscription & Authentification]
+<!-- Description du flux en quelques étapes -->
+
+### [Processus 2 — ex: Commande & Paiement]
+<!-- Description du flux -->
+
+## 📏 Règles métier importantes
+
+<!-- Les règles qui impactent les décisions de développement -->
+
+- <!-- ex: Un utilisateur ne peut pas commander sans adresse de livraison validée -->
+- <!-- ex: Les prix affichés sont TTC pour les particuliers, HT pour les professionnels -->
+
+## 🔗 Dépendances & intégrations
+
+<!-- Avec quels autres systèmes/services ce projet interagit-il ? -->
+
+| Système | Type | Description |
+|---------|------|-------------|
+| <!-- ex: Stripe --> | <!-- API externe --> | <!-- Paiements --> |
+| <!-- ex: service-auth --> | <!-- Service interne --> | <!-- Authentification --> |
+
+## 🔒 Contraintes non-techniques
+
+### Conformité & réglementation
+<!-- ex: RGPD, PCI-DSS, HDS, ISO 27001... -->
+
+### Contraintes métier
+<!-- ex: Disponibilité 24/7, SLA client 99.9%, données hébergées en UE -->
+
+## 📚 Ressources & documentation
+
+<!-- Liens vers la doc existante, confluence, notion, wiki, etc. -->
+
+- **Documentation produit :** <!-- lien -->
+- **Spécifications fonctionnelles :** <!-- lien -->
+- **Maquettes / Figma :** <!-- lien -->

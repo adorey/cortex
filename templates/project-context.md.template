@@ -1,0 +1,67 @@
+<!-- @alias: mon-projet -->
+<!--
+  @alias : identifiant court pour cibler ce projet/service depuis un prompt.
+  Doit correspondre à l'alias déclaré dans project-overview.md.
+  Utile principalement en mode workspace multi-projets.
+-->
+
+# Contexte technique : [Nom du projet / service]
+
+<!--
+  Ce fichier décrit COMMENT le projet est construit : stack, conventions, outils.
+  Lu par le Prompt Manager pour charger les capacités techniques appropriées.
+  Ne contient PAS la vision métier → voir project-overview.md
+-->
+
+## 🏗️ Stack technique
+
+### Backend
+<!-- ex: Symfony 7.2 / PHP 8.3, NestJS / TypeScript, Django / Python 3.12 -->
+
+### Frontend
+<!-- ex: React 18 / TypeScript, Vue 3 / Nuxt, Next.js 14 -->
+
+### Base de données
+<!-- ex: MySQL 8.0, PostgreSQL 16, MongoDB 7, Redis 7 -->
+
+### Infrastructure
+<!-- ex: Docker + Kubernetes (GKE), AWS ECS, VPS OVH -->
+
+### CI/CD
+<!-- ex: GitHub Actions, GitLab CI, CircleCI -->
+
+## 📁 Structure du projet
+
+<!-- Organisation des dossiers et modules principaux -->
+```
+project/
+├── src/
+├── docs/
+├── tests/
+└── ...
+```
+
+## 📝 Conventions de code
+
+<!-- Linters, formatters, naming conventions, standards appliqués -->
+
+- **Linter / Formatter :** <!-- ex: ESLint + Prettier, PHP CS Fixer PSR-12 -->
+- **Naming conventions :** <!-- ex: camelCase variables, PascalCase classes -->
+- **Standards :** <!-- ex: PSR-12, Conventional Commits, Semantic Versioning -->
+- **Code review :** <!-- ex: 1 approbation requise, feature branches only -->
+
+## 🛠️ Outils de développement
+
+<!-- IDE, extensions, outils spécifiques à ce projet -->
+
+- **IDE recommandé :** <!-- ex: VS Code + extensions Cortex -->
+- **Outils locaux :** <!-- ex: Docker Desktop, TablePlus, Postman -->
+- **Variables d'environnement :** <!-- ex: voir .env.example à la racine -->
+
+## ⚡ Contraintes techniques
+
+### Performance
+<!-- SLOs, métriques cibles, ex: réponse API < 200ms p95 -->
+
+### Sécurité
+<!-- Exigences spécifiques, ex: OWASP Top 10, pas de secrets en dur -->
