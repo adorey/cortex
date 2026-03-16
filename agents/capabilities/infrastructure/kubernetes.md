@@ -1,8 +1,8 @@
 # Kubernetes — Best Practices
 
-<!-- STACK REFERENCE
+<!-- CAPABILITY REFERENCE
 Fiche de best practices pour Kubernetes.
-À combiner avec stacks/infrastructure/docker.md et un rôle (ex: roles/platform-engineer.md).
+À combiner avec capabilities/infrastructure/docker.md et un rôle (ex: roles/platform-engineer.md).
 -->
 
 > **Version de référence :** Kubernetes 1.30+ | **Dernière mise à jour :** 2026-02

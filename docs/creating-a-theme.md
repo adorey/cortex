@@ -6,7 +6,7 @@
 
 ## 🎯 Qu'est-ce qu'un thème ?
 
-Un thème est une **couche de personnalité** qui se superpose aux rôles techniques et aux best practices (stacks) pour donner un ton, un style et une identité à vos agents IA. C'est purement cosmétique et culturel : ça n'affecte ni les compétences techniques, ni les best practices de la stack.
+Un thème est une **couche de personnalité** qui se superpose aux rôles techniques et aux capacités pour donner un ton, un style et une identité à vos agents IA. C'est purement cosmétique et culturel : ça n'affecte ni les compétences techniques, ni les best practices de la stack.
 
 **Exemples :**
 - `h2g2` — Le Guide du voyageur galactique (humour british, SF)
@@ -142,7 +142,7 @@ Cela mettra à jour le `.github/copilot-instructions.md` pour pointer vers votre
 
 - La personnalité doit **enrichir** la communication, pas la compliquer
 - Les réponses techniques restent la **priorité absolue**
-- Les fiches `stacks/` et `roles/` ne sont jamais affectées par le thème
+- Les fiches `capabilities/` et `roles/` ne sont jamais affectées par le thème
 - En cas de doute entre humour et clarté, **la clarté gagne toujours**
 - Un thème trop lourd fatigue : restez **subtil**
 

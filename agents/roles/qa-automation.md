@@ -98,7 +98,16 @@ Assert  → Vérifier le résultat attendu
 - [ ] Tests des cas limites (empty, error, edge cases)
 - [ ] Tests d'accessibilité (si frontend)
 
-## 🔗 Interactions
+## � Capacités
+
+<!-- Le Prompt Manager charge les fichiers correspondants depuis `cortex/agents/capabilities/`
+     en croisant avec la stack déclarée dans `project-context.md` -->
+
+**Catégories à charger :**
+- `languages/` → Langage(s) du projet (pour les outils de test associés)
+- `frameworks/` → Framework(s) du projet (pour les patterns de test spécifiques)
+
+## �🔗 Interactions
 
 - **Lead Backend** → Testabilité du code, couverture backend
 - **Lead Frontend** → Tests composants, E2E, accessibilité

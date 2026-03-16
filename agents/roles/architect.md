@@ -94,7 +94,19 @@ Quelle option et pourquoi ?
 - [ ] La solution est scalable pour la croissance prévue
 - [ ] La dette technique est documentée si elle est acceptée
 
-## 🔗 Interactions
+## � Capacités
+
+<!-- Le Prompt Manager charge les fichiers correspondants depuis `cortex/agents/capabilities/`
+     en croisant avec la stack déclarée dans `project-context.md` -->
+
+**Catégories à charger :**
+- `languages/` → Tous les langages utilisés dans le projet
+- `frameworks/` → Tous les frameworks utilisés dans le projet
+- `infrastructure/` → Outils infra utilisés (Docker, Kubernetes…)
+- `databases/` → Tous les SGBD utilisés dans le projet
+- `security/` → Toujours charger `security/owasp.md`
+
+## �🔗 Interactions
 
 - **Performance Engineer** → Validation des impacts performance
 - **Security Engineer** → Validation des aspects sécurité

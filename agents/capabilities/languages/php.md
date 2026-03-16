@@ -1,8 +1,8 @@
 # PHP — Best Practices
 
-<!-- STACK REFERENCE
+<!-- CAPABILITY REFERENCE
 Fiche de best practices pour le langage PHP.
-À combiner avec un rôle (ex: roles/lead-backend.md) et un framework (ex: stacks/frameworks/symfony.md).
+À combiner avec un rôle (ex: roles/lead-backend.md) et un framework (ex: capabilities/frameworks/symfony.md).
 Ne contient AUCUNE référence à un framework spécifique — uniquement le langage.
 -->
 

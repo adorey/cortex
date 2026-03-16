@@ -101,7 +101,16 @@ Les différences sont uniquement dans les variables d'environnement.
 - [ ] Plan de rollback documenté
 - [ ] Backup récent vérifié
 
-## 🔗 Interactions
+## � Capacités
+
+<!-- Le Prompt Manager charge les fichiers correspondants depuis `cortex/agents/capabilities/`
+     en croisant avec la stack déclarée dans `project-context.md` -->
+
+**Catégories à charger :**
+- `infrastructure/` → Outils infra du projet (Docker, Kubernetes…)
+- `security/` → Toujours charger `security/owasp.md`
+
+## �🔗 Interactions
 
 - **Architect** → Validation de la faisabilité infrastructure
 - **Security Engineer** → Sécurité infra, secrets, réseau

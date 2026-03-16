@@ -92,7 +92,16 @@ Préférer la composition à l'héritage.
 - [ ] Performance vérifiée (pas de re-renders inutiles)
 - [ ] Intégration API testée (cas nominaux + erreurs)
 
-## 🔗 Interactions
+## � Capacités
+
+<!-- Le Prompt Manager charge les fichiers correspondants depuis `cortex/agents/capabilities/`
+     en croisant avec la stack déclarée dans `project-context.md` -->
+
+**Catégories à charger :**
+- `languages/` → Langage(s) frontend du projet
+- `frameworks/` → Framework(s) frontend du projet
+
+## �🔗 Interactions
 
 - **Lead Backend** → Contrats d'API, formats de données
 - **Tech Writer** → Clarté des interfaces et messages

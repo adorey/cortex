@@ -99,7 +99,15 @@ Décimaux   : DECIMAL(p, s) pour la précision (jamais FLOAT pour de l'argent)
 - [ ] Temps d'exécution mesuré avec des données réalistes
 - [ ] Pagination en place
 
-## 🔗 Interactions
+## � Capacités
+
+<!-- Le Prompt Manager charge les fichiers correspondants depuis `cortex/agents/capabilities/`
+     en croisant avec la stack déclarée dans `project-context.md` -->
+
+**Catégories à charger :**
+- `databases/` → Tous les SGBD utilisés dans le projet
+
+## �🔗 Interactions
 
 - **Lead Backend** → Requêtes ORM, migrations, modèle de données
 - **Performance Engineer** → Optimisation des requêtes lentes

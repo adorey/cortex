@@ -89,7 +89,17 @@ Garantir la sécurité du projet à tous les niveaux : code, infrastructure, don
 - [ ] Revue régulière des permissions
 ```
 
-## 🔗 Interactions
+## � Capacités
+
+<!-- Le Prompt Manager charge les fichiers correspondants depuis `cortex/agents/capabilities/`
+     en croisant avec la stack déclarée dans `project-context.md` -->
+
+**Catégories à charger :**
+- `security/` → Toujours charger `security/owasp.md`
+- `languages/` → Langage(s) du projet (pour les patterns vulnérables spécifiques au langage)
+- `frameworks/` → Framework(s) du projet (pour les vecteurs d'attaque spécifiques)
+
+## �🔗 Interactions
 
 - **Compliance Officer** → Conformité RGPD et réglementaire
 - **Platform Engineer** → Sécurité infrastructure

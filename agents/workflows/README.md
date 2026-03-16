@@ -11,7 +11,7 @@ Ce n'est pas un script rigide. C'est un filet de sécurité pour ne rien oublier
 | Couche | Répond à |
 |---|---|
 | `roles/` | **QUOI** faire |
-| `stacks/` | **COMMENT** le faire |
+| `capabilities/` | **CE QUE JE SAIS FAIRE** |
 | `personalities/` | **QUI** tu es |
 | `project-context.md` | **OÙ** tu travailles |
 | `workflows/` | **DANS QUEL ORDRE et AVEC QUI** |

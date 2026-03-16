@@ -124,8 +124,9 @@ Avant d'optimiser, vérifier :
    - Si non trouvé → continuer en dispatch classique (étape 3)
    - Si cas récurrent sans workflow → proposer d'en créer un via `cortex/templates/workflow.md.template`
 3. **Dispatch :** Identifier et nommer l'expert qui traitera la demande
-4. **Transmission :** Inclure l'ordre de se mettre au travail immédiatement
-5. **Archivage :** Proposer l'archivage en fin de tâche
+4. **Chargement des capacités :** Lire la section `🔌 Capacités` de la fiche rôle de l'expert dispatché, croiser avec la stack déclarée dans `project-context.md`, charger les fichiers correspondants dans `cortex/agents/capabilities/`
+5. **Transmission :** Inclure l'ordre de se mettre au travail immédiatement
+6. **Archivage :** Proposer l'archivage en fin de tâche
 
 ## 🛠️ Patterns de Bons Prompts
 
@@ -173,3 +174,4 @@ Avant d'optimiser, vérifier :
 - **Product Owner** → Clarification des exigences produit
 - **Tous les rôles** → Optimisation de la communication vers chaque expert
 - **Workflows** → Orchestration d'étapes multi-agents selon le contexte détecté
+- **Capabilities** → Chargement automatique des compétences techniques selon le rôle + la stack projet

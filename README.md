@@ -14,7 +14,7 @@ Chaque agent est composé de **4 couches indépendantes** :
 ┌─────────────────────────────────┐
 │   project-context.md            │  ← Vos règles métier, conventions locales
 ├─────────────────────────────────┤
-│   stacks/{techno}.md            │  ← Best practices techno (PHP, Docker…)
+│   capabilities/{techno}.md      │  ← Compétences techniques chargeables (PHP, Docker…)
 ├─────────────────────────────────┤
 │   personalities/{theme}/        │  ← Personnalité optionnelle (ex: H2G2)
 ├─────────────────────────────────┤
@@ -29,7 +29,7 @@ Chaque agent est composé de **4 couches indépendantes** :
 | Couche | Répond à | Exemple |
 |---|---|---|
 | `roles/` | **QUOI** faire | "Un lead backend structure, review, mentore" |
-| `stacks/` | **COMMENT** le faire | "En PHP : PSR-12, injection de dépendances..." |
+| `capabilities/` | **CE QUE JE SAIS FAIRE** | "En PHP : PSR-12, injection de dépendances..." |
 | `personalities/` | **QUI** tu es | "Hactar, méthodique, élégant" |
 | `project-context.md` | **OÙ** tu travailles | "Ce projet : Symfony 7.2, PHP 8.3, MySQL 8" |
 | `workflows/` | **DANS QUEL ORDRE et AVEC QUI** | "Feature dev : architect → backend → QA → sécu → doc" |
@@ -71,7 +71,7 @@ cortex/
 │   │   ├── performance-engineer.md
 │   │   └── consultant-platform.md
 │   │
-│   ├── stacks/                        # Couche 2 : Best practices techniques
+│   ├── capabilities/                   # Couche 2 : Compétences techniques chargeables
 │   │   ├── languages/
 │   │   │   ├── php.md
 │   │   │   └── typescript.md
@@ -299,8 +299,8 @@ Checklist de diagnostic :
 - **Zéro dépendance projet** : les rôles sont agnostiques, la stack est dans `project-context.md`
 - **Plug & Play** : `setup.sh` et c'est prêt
 - **Composable** : rôle + stack + personnalité + contexte + workflow = agent complet
-- **Best practices partagées** : les fiches `stacks/` sont réutilisables d'un projet à l'autre
-- **Évolutif** : ajoutez vos propres rôles, stacks, thèmes ou workflows
+- **Capacités chargeables** : les fiches `capabilities/` sont réutilisables d'un projet à l'autre, et chargées automatiquement par le PM selon le rôle actif et la stack du projet
+- **Évolutif** : ajoutez vos propres rôles, capacités, thèmes ou workflows
 - **Workflows projet** : créez vos workflows métier dans `{projet}/agents/workflows/` avec `cortex/templates/workflow.md.template`
 
 > *"La documentation, c'est le thé du développeur : personne n'en veut jusqu'à ce qu'il en ait désespérément besoin."* — Arthur Dent

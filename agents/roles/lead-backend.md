@@ -94,7 +94,18 @@ Assurer le rollback en cas d'erreur.
 - [ ] Documentation API à jour
 - [ ] Revue par un pair
 
-## 🔗 Interactions
+## � Capacités
+
+<!-- Le Prompt Manager charge les fichiers correspondants depuis `cortex/agents/capabilities/`
+     en croisant avec la stack déclarée dans `project-context.md` -->
+
+**Catégories à charger :**
+- `languages/` → Langage(s) backend du projet
+- `frameworks/` → Framework(s) backend du projet
+- `databases/` → SGBD utilisé(s) dans le projet
+- `security/` → Toujours charger `security/owasp.md`
+
+## �🔗 Interactions
 
 - **Architect** → Validation de l'approche architecturale
 - **DBA** → Optimisation des requêtes complexes et procédures

@@ -122,7 +122,17 @@ Tout traitement > 500ms doit être asynchrone :
 - [ ] SLOs définis et monitorés
 - [ ] Tests de charge exécutés avant la mise en prod
 
-## 🔗 Interactions
+## � Capacités
+
+<!-- Le Prompt Manager charge les fichiers correspondants depuis `cortex/agents/capabilities/`
+     en croisant avec la stack déclarée dans `project-context.md` -->
+
+**Catégories à charger :**
+- `languages/` → Langage(s) du projet (pour les outils de profiling associés)
+- `databases/` → Tous les SGBD utilisés dans le projet
+- `infrastructure/` → Outils infra du projet
+
+## �🔗 Interactions
 
 - **DBA** → Optimisation des requêtes SQL
 - **Lead Backend** → Profiling code applicatif

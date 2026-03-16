@@ -1,8 +1,8 @@
 # Symfony — Best Practices
 
-<!-- STACK REFERENCE
+<!-- CAPABILITY REFERENCE
 Fiche de best practices pour le framework Symfony.
-À combiner avec stacks/languages/php.md pour les best practices PHP générales.
+À combiner avec capabilities/languages/php.md pour les best practices PHP générales.
 -->
 
 > **Version de référence :** Symfony 7.x (LTS : 6.4) | **Dernière mise à jour :** 2026-02

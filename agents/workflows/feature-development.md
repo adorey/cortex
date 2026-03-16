@@ -45,7 +45,7 @@ Ce workflow s'active lorsque le prompt contient des formulations du type :
 **Objectif :** Produire le code selon les standards de la stack projet.
 
 **Checklist :**
-- [ ] Respecter les conventions définies dans `stacks/` et `project-context.md`
+- [ ] Respecter les conventions définies dans `capabilities/` et `project-context.md`
 - [ ] Implémenter la logique métier
 - [ ] Gérer les cas d'erreur et les edge cases
 - [ ] Écrire les tests unitaires en parallèle

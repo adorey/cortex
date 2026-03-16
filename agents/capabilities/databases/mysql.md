@@ -1,6 +1,6 @@
 # MySQL — Best Practices
 
-<!-- STACK REFERENCE
+<!-- CAPABILITY REFERENCE
 Fiche de best practices pour MySQL / MariaDB.
 À combiner avec un rôle (ex: roles/dba.md).
 -->
