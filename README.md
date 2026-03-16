@@ -8,11 +8,12 @@ Cortex est un framework d'agents IA spécialisés, prêts à être intégrés da
 
 ## 🚀 Concept
 
-Chaque agent est composé de **4 couches indépendantes** :
+Chaque agent est composé de **5 couches indépendantes** :
 
 ```
 ┌─────────────────────────────────┐
-│   project-context.md            │  ← Vos règles métier, conventions locales
+│   project-overview.md           │  ← Vision, acteurs, contraintes métier
+│   project-context.md            │  ← Stack, conventions, outils
 ├─────────────────────────────────┤
 │   capabilities/{techno}.md      │  ← Compétences techniques chargeables (PHP, Docker…)
 ├─────────────────────────────────┤
@@ -31,7 +32,8 @@ Chaque agent est composé de **4 couches indépendantes** :
 | `roles/` | **QUOI** faire | "Un lead backend structure, review, mentore" |
 | `capabilities/` | **CE QUE JE SAIS FAIRE** | "En PHP : PSR-12, injection de dépendances..." |
 | `personalities/` | **QUI** tu es | "Hactar, méthodique, élégant" |
-| `project-context.md` | **OÙ** tu travailles | "Ce projet : Symfony 7.2, PHP 8.3, MySQL 8" |
+| `project-overview.md` | **POURQUOI** tu travailles | "Mission : plateforme B2B, acteurs, contraintes business" |
+| `project-context.md` | **OÙ / COMMENT** tu travailles | "Ce projet : Symfony 7.2, PHP 8.3, MySQL 8" |
 | `workflows/` | **DANS QUEL ORDRE et AVEC QUI** | "Feature dev : architect → backend → QA → sécu → doc" |
 
 Cette séparation permet de :
@@ -55,8 +57,6 @@ cortex/
 │   └── workflow.md.template                 # Template pour créer un workflow projet
 │
 ├── agents/
-│   ├── project-context.md.template    # Template project-context
-│   │
 │   ├── roles/                         # Couche 1 : Rôles métier (agnostiques)
 │   │   ├── prompt-manager.md         # Point d'entrée (racine, toujours actif)
 │   │   ├── engineering/               # Conception & réalisation technique
@@ -105,6 +105,7 @@ cortex/
 │       └── tech-watch.md
 │
 └── docs/
+    ├── getting-started.md             # Guide d'installation pas à pas
     └── creating-a-theme.md            # Guide pour créer un thème
 ```
 
@@ -161,6 +162,11 @@ Si aucun alias n'est mentionné, Cortex déduit le service depuis les fichiers o
 2. Copiez `cortex/templates/project-overview.md.template` → `project-overview.md` et remplissez la vision
 3. Copiez `cortex/templates/project-context.md.template` → `project-context.md` et remplissez la stack
 4. Invoquez un agent via `@NomAgent` dans votre IDE (Copilot, Cursor, etc.)
+
+## 📚 Documentation
+
+- [**Getting Started**](docs/getting-started.md) — guide d’installation pas à pas (projet unique & workspace)
+- [**Créer un thème**](docs/creating-a-theme.md) — personnaliser le ton et le style des agents
 
 ## 🎯 Philosophie
 

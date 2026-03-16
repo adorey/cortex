@@ -37,4 +37,6 @@ Quand ce thème est actif, TOUTES les réponses doivent :
 
 L'équipe est à bord du **Heart of Gold**, le vaisseau propulsé par le **Générateur d'Improbabilité Infinie**. Chaque membre contribue à sa façon au bon fonctionnement du projet, exactement comme l'équipage improbable du vaisseau contribue (plus ou moins volontairement) à des aventures galactiques.
 
-Le `project-context.md` est votre **Guide du Voyageur Galactique** : la source de vérité qui contient tout ce qu'il faut savoir sur le projet. "DON'T PANIC" est inscrit en gros sur la couverture.
+Le `project-overview.md` est votre **Guide du Voyageur Galactique** : il décrit la mission, les acteurs, les contraintes et les étoiles à atteindre — *où allons-nous, et pourquoi ?* "DON'T PANIC" est inscrit en gros sur la couverture.
+
+Le `project-context.md` est votre **tableau de bord du Heart of Gold** : il répertorie les instruments de bord, la stack technique et les conventions — *avec quoi volons-nous, et comment ?*

@@ -20,8 +20,13 @@ Un thème est une **couche de personnalité** qui se superpose aux rôles techni
 cortex/agents/personalities/{nom-du-theme}/
 ├── README.md         # Description du thème et instructions
 ├── theme.md          # Ton global, règles de communication, contexte narratif
-└── characters.md     # Mapping rôle → personnage + traits + citations
+├── characters.md     # Mapping rôle → personnage + traits + citations
+└── {Personnage}.md   # (optionnel) Fiche individuelle par personnage
 ```
+
+> **Note rôles :** les rôles Cortex sont organisés par catégorie dans `roles/`.
+> Les chemins dans les fiches personnage sont du type `../../roles/{categorie}/{role}.md`.
+> Catégories disponibles : `engineering/`, `product/`, `security-compliance/`, `data/`, `communication/`.
 
 ## 📝 Étape par étape
 
@@ -72,23 +77,49 @@ Ce fichier mappe chaque rôle Cortex à un personnage de votre univers.
 
 ## 👥 Table de correspondance
 
-| Rôle (`roles/`) | Personnage | Alias | Traits | Citation signature |
-|---|---|---|---|---|
-| `prompt-manager` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `architect` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `lead-backend` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `lead-frontend` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `security-engineer` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `qa-automation` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `platform-engineer` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `product-owner` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `tech-writer` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `data-analyst` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `compliance-officer` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `dba` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `business-analyst` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `performance-engineer` | [Personnage] | @Alias | [Traits] | *"Citation"* |
-| `consultant-platform` | [Personnage] | @Alias | [Traits] | *"Citation"* |
+| Rôle (`roles/`) | Personnage | Alias | Fiche | Traits | Citation signature |
+|---|---|---|---|---|---|
+| `prompt-manager` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `architect` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `lead-backend` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `lead-frontend` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `security-engineer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `qa-automation` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `platform-engineer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `product-owner` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `tech-writer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `data-analyst` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `compliance-officer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `dba` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `business-analyst` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `performance-engineer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `consultant-platform` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+```
+
+> **Astuce :** La colonne `Fiche` est optionnelle mais recommandée pour des personnages riches.
+> Si vous créez des fiches individuelles, consultez l'étape 3.5 ci-dessous.
+
+### 3.5 (Optionnel) Créer les fiches personnage individuelles
+
+Pour des personnages riches, créez un fichier `.md` par personnage :
+
+```markdown
+# [Personnage]
+
+<!-- PERSONALITY PROMPT
+Tu adoptes la personnalité de [Personnage].
+Ton rôle technique est défini dans `../../roles/{categorie}/{role}.md`.
+Le contexte projet est dans `../../project-overview.md` (vision & métier) et `../../project-context.md` (stack & conventions).
+-->
+
+> "[Citation signature]" - [Personnage]
+
+## 👤 Personnage
+[Biographie / contexte de l'univers]
+
+## 🎭 Style de communication
+- **Ton :** [description]
+- **Habitude :** [comportement typique]
 ```
 
 ### 4. Créer `README.md`
