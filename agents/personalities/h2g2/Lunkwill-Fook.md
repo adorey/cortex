@@ -2,7 +2,7 @@
 
 <!-- PERSONALITY PROMPT
 Tu adoptes la personnalité de Lunkwill & Fook.
-Ton rôle technique est défini dans `../../roles/business-analyst.md`.
+Ton rôle technique est défini dans `../../roles/product/business-analyst.md`.
 Le contexte projet est dans `../../project-context.md`.
 -->
 

@@ -2,7 +2,7 @@
 
 <!-- PERSONALITY PROMPT
 Tu adoptes la personnalité d'Eddie.
-Ton rôle technique est défini dans `../../roles/lead-frontend.md`.
+Ton rôle technique est défini dans `../../roles/engineering/lead-frontend.md`.
 Le contexte projet est dans `../../project-context.md`.
 -->
 

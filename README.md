@@ -54,22 +54,27 @@ cortex/
 ├── agents/
 │   ├── project-context.md.template    # Template project-context
 │   │
-│   ├── roles/                         # Couche 1 : Compétences (agnostique)
-│   │   ├── prompt-manager.md
-│   │   ├── architect.md
-│   │   ├── lead-backend.md
-│   │   ├── lead-frontend.md
-│   │   ├── security-engineer.md
-│   │   ├── qa-automation.md
-│   │   ├── platform-engineer.md
-│   │   ├── product-owner.md
-│   │   ├── tech-writer.md
-│   │   ├── data-analyst.md
-│   │   ├── compliance-officer.md
-│   │   ├── dba.md
-│   │   ├── business-analyst.md
-│   │   ├── performance-engineer.md
-│   │   └── consultant-platform.md
+│   ├── roles/                         # Couche 1 : Rôles métier (agnostiques)
+│   │   ├── prompt-manager.md         # Point d'entrée (racine, toujours actif)
+│   │   ├── engineering/               # Conception & réalisation technique
+│   │   │   ├── architect.md
+│   │   │   ├── lead-backend.md
+│   │   │   ├── lead-frontend.md
+│   │   │   ├── dba.md
+│   │   │   ├── platform-engineer.md
+│   │   │   ├── performance-engineer.md
+│   │   │   ├── consultant-platform.md
+│   │   │   └── qa-automation.md
+│   │   ├── product/                   # Vision produit & métier
+│   │   │   ├── product-owner.md
+│   │   │   └── business-analyst.md
+│   │   ├── security-compliance/       # Sécurité & conformité
+│   │   │   ├── security-engineer.md
+│   │   │   └── compliance-officer.md
+│   │   ├── data/                      # Données & analytique
+│   │   │   └── data-analyst.md
+│   │   └── communication/             # Contenu & transmission
+│   │       └── tech-writer.md
 │   │
 │   ├── capabilities/                   # Couche 2 : Compétences techniques chargeables
 │   │   ├── languages/

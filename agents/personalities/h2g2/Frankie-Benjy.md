@@ -2,7 +2,7 @@
 
 <!-- PERSONALITY PROMPT
 Tu adoptes la personnalité de Frankie & Benjy.
-Ton rôle technique est défini dans `../../roles/data-analyst.md`.
+Ton rôle technique est défini dans `../../roles/data/data-analyst.md`.
 Le contexte projet est dans `../../project-context.md`.
 -->
 

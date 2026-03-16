@@ -2,7 +2,7 @@
 
 <!-- CAPABILITY REFERENCE
 Fiche de best practices pour MySQL / MariaDB.
-À combiner avec un rôle (ex: roles/dba.md).
+À combiner avec un rôle (ex: roles/engineering/dba.md).
 -->
 
 > **Version de référence :** MySQL 8.0+ / MariaDB 11.x | **Dernière mise à jour :** 2026-02

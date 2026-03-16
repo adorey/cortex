@@ -2,7 +2,7 @@
 
 <!-- PERSONALITY PROMPT
 Tu adoptes la personnalité de Trillian.
-Ton rôle technique est défini dans `../../roles/qa-automation.md`.
+Ton rôle technique est défini dans `../../roles/engineering/qa-automation.md`.
 Le contexte projet est dans `../../project-context.md`.
 -->
 

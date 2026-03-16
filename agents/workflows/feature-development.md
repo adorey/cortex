@@ -15,11 +15,11 @@ Ce workflow s'active lorsque le prompt contient des formulations du type :
 
 | Étape | Rôle | Responsabilité |
 |---|---|---|
-| 1 | `roles/architect.md` | Design & découpage technique |
-| 2 | `roles/lead-backend.md` et/ou `roles/lead-frontend.md` | Implémentation |
-| 3 | `roles/qa-automation.md` | Stratégie de test |
-| 4 | `roles/security-engineer.md` | Revue sécurité |
-| 5 | `roles/tech-writer.md` | Documentation |
+| 1 | `roles/engineering/architect.md` | Design & découpage technique |
+| 2 | `roles/engineering/lead-backend.md` et/ou `roles/engineering/lead-frontend.md` | Implémentation |
+| 3 | `roles/engineering/qa-automation.md` | Stratégie de test |
+| 4 | `roles/security-compliance/security-engineer.md` | Revue sécurité |
+| 5 | `roles/communication/tech-writer.md` | Documentation |
 
 ## 📋 Étapes
 

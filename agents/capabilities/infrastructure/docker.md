@@ -1,8 +1,8 @@
 # Docker — Best Practices
 
-<!-- STACK REFERENCE
+<!-- CAPABILITY REFERENCE
 Fiche de best practices pour Docker (conteneurisation).
-À combiner avec un rôle (ex: roles/platform-engineer.md).
+À combiner avec un rôle (ex: roles/engineering/platform-engineer.md).
 -->
 
 > **Version de référence :** Docker Engine 27.x / Docker Compose v2 | **Dernière mise à jour :** 2026-02

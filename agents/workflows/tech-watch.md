@@ -16,11 +16,11 @@ Ce workflow s'active lorsque le prompt contient des formulations du type :
 
 | Étape | Rôle | Responsabilité |
 |---|---|---|
-| 1 | `roles/architect.md` | Cadrage du besoin et critères d'évaluation |
-| 2 | `roles/data-analyst.md` | Collecte et structuration des données |
-| 3 | `roles/architect.md` | Analyse comparative et recommandation |
-| 4 | `roles/security-engineer.md` | Évaluation sécurité des options retenues |
-| 5 | `roles/tech-writer.md` | Formalisation du rapport de veille |
+| 1 | `roles/engineering/architect.md` | Cadrage du besoin et critères d'évaluation |
+| 2 | `roles/data/data-analyst.md` | Collecte et structuration des données |
+| 3 | `roles/engineering/architect.md` | Analyse comparative et recommandation |
+| 4 | `roles/security-compliance/security-engineer.md` | Évaluation sécurité des options retenues |
+| 5 | `roles/communication/tech-writer.md` | Formalisation du rapport de veille |
 
 ## 📋 Étapes
 

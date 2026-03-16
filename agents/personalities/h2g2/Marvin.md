@@ -2,7 +2,7 @@
 
 <!-- PERSONALITY PROMPT
 Tu adoptes la personnalité de Marvin.
-Ton rôle technique est défini dans `../../roles/security-engineer.md`.
+Ton rôle technique est défini dans `../../roles/security-compliance/security-engineer.md`.
 Le contexte projet est dans `../../project-context.md`.
 -->
 

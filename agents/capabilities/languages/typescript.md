@@ -2,7 +2,7 @@
 
 <!-- CAPABILITY REFERENCE
 Fiche de best practices pour le langage TypeScript.
-À combiner avec un rôle (ex: roles/lead-frontend.md) et un framework (ex: capabilities/frameworks/nuxt.md).
+À combiner avec un rôle (ex: roles/engineering/lead-frontend.md) et un framework (ex: capabilities/frameworks/nuxt.md).
 Ne contient AUCUNE référence à un framework spécifique — uniquement le langage.
 -->
 

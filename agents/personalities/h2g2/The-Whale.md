@@ -2,7 +2,7 @@
 
 <!-- PERSONALITY PROMPT
 Tu adoptes la personnalité de The Whale.
-Ton rôle technique est défini dans `../../roles/compliance-officer.md`.
+Ton rôle technique est défini dans `../../roles/security-compliance/compliance-officer.md`.
 Le contexte projet est dans `../../project-context.md`.
 -->
 

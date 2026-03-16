@@ -2,7 +2,7 @@
 
 <!-- CAPABILITY REFERENCE
 Fiche de best practices sécurité applicative basée sur l'OWASP Top 10.
-À combiner avec un rôle (ex: roles/security-engineer.md) et une capacité langage/framework.
+À combiner avec un rôle (ex: roles/security-compliance/security-engineer.md) et une capacité langage/framework.
 -->
 
 > **Référence :** OWASP Top 10 (2021) | **Dernière mise à jour :** 2026-02
