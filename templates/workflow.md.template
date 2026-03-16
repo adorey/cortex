@@ -1,0 +1,60 @@
+# Workflow : [Nom du workflow]
+
+<!-- WORKFLOW SPÉCIFIQUE PROJET
+     Placez ce fichier dans {projet}/agents/workflows/
+     Il surchargera automatiquement le workflow générique cortex du même nom, s'il existe.
+-->
+
+## 🎯 Déclencheurs
+
+Ce workflow s'active lorsque le prompt contient des formulations du type :
+<!-- Listez les mots-clés, expressions ou contextes qui déclenchent ce workflow -->
+- "[expression déclencheuse 1]"
+- "[expression déclencheuse 2]"
+
+## 👥 Agents impliqués
+
+| Étape | Rôle | Responsabilité |
+|---|---|---|
+| 1 | `roles/[role].md` | [Responsabilité] |
+| 2 | `roles/[role].md` | [Responsabilité] |
+
+## 📋 Étapes
+
+### Étape 1 — [Nom de l'étape]
+**Agent :** `[role]`
+**Objectif :** [Ce que cette étape doit produire ou vérifier.]
+
+**Checklist :**
+- [ ] [Point à vérifier ou action à réaliser]
+- [ ] [Point à vérifier ou action à réaliser]
+- [ ] [Point à vérifier ou action à réaliser]
+
+**Livrable :** [Ce qui doit exister à la fin de cette étape avant de passer à la suivante.]
+
+---
+
+### Étape 2 — [Nom de l'étape]
+**Agent :** `[role]`
+**Objectif :** [Ce que cette étape doit produire ou vérifier.]
+
+**Checklist :**
+- [ ] [Point à vérifier ou action à réaliser]
+- [ ] [Point à vérifier ou action à réaliser]
+
+**Livrable :** [Livrable attendu.]
+
+---
+
+<!-- Ajoutez autant d'étapes que nécessaire -->
+
+## ✅ Définition de "terminé"
+
+<!-- Critères objectifs et vérifiables pour considérer le workflow complété -->
+- [ ] [Critère 1]
+- [ ] [Critère 2]
+
+## 🔗 Workflows liés
+
+<!-- Workflows qui peuvent précéder, suivre ou s'enchaîner avec celui-ci -->
+- `[workflow].md` — [Contexte de l'enchaînement]

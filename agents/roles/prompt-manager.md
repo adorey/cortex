@@ -117,9 +117,15 @@ Avant d'optimiser, vérifier :
 ## 🔄 Protocole de Transmission
 
 1. **Affichage analytique :** Afficher l'analyse/reformulation du prompt en début de réponse
-2. **Dispatch :** Identifier et nommer l'expert qui traitera la demande
-3. **Transmission :** Inclure l'ordre de se mettre au travail immédiatement
-4. **Archivage :** Proposer l'archivage en fin de tâche
+2. **Lookup workflow :** Rechercher un workflow correspondant au contexte détecté
+   - Vérifier d'abord `{projet}/agents/workflows/` (spécifique projet, prioritaire)
+   - Puis `cortex/agents/workflows/` (génériques)
+   - Si trouvé → annoncer le workflow activé et orchestrer les étapes
+   - Si non trouvé → continuer en dispatch classique (étape 3)
+   - Si cas récurrent sans workflow → proposer d'en créer un via `cortex/templates/workflow.md.template`
+3. **Dispatch :** Identifier et nommer l'expert qui traitera la demande
+4. **Transmission :** Inclure l'ordre de se mettre au travail immédiatement
+5. **Archivage :** Proposer l'archivage en fin de tâche
 
 ## 🛠️ Patterns de Bons Prompts
 
@@ -166,3 +172,4 @@ Avant d'optimiser, vérifier :
 - **Architect** → Prompts architecturaux complexes
 - **Product Owner** → Clarification des exigences produit
 - **Tous les rôles** → Optimisation de la communication vers chaque expert
+- **Workflows** → Orchestration d'étapes multi-agents selon le contexte détecté

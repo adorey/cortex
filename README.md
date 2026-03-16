@@ -19,6 +19,8 @@ Chaque agent est composé de **4 couches indépendantes** :
 │   personalities/{theme}/        │  ← Personnalité optionnelle (ex: H2G2)
 ├─────────────────────────────────┤
 │   roles/{role}.md               │  ← Compétences métier génériques
+├─────────────────────────────────┤
+│   workflows/{contexte}.md       │  ← Trames d'orchestration multi-agents
 └─────────────────────────────────┘
 ```
 
@@ -29,13 +31,15 @@ Chaque agent est composé de **4 couches indépendantes** :
 | `roles/` | **QUOI** faire | "Un lead backend structure, review, mentore" |
 | `stacks/` | **COMMENT** le faire | "En PHP : PSR-12, injection de dépendances..." |
 | `personalities/` | **QUI** tu es | "Hactar, méthodique, élégant" |
-| `project-context.md` | **OÙ** tu travailles | "Ce projet : Symfony 7.2, PHP 8.3, PostgreSQL 16" |
+| `project-context.md` | **OÙ** tu travailles | "Ce projet : Symfony 7.2, PHP 8.3, MySQL 8" |
+| `workflows/` | **DANS QUEL ORDRE et AVEC QUI** | "Feature dev : architect → backend → QA → sécu → doc" |
 
 Cette séparation permet de :
 - Changer de **personnalité** (H2G2, Star Wars, corporate…) sans toucher aux compétences
 - Réutiliser les **rôles** sur n'importe quelle stack technique
 - Partager les **best practices** d'une techno entre tous les projets qui l'utilisent
 - Personnaliser le **contexte projet** sans modifier les agents
+- Définir des **workflows** réutilisables (génériques dans cortex) ou spécifiques (dans le projet hôte via `agents/workflows/`)
 
 ## 📁 Structure
 
@@ -44,7 +48,8 @@ cortex/
 ├── README.md                          # Ce fichier
 ├── setup.sh                           # Script d'installation
 ├── templates/
-│   └── copilot-instructions.md        # Template de référence
+│   ├── copilot-instructions.md        # Template auto-généré à l'install
+│   └── workflow.md.template           # Template pour créer un workflow projet
 │
 ├── agents/
 │   ├── project-context.md.template    # Template project-context
@@ -80,11 +85,16 @@ cortex/
 │   │   └── security/
 │   │       └── owasp.md
 │   │
-│   └── personalities/                 # Couche 3 : Thèmes de personnalité
-│       └── h2g2/                      # Thème H2G2 (Guide du voyageur galactique)
-│           ├── theme.md
-│           ├── characters.md
-│           └── {personnage}.md        # Fiches personnalité individuelles
+│   ├── personalities/                 # Couche 3 : Thèmes de personnalité
+│   │   └── h2g2/                      # Thème H2G2 (Guide du voyageur galactique)
+│   │       ├── theme.md
+│   │       ├── characters.md
+│   │       └── {personnage}.md        # Fiche personnalité individuelle
+│   │
+│   └── workflows/                     # Couche 5 : Trames d'orchestration multi-agents
+│       ├── README.md
+│       ├── feature-development.md
+│       └── tech-watch.md
 │
 └── docs/
     └── creating-a-theme.md            # Guide pour créer un thème
@@ -287,9 +297,10 @@ Checklist de diagnostic :
 ## 🎯 Philosophie
 
 - **Zéro dépendance projet** : les rôles sont agnostiques, la stack est dans `project-context.md`
-- **Plug & Play** : `setup.sh` et c'est prêt — triple couche de fiabilité automatique
-- **Composable** : rôle + stack + personnalité + contexte = agent complet
+- **Plug & Play** : `setup.sh` et c'est prêt
+- **Composable** : rôle + stack + personnalité + contexte + workflow = agent complet
 - **Best practices partagées** : les fiches `stacks/` sont réutilisables d'un projet à l'autre
-- **Évolutif** : ajoutez vos propres rôles, stacks ou thèmes de personnalité
+- **Évolutif** : ajoutez vos propres rôles, stacks, thèmes ou workflows
+- **Workflows projet** : créez vos workflows métier dans `{projet}/agents/workflows/` avec `cortex/templates/workflow.md.template`
 
 > *"La documentation, c'est le thé du développeur : personne n'en veut jusqu'à ce qu'il en ait désespérément besoin."* — Arthur Dent
