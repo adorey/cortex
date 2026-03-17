@@ -99,10 +99,12 @@ cortex/
 │   │       ├── characters.md
 │   │       └── {personnage}.md        # Fiche personnalité individuelle
 │   │
-│   └── workflows/                     # Couche 5 : Trames d'orchestration multi-agents
-│       ├── README.md
-│       ├── feature-development.md
-│       └── tech-watch.md
+   └── workflows/                     # Couche 4 : Trames d'orchestration multi-agents
+       ├── engineering/               # Développement & technique
+       │   └── feature-development.md
+       ├── intelligence/              # Veille & analyse
+       │   └── tech-watch.md
+       └── README.md
 │
 └── docs/
     ├── getting-started.md             # Guide d'installation pas à pas

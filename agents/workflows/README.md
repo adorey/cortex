@@ -19,13 +19,17 @@ Ce n'est pas un script rigide. C'est un filet de sécurité pour ne rien oublier
 ## 📁 Deux niveaux
 
 ```
-cortex/agents/workflows/        ← Workflows génériques (ce dossier)
-    ├── feature-development.md
-    ├── tech-watch.md
-    └── ...
+cortex/agents/workflows/                 ← Workflows génériques (ce dossier)
+    ├── engineering/                         ← Développement & technique
+    │   └── feature-development.md
+    ├── intelligence/                        ← Veille & analyse
+    │   └── tech-watch.md
+    ├── ops/                                 ← Déploiement & incident (futur)
+    └── product/                             ← Discovery & roadmap (futur)
 
-{projet}/agents/workflows/      ← Workflows spécifiques au projet hôte
-    ├── rfp-response.md
+{projet}/agents/workflows/               ← Workflows spécifiques au projet hôte
+    ├── engineering/
+    │   └── mon-workflow.md
     └── ...
 ```
 
@@ -43,11 +47,20 @@ Le Prompt Manager est le **seul point d'entrée**. À chaque demande il :
 
 ## 📝 Workflows disponibles
 
-| Fichier | Contexte de déclenchement |
-|---|---|
-| `feature-development.md` | Développement d'une nouvelle fonctionnalité |
-| `tech-watch.md` | Veille technologique sur un sujet ou outil |
+| Catégorie | Fichier | Contexte de déclenchement |
+|---|---|---|
+| `engineering/` | `feature-development.md` | Développement d'une nouvelle fonctionnalité |
+| `intelligence/` | `tech-watch.md` | Veille technologique sur un sujet ou outil |
+
+## 🗂️ Catégories
+
+| Catégorie | Vocation | Exemples de workflows futurs |
+|---|---|---|
+| `engineering/` | Développement & technique | `bug-fix`, `code-review`, `refactoring` |
+| `intelligence/` | Veille & analyse | `security-audit`, `competitive-watch` |
+| `ops/` | Déploiement & incident | `deployment`, `incident-response` |
+| `product/` | Discovery & roadmap | `backlog-grooming`, `user-story-mapping` |
 
 ## ➕ Créer un workflow projet
 
-Utilisez le template `cortex/templates/workflow.md.template` et placez votre fichier dans `{projet}/agents/workflows/`.
+Utilisez le template `cortex/templates/workflow.md.template` et placez votre fichier dans `{projet}/agents/workflows/{catégorie}/`.

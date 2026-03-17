@@ -186,8 +186,8 @@ Les workflows Cortex sont dans `cortex/agents/workflows/` (génériques, partag�
 Pour créer un workflow spécifique à votre projet :
 
 ```bash
-mkdir -p agents/workflows/
-cp cortex/templates/workflow.md.template agents/workflows/mon-workflow.md
+mkdir -p agents/workflows/engineering/
+cp cortex/templates/workflow.md.template agents/workflows/engineering/mon-workflow.md
 # Remplissez le template
 ```
 
