@@ -1,38 +1,38 @@
-<!-- @alias: mon-projet -->
+<!-- @alias: my-project -->
 <!--
-  @alias : identifiant court pour cibler ce projet/service depuis un prompt.
-  Doit correspondre à l'alias déclaré dans project-overview.md.
-  Utile principalement en mode workspace multi-projets.
+  @alias: short identifier to target this project/service from a prompt.
+  Must match the alias declared in project-overview.md.
+  Mainly useful in multi-project workspace mode.
 -->
 
-# Contexte technique : [Nom du projet / service]
+# Technical context: [Project / service name]
 
 <!--
-  Ce fichier décrit COMMENT le projet est construit : stack, conventions, outils.
-  Lu par le Prompt Manager pour charger les capacités techniques appropriées.
-  Ne contient PAS la vision métier → voir project-overview.md
+  This file describes HOW the project is built: stack, conventions, tools.
+  Read by the Prompt Manager to load the appropriate technical capabilities.
+  Does NOT contain business vision → see project-overview.md
 -->
 
-## 🏗️ Stack technique
+## 🏗️ Tech stack
 
 ### Backend
-<!-- ex: Symfony 7.2 / PHP 8.3, NestJS / TypeScript, Django / Python 3.12 -->
+<!-- e.g. Symfony 7.2 / PHP 8.3, NestJS / TypeScript, Django / Python 3.12 -->
 
 ### Frontend
-<!-- ex: React 18 / TypeScript, Vue 3 / Nuxt, Next.js 14 -->
+<!-- e.g. React 18 / TypeScript, Vue 3 / Nuxt, Next.js 14 -->
 
-### Base de données
-<!-- ex: MySQL 8.0, PostgreSQL 16, MongoDB 7, Redis 7 -->
+### Database
+<!-- e.g. MySQL 8.0, PostgreSQL 16, MongoDB 7, Redis 7 -->
 
 ### Infrastructure
-<!-- ex: Docker + Kubernetes (GKE), AWS ECS, VPS OVH -->
+<!-- e.g. Docker + Kubernetes (GKE), AWS ECS, OVH VPS -->
 
 ### CI/CD
-<!-- ex: GitHub Actions, GitLab CI, CircleCI -->
+<!-- e.g. GitHub Actions, GitLab CI, CircleCI -->
 
-## 📁 Structure du projet
+## 📁 Project structure
 
-<!-- Organisation des dossiers et modules principaux -->
+<!-- Organisation of main folders and modules -->
 ```
 project/
 ├── src/
@@ -41,27 +41,27 @@ project/
 └── ...
 ```
 
-## 📝 Conventions de code
+## 📝 Code conventions
 
-<!-- Linters, formatters, naming conventions, standards appliqués -->
+<!-- Linters, formatters, naming conventions, applied standards -->
 
-- **Linter / Formatter :** <!-- ex: ESLint + Prettier, PHP CS Fixer PSR-12 -->
-- **Naming conventions :** <!-- ex: camelCase variables, PascalCase classes -->
-- **Standards :** <!-- ex: PSR-12, Conventional Commits, Semantic Versioning -->
-- **Code review :** <!-- ex: 1 approbation requise, feature branches only -->
+- **Linter / Formatter:** <!-- e.g. ESLint + Prettier, PHP CS Fixer PSR-12 -->
+- **Naming conventions:** <!-- e.g. camelCase variables, PascalCase classes -->
+- **Standards:** <!-- e.g. PSR-12, Conventional Commits, Semantic Versioning -->
+- **Code review:** <!-- e.g. 1 approval required, feature branches only -->
 
-## 🛠️ Outils de développement
+## 🛠️ Development tools
 
-<!-- IDE, extensions, outils spécifiques à ce projet -->
+<!-- IDE, extensions, project-specific tools -->
 
-- **IDE recommandé :** <!-- ex: VS Code + extensions Cortex -->
-- **Outils locaux :** <!-- ex: Docker Desktop, TablePlus, Postman -->
-- **Variables d'environnement :** <!-- ex: voir .env.example à la racine -->
+- **Recommended IDE:** <!-- e.g. VS Code + Cortex extensions -->
+- **Local tools:** <!-- e.g. Docker Desktop, TablePlus, Postman -->
+- **Environment variables:** <!-- e.g. see .env.example at the root -->
 
-## ⚡ Contraintes techniques
+## ⚡ Technical constraints
 
 ### Performance
-<!-- SLOs, métriques cibles, ex: réponse API < 200ms p95 -->
+<!-- SLOs, target metrics, e.g. API response < 200ms p95 -->
 
-### Sécurité
-<!-- Exigences spécifiques, ex: OWASP Top 10, pas de secrets en dur -->
+### Security
+<!-- Specific requirements, e.g. OWASP Top 10, no hardcoded secrets -->

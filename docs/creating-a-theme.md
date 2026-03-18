@@ -1,192 +1,192 @@
-# Créer un thème de personnalité
+# Creating a Personality Theme
 
-> *"Si je peux comprendre ce guide en peignoir et sans café, alors la doc est bonne."* — Arthur Dent
+> *"If I can understand this guide in my dressing gown and without coffee, then the documentation is good."* — Arthur Dent
 >
-> Ce guide explique comment créer un thème de personnalité custom pour votre équipe Cortex.
+> This guide explains how to create a custom personality theme for your Cortex team.
 
-## 🎯 Qu'est-ce qu'un thème ?
+## 🎯 What is a theme?
 
-Un thème est une **couche de personnalité** qui se superpose aux rôles techniques et aux capacités pour donner un ton, un style et une identité à vos agents IA. C'est purement cosmétique et culturel : ça n'affecte ni les compétences techniques, ni les best practices de la stack.
+A theme is a **personality layer** that sits on top of the technical roles and capabilities to give a tone, style and identity to your AI agents. It is purely cosmetic and cultural: it does not affect technical skills or stack best practices.
 
-**Exemples :**
-- `h2g2` — Le Guide du voyageur galactique (humour british, SF)
-- `star-wars` — Star Wars (sagesse Jedi, rigueur impériale…)
-- `corporate` — Professionnel neutre (pas de personnage, ton formel)
-- `lotr` — Le Seigneur des Anneaux (sagesse elfique, robustesse naine…)
+**Examples:**
+- `h2g2` — The Hitchhiker's Guide to the Galaxy (British humour, SF)
+- `star-wars` — Star Wars (Jedi wisdom, imperial rigour…)
+- `corporate` — Neutral professional (no character, formal tone)
+- `lotr` — The Lord of the Rings (elven wisdom, dwarven robustness…)
 
-## 📁 Structure d'un thème
+## 📁 Theme structure
 
 ```
-cortex/agents/personalities/{nom-du-theme}/
-├── README.md         # Description du thème et instructions
-├── theme.md          # Ton global, règles de communication, contexte narratif
-├── characters.md     # Mapping rôle → personnage + traits + citations
-└── {Personnage}.md   # (optionnel) Fiche individuelle par personnage
+cortex/agents/personalities/{theme-name}/
+├── README.md         # Theme description and instructions
+├── theme.md          # Global tone, communication rules, narrative context
+├── characters.md     # Role → character mapping + traits + quotes
+└── {Character}.md    # (optional) Individual card per character
 ```
 
-> **Note rôles :** les rôles Cortex sont organisés par catégorie dans `roles/`.
-> Les chemins dans les fiches personnage sont du type `../../roles/{categorie}/{role}.md`.
-> Catégories disponibles : `engineering/`, `product/`, `security-compliance/`, `data/`, `communication/`.
+> **Note on roles:** Cortex roles are organised by category in `roles/`.
+> Paths in character cards follow the pattern `../../roles/{category}/{role}.md`.
+> Available categories: `engineering/`, `product/`, `security-compliance/`, `data/`, `communication/`.
 
-## 📝 Étape par étape
+## 📝 Step by step
 
-### 1. Créer le dossier
+### 1. Create the folder
 
 ```bash
-mkdir -p cortex/agents/personalities/mon-theme
+mkdir -p cortex/agents/personalities/my-theme
 ```
 
-### 2. Créer `theme.md`
+### 2. Create `theme.md`
 
-Ce fichier définit les règles globales du thème. Il est lu par l'IA pour appliquer le ton.
+This file defines the global rules of the theme. It is read by the AI to apply the tone.
 
 ```markdown
-# Thème [Nom] — Règles & Ton
+# [Name] Theme — Rules & Tone
 
 <!-- SYSTEM PROMPT ADDON — PERSONALITY LAYER
-Quand ce thème est actif, TOUTES les réponses doivent :
-1. Adopter le ton du personnage assigné au rôle (voir characters.md)
-2. Commencer par une citation signature du personnage
-3. Utiliser des analogies et références à [univers] quand c'est naturel
-4. NE JAMAIS sacrifier la qualité technique pour le style
+When this theme is active, ALL responses must:
+1. Adopt the tone of the character assigned to the role (see characters.md)
+2. Start with the character's signature quote
+3. Use analogies and references to [universe] when natural
+4. NEVER sacrifice technical quality for style
 -->
 
-## 🎭 Identité du thème
+## 🎭 Theme identity
 
-**Source :** [Œuvre d'origine]
-**Ton :** [Description du ton : humour, sérieux, épique…]
-**Motto :** [Phrase emblématique]
+**Source:** [Original work]
+**Tone:** [Tone description: humour, serious, epic…]
+**Motto:** [Iconic phrase]
 
-## 📏 Règles
+## 📏 Rules
 
-### À faire
-- [Règle 1]
-- [Règle 2]
+### Do
+- [Rule 1]
+- [Rule 2]
 
-### À ne pas faire
+### Don't
 - [Anti-pattern 1]
 - [Anti-pattern 2]
 ```
 
-### 3. Créer `characters.md`
+### 3. Create `characters.md`
 
-Ce fichier mappe chaque rôle Cortex à un personnage de votre univers.
+This file maps each Cortex role to a character from your universe.
 
 ```markdown
-# Thème [Nom] — Personnages
+# [Name] Theme — Characters
 
-## 👥 Table de correspondance
+## 👥 Mapping table
 
-| Rôle (`roles/`) | Personnage | Alias | Fiche | Traits | Citation signature |
+| Role (`roles/`) | Character | Alias | Card | Traits | Signature quote |
 |---|---|---|---|---|---|
-| `prompt-manager` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `architect` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `lead-backend` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `lead-frontend` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `security-engineer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `qa-automation` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `platform-engineer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `product-owner` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `tech-writer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `data-analyst` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `compliance-officer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `dba` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `business-analyst` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `performance-engineer` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
-| `consultant-platform` | [Personnage] | @Alias | [📄](Personnage.md) | [Traits] | *"Citation"* |
+| `prompt-manager` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `architect` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `lead-backend` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `lead-frontend` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `security-engineer` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `qa-automation` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `platform-engineer` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `product-owner` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `tech-writer` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `data-analyst` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `compliance-officer` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `dba` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `business-analyst` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `performance-engineer` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
+| `consultant-platform` | [Character] | @Alias | [📄](Character.md) | [Traits] | *"Quote"* |
 ```
 
-> **Astuce :** La colonne `Fiche` est optionnelle mais recommandée pour des personnages riches.
-> Si vous créez des fiches individuelles, consultez l'étape 3.5 ci-dessous.
+> **Tip:** The `Card` column is optional but recommended for rich characters.
+> If you create individual cards, see step 3.5 below.
 
-### 3.5 (Optionnel) Créer les fiches personnage individuelles
+### 3.5 (Optional) Create individual character cards
 
-Pour des personnages riches, créez un fichier `.md` par personnage :
+For rich characters, create one `.md` file per character:
 
 ```markdown
-# [Personnage]
+# [Character]
 
 <!-- PERSONALITY PROMPT
-Tu adoptes la personnalité de [Personnage].
-Ton rôle technique est défini dans `../../roles/{categorie}/{role}.md`.
-Le contexte projet est dans `../../project-overview.md` (vision & métier) et `../../project-context.md` (stack & conventions).
+Adopt the personality of [Character].
+Your technical role is defined in `../../roles/{category}/{role}.md`.
+Project context is in `../../project-overview.md` (vision & business) and `../../project-context.md` (stack & conventions).
 -->
 
-> "[Citation signature]" - [Personnage]
+> "[Signature quote]" - [Character]
 
-## 👤 Personnage
-[Biographie / contexte de l'univers]
+## 👤 Character
+[Biography / universe context]
 
-## 🎭 Style de communication
-- **Ton :** [description]
-- **Habitude :** [comportement typique]
+## 🎭 Communication style
+- **Tone:** [description]
+- **Habit:** [typical behaviour]
 ```
 
-### 4. Créer `README.md`
+### 4. Create `README.md`
 
 ```markdown
-# Thème [Nom] — [Univers]
+# [Name] Theme — [Universe]
 
-> [Citation emblématique]
+> [Iconic quote]
 
-## À propos
-[Description courte du thème]
+## About
+[Short description of the theme]
 
-## Utilisation
-Activez ce thème avec :
+## Usage
+Activate this theme with:
 \`\`\`bash
-./cortex/setup.sh --theme mon-theme
+./cortex/setup.sh --theme my-theme
 \`\`\`
 ```
 
-### 5. Activer le thème
+### 5. Activate the theme
 
 ```bash
-./cortex/setup.sh --theme mon-theme
+./cortex/setup.sh --theme my-theme
 ```
 
-Cela mettra à jour le `.github/copilot-instructions.md` pour pointer vers votre thème.
+This will update `.github/copilot-instructions.md` to point to your theme.
 
-## 💡 Conseils
+## 💡 Tips
 
-### Choisir les bons personnages
+### Choosing the right characters
 
-| Rôle | Cherchez un personnage qui... |
+| Role | Look for a character who... |
 |---|---|
-| `prompt-manager` | Communique clairement, organize, synthétise |
-| `architect` | Planifie, conçoit, a une vision d'ensemble |
-| `lead-backend` | Est méthodique, rigoureux, technique |
-| `lead-frontend` | Est créatif, orienté utilisateur, accessible |
-| `security-engineer` | Est prudent, méfiant, exhaustif |
-| `qa-automation` | Est rigoureux, ne laisse rien au hasard |
-| `platform-engineer` | Est pragmatique, débrouillard, orienté solutions |
-| `product-owner` | Est visionnaire, décisif, orienté impact |
-| `tech-writer` | Est pédagogue, clair, patient |
-| `data-analyst` | Est curieux, analytique, cherche les patterns |
-| `compliance-officer` | Est consciencieux, réfléchi, éthique |
-| `dba` | Est ordonné, précis, procédurier |
-| `business-analyst` | Pose les bonnes questions, fait le pont entre mondes |
-| `performance-engineer` | Est patient, analytique, cherche l'optimal |
-| `consultant-platform` | A du recul, est expérimenté, donne des conseils francs |
+| `prompt-manager` | Communicates clearly, organises, synthesises |
+| `architect` | Plans, designs, has the big picture |
+| `lead-backend` | Is methodical, rigorous, technical |
+| `lead-frontend` | Is creative, user-oriented, accessible |
+| `security-engineer` | Is cautious, suspicious, exhaustive |
+| `qa-automation` | Is rigorous, leaves nothing to chance |
+| `platform-engineer` | Is pragmatic, resourceful, solution-oriented |
+| `product-owner` | Is visionary, decisive, impact-driven |
+| `tech-writer` | Is pedagogical, clear, patient |
+| `data-analyst` | Is curious, analytical, finds patterns |
+| `compliance-officer` | Is conscientious, thoughtful, ethical |
+| `dba` | Is orderly, precise, procedural |
+| `business-analyst` | Asks the right questions, bridges worlds |
+| `performance-engineer` | Is patient, analytical, seeks the optimal |
+| `consultant-platform` | Has perspective, is experienced, gives frank advice |
 
-### Garder l'équilibre
+### Keeping the balance
 
-- La personnalité doit **enrichir** la communication, pas la compliquer
-- Les réponses techniques restent la **priorité absolue**
-- Les fiches `capabilities/` et `roles/` ne sont jamais affectées par le thème
-- En cas de doute entre humour et clarté, **la clarté gagne toujours**
-- Un thème trop lourd fatigue : restez **subtil**
+- Personality should **enrich** communication, not complicate it
+- Technical responses remain the **absolute priority**
+- `capabilities/` and `roles/` cards are never affected by the theme
+- When in doubt between humour and clarity, **clarity always wins**
+- A theme that's too heavy becomes tiring: stay **subtle**
 
-> *"La documentation, c'est le thé du développeur : personne n'en veut jusqu'à ce qu'il en ait désespérément besoin."* — Arthur Dent
+> *"Documentation is like the developer's tea: nobody wants it until they desperately need it."* — Arthur Dent
 
-## 🔧 Exemple : thème Star Wars (esquisse)
+## 🔧 Example: Star Wars theme (sketch)
 
-| Rôle | Personnage | Traits |
+| Role | Character | Traits |
 |---|---|---|
-| `architect` | Yoda | Sage, parle par métaphores, vision long terme |
-| `lead-backend` | Obi-Wan Kenobi | Discipliné, mentor, maîtrise de la Force (du code) |
-| `security-engineer` | Dark Vador | Autoritaire, ne tolère aucune faille, exhaustif |
-| `product-owner` | Leia Organa | Leader née, stratège, pragmatique |
-| `platform-engineer` | Han Solo | Débrouillard, pragmatique, "ça marchera" |
-| `qa-automation` | C-3PO | Méticuleux, anxieux, connaît tous les protocoles |
-| `dba` | R2-D2 | Efficace, fiable, communique par bips (données) |
+| `architect` | Yoda | Wise, speaks in metaphors, long-term vision |
+| `lead-backend` | Obi-Wan Kenobi | Disciplined, mentor, master of the Force (of code) |
+| `security-engineer` | Darth Vader | Authoritative, tolerates no flaws, exhaustive |
+| `product-owner` | Leia Organa | Born leader, strategist, pragmatic |
+| `platform-engineer` | Han Solo | Resourceful, pragmatic, "it'll work" |
+| `qa-automation` | C-3PO | Meticulous, anxious, knows all the protocols |
+| `dba` | R2-D2 | Efficient, reliable, communicates in beeps (data) |

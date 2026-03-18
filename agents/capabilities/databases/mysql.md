@@ -1,25 +1,25 @@
 # MySQL — Best Practices
 
 <!-- CAPABILITY REFERENCE
-Fiche de best practices pour MySQL / MariaDB.
-À combiner avec un rôle (ex: roles/engineering/dba.md).
+Best practices card for MySQL / MariaDB.
+To combine with a role (e.g. roles/engineering/dba.md).
 -->
 
-> **Version de référence :** MySQL 8.0+ / MariaDB 11.x | **Dernière mise à jour :** 2026-02
-> **Docs officielles :** [dev.mysql.com/doc](https://dev.mysql.com/doc/) | [mariadb.com/kb](https://mariadb.com/kb/)
+> **Reference version:** MySQL 8.0+ / MariaDB 11.x | **Last updated:** 2026-02
+> **Official docs:** [dev.mysql.com/doc](https://dev.mysql.com/doc/) | [mariadb.com/kb](https://mariadb.com/kb/)
 
 ---
 
-## 🏛️ Principes fondamentaux
+## 🏛️ Fundamental principles
 
-### 1. Schema design — normalisation d'abord
+### 1. Schema design — normalisation first
 
-- **3NF minimum** pour les données transactionnelles
-- Dénormaliser uniquement pour la lecture (vues matérialisées, tables de cache)
-- Documenter chaque dénormalisation et sa raison
+- **3NF minimum** for transactional data
+- Denormalise only for reads (materialised views, cache tables)
+- Document every denormalisation and its reason
 
 ```sql
--- ✅ Bien — table normalisée avec contraintes
+-- ✅ Good — normalised table with constraints
 CREATE TABLE `order` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `user_id` BIGINT UNSIGNED NOT NULL,
@@ -34,59 +34,59 @@ CREATE TABLE `order` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-### 2. Conventions de nommage
+### 2. Naming conventions
 
 ```
-Tables          : singulier, snake_case          → order, access_card
-Colonnes        : snake_case                     → created_at, user_id
-Index           : idx_{table}_{colonnes}         → idx_order_user_id
-Foreign Keys    : fk_{table_source}_{table_cible}→ fk_order_user
-Unique          : uq_{table}_{colonnes}          → uq_user_email
+Tables          : singular, snake_case           → order, access_card
+Columns         : snake_case                     → created_at, user_id
+Indexes         : idx_{table}_{columns}          → idx_order_user_id
+Foreign Keys    : fk_{source_table}_{target_table} → fk_order_user
+Unique          : uq_{table}_{columns}           → uq_user_email
 ```
 
-### 3. Types de données — choisir correctement
+### 3. Data types — choose correctly
 
-| Donnée | Type | ❌ Ne pas |
+| Data | Type | ❌ Avoid |
 |---|---|---|
-| IDs | `BIGINT UNSIGNED AUTO_INCREMENT` ou `BINARY(16)` UUID | `INT` (overflow) |
-| Dates | `DATETIME` (+ timezone app) | `TIMESTAMP` (limite 2038) |
-| Argent | `DECIMAL(10, 2)` | `FLOAT` / `DOUBLE` (imprécision) |
-| Booléens | `TINYINT(1)` | `ENUM('0','1')` |
-| Statuts | `VARCHAR(20)` | `ENUM` natif (migration difficile) |
-| Texte court | `VARCHAR(n)` avec n adapté | `TEXT` (si < 255 chars) |
-| Texte long | `TEXT` / `MEDIUMTEXT` | `VARCHAR(65535)` |
-| JSON | `JSON` (natif MySQL 8) | `TEXT` + sérialisation manuelle |
+| IDs | `BIGINT UNSIGNED AUTO_INCREMENT` or `BINARY(16)` UUID | `INT` (overflow) |
+| Dates | `DATETIME` (+ app timezone) | `TIMESTAMP` (2038 limit) |
+| Money | `DECIMAL(10, 2)` | `FLOAT` / `DOUBLE` (imprecision) |
+| Booleans | `TINYINT(1)` | `ENUM('0','1')` |
+| Statuses | `VARCHAR(20)` | native `ENUM` (hard to migrate) |
+| Short text | `VARCHAR(n)` with appropriate n | `TEXT` (if < 255 chars) |
+| Long text | `TEXT` / `MEDIUMTEXT` | `VARCHAR(65535)` |
+| JSON | `JSON` (native MySQL 8) | `TEXT` + manual serialisation |
 
-### 4. UTF8MB4 — toujours
+### 4. UTF8MB4 — always
 
 ```sql
--- ✅ Supporter les emojis et tous les caractères Unicode
+-- ✅ Support emojis and all Unicode characters
 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ```
 
-**Jamais** `utf8` dans MySQL (c'est `utf8mb3`, limité à 3 bytes).
+**Never** use `utf8` in MySQL (it is `utf8mb3`, limited to 3 bytes).
 
-### 5. InnoDB — toujours
+### 5. InnoDB — always
 
 ```sql
 ENGINE=InnoDB
 ```
 
-Pas de MyISAM. Pas de MEMORY pour les tables persistantes.
+No MyISAM. No MEMORY for persistent tables.
 
 ---
 
-## 📐 Patterns recommandés
+## 📐 Recommended patterns
 
-### Index — stratégie
+### Index strategy
 
 ```sql
--- ✅ Index composite pour les requêtes fréquentes
--- Ordre : colonnes du WHERE + ORDER BY + SELECT (covering index)
+-- ✅ Composite index for frequent queries
+-- Order: WHERE columns + ORDER BY + SELECT (covering index)
 CREATE INDEX idx_order_user_status_created
 ON `order` (`user_id`, `status`, `created_at` DESC);
 
--- ✅ Cette requête utilise l'index à 100%
+-- ✅ This query uses the index 100%
 SELECT id, total_amount, created_at
 FROM `order`
 WHERE user_id = 42
@@ -95,50 +95,50 @@ ORDER BY created_at DESC
 LIMIT 20;
 ```
 
-**Règles d'index :**
-- Colonnes les plus sélectives en premier (sauf pour range queries)
-- Un index par pattern de requête fréquent
-- Pas plus de 5-6 index par table (impact sur les écritures)
-- Vérifier avec `EXPLAIN ANALYZE` que l'index est utilisé
+**Index rules:**
+- Most selective columns first (except for range queries)
+- One index per frequent query pattern
+- No more than 5-6 indexes per table (impact on writes)
+- Verify with `EXPLAIN ANALYZE` that the index is used
 
-### Requêtes — bonnes pratiques
+### Queries — best practices
 
 ```sql
--- ✅ Prepared statements (toujours, sans exception)
+-- ✅ Prepared statements (always, no exceptions)
 PREPARE stmt FROM 'SELECT * FROM user WHERE id = ?';
 
--- ✅ Pagination par curseur (pas OFFSET pour les gros volumes)
+-- ✅ Cursor-based pagination (not OFFSET for large volumes)
 SELECT * FROM `order`
 WHERE id > :last_seen_id
 ORDER BY id ASC
 LIMIT 20;
 
--- ❌ Pagination par OFFSET (lent sur les gros volumes)
+-- ❌ OFFSET-based pagination (slow on large volumes)
 SELECT * FROM `order`
 ORDER BY id ASC
-LIMIT 20 OFFSET 100000;  -- scanne 100 000 lignes pour rien
+LIMIT 20 OFFSET 100000;  -- scans 100,000 rows for nothing
 
--- ✅ SELECT explicite (pas de SELECT *)
+-- ✅ Explicit SELECT (no SELECT *)
 SELECT id, user_id, status, total_amount FROM `order`;
 
--- ❌ SELECT * (colonnes inutiles, pas de covering index)
+-- ❌ SELECT * (unnecessary columns, no covering index)
 SELECT * FROM `order`;
 ```
 
-### Migrations — gestion propre
+### Migrations — clean management
 
 ```
-- Toujours versionner les migrations (Doctrine, Flyway, Liquibase...)
-- Jamais de SQL manuel en production
-- Migrations réversibles quand possible (UP + DOWN)
-- Tester les migrations sur une copie de la prod avant deploy
-- Migrations non-bloquantes pour les grosses tables (pt-online-schema-change)
+- Always version migrations (Doctrine, Flyway, Liquibase...)
+- Never manual SQL in production
+- Reversible migrations where possible (UP + DOWN)
+- Test migrations on a production copy before deploying
+- Non-blocking migrations for large tables (pt-online-schema-change)
 ```
 
 ### Transactions
 
 ```sql
--- ✅ Transaction explicite pour les opérations liées
+-- ✅ Explicit transaction for related operations
 START TRANSACTION;
 
 UPDATE account SET balance = balance - 100 WHERE id = 1;
@@ -147,7 +147,7 @@ INSERT INTO transfer (from_id, to_id, amount) VALUES (1, 2, 100);
 
 COMMIT;
 
--- ✅ Isolation level adapté
+-- ✅ Appropriate isolation level
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ```
 
@@ -156,42 +156,42 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ## 🚫 Anti-patterns
 
 ```sql
--- ❌ Concaténation SQL (injection SQL)
+-- ❌ SQL concatenation (SQL injection)
 "SELECT * FROM user WHERE name = '" + userName + "'"
 
--- ❌ SELECT * partout
+-- ❌ SELECT * everywhere
 SELECT * FROM order JOIN user JOIN product;
 
 -- ❌ N+1 queries
--- Boucle PHP : pour chaque order, SELECT user WHERE id = order.user_id
+-- PHP loop: for each order, SELECT user WHERE id = order.user_id
 
--- ❌ Index sur chaque colonne individuellement
--- (mieux : un index composite adapté aux requêtes réelles)
+-- ❌ Individual index on every column
+-- (better: a composite index tailored to real queries)
 
--- ❌ Stocker des fichiers en BLOB
--- (utiliser un stockage objet : S3, MinIO)
+-- ❌ Storing files as BLOB
+-- (use object storage: S3, MinIO)
 
--- ❌ Pas de foreign keys "pour la performance"
--- (les FK protègent l'intégrité des données)
+-- ❌ No foreign keys "for performance"
+-- (FKs protect data integrity)
 
--- ❌ ENUM natif MySQL
+-- ❌ Native MySQL ENUM
 ALTER TABLE user ADD status ENUM('active', 'banned');
--- Impossible de modifier sans ALTER TABLE = downtime potentiel
+-- Cannot modify without ALTER TABLE = potential downtime
 ```
 
 ---
 
-## 🔒 Sécurité BDD
+## 🔒 Database security
 
 ```
-- [ ] Prepared statements obligatoires (jamais de concaténation)
-- [ ] Utilisateur applicatif avec droits minimaux (pas de GRANT ALL)
-- [ ] Pas de root pour l'application
-- [ ] Mots de passe hashés côté applicatif (bcrypt/argon2)
-- [ ] Chiffrement des données sensibles (AES_ENCRYPT ou app-level)
-- [ ] SSL/TLS entre app et BDD
-- [ ] Backups automatiques testés (restore test mensuel minimum)
-- [ ] Audit log activé pour les accès sensibles
+- [ ] Prepared statements mandatory (never concatenation)
+- [ ] Application user with minimal rights (no GRANT ALL)
+- [ ] No root for the application
+- [ ] Passwords hashed at application level (bcrypt/argon2)
+- [ ] Encrypt sensitive data (AES_ENCRYPT or app-level)
+- [ ] SSL/TLS between app and DB
+- [ ] Automated backups tested (restore test at least monthly)
+- [ ] Audit log enabled for sensitive access
 ```
 
 ---
@@ -199,28 +199,28 @@ ALTER TABLE user ADD status ENUM('active', 'banned');
 ## 📊 Monitoring
 
 ```
-Métriques essentielles :
-- Slow queries (slow_query_log, seuil : 1s)
-- Connections actives vs max_connections
+Key metrics:
+- Slow queries (slow_query_log, threshold: 1s)
+- Active connections vs max_connections
 - Buffer pool hit ratio (> 99%)
-- Replication lag (si replica)
+- Replication lag (if replica)
 - Table locks / deadlocks
-- Disk I/O et espace disque
+- Disk I/O and disk space
 ```
 
 ---
 
-## ✅ Checklist rapide
+## ✅ Quick checklist
 
 ```
 - [ ] InnoDB + utf8mb4_unicode_ci
-- [ ] Conventions de nommage respectées
-- [ ] Types de données adaptés (DECIMAL pour l'argent, BIGINT pour les IDs)
-- [ ] Index composites alignés sur les requêtes fréquentes
-- [ ] EXPLAIN ANALYZE sur les requêtes critiques
-- [ ] Prepared statements partout
-- [ ] Migrations versionnées (jamais de SQL manuel en prod)
-- [ ] Foreign keys pour l'intégrité
-- [ ] Pagination par curseur (pas OFFSET)
-- [ ] Backups automatiques + test de restore
+- [ ] Naming conventions respected
+- [ ] Appropriate data types (DECIMAL for money, BIGINT for IDs)
+- [ ] Composite indexes aligned with frequent queries
+- [ ] EXPLAIN ANALYZE on critical queries
+- [ ] Prepared statements everywhere
+- [ ] Versioned migrations (never manual SQL in production)
+- [ ] Foreign keys for integrity
+- [ ] Cursor-based pagination (not OFFSET)
+- [ ] Automated backups + restore test
 ```

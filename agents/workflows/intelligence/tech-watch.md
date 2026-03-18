@@ -1,99 +1,99 @@
-# Workflow : Veille technologique
+# Workflow: Technology Watch
 
-<!-- WORKFLOW GÉNÉRIQUE — cortex
-     Peut être surchargé par {projet}/agents/workflows/tech-watch.md
+<!-- GENERIC WORKFLOW — cortex
+     Can be overridden by {project}/agents/workflows/tech-watch.md
 -->
 
-## 🎯 Déclencheurs
+## 🎯 Triggers
 
-Ce workflow s'active lorsque le prompt contient des formulations du type :
-- "veille", "benchmark", "comparer", "évaluer"
-- "on devrait passer à", "quelle techno pour", "alternatives à"
-- "est-ce que [outil/lib/framework] est adapté à notre projet"
-- "qu'est-ce qui existe pour faire X"
+This workflow activates when the prompt contains formulations such as:
+- "watch", "benchmark", "compare", "evaluate"
+- "should we switch to", "which technology for", "alternatives to"
+- "is [tool/lib/framework] right for our project"
+- "what exists to do X"
 
-## 👥 Agents impliqués
+## 👥 Agents involved
 
-| Étape | Rôle | Responsabilité |
+| Step | Role | Responsibility |
 |---|---|---|
-| 1 | `roles/engineering/architect.md` | Cadrage du besoin et critères d'évaluation |
-| 2 | `roles/data/data-analyst.md` | Collecte et structuration des données |
-| 3 | `roles/engineering/architect.md` | Analyse comparative et recommandation |
-| 4 | `roles/security-compliance/security-engineer.md` | Évaluation sécurité des options retenues |
-| 5 | `roles/communication/tech-writer.md` | Formalisation du rapport de veille |
+| 1 | `roles/engineering/architect.md` | Need scoping and evaluation criteria |
+| 2 | `roles/data/data-analyst.md` | Data collection and structuring |
+| 3 | `roles/engineering/architect.md` | Comparative analysis and recommendation |
+| 4 | `roles/security-compliance/security-engineer.md` | Security evaluation of shortlisted options |
+| 5 | `roles/communication/tech-writer.md` | Formalising the watch report |
 
-## 📋 Étapes
+## 📋 Steps
 
-### Étape 1 — Cadrage
-**Agent :** `architect`
-**Objectif :** Définir précisément ce qu'on cherche et pourquoi.
+### Step 1 — Scoping
+**Agent:** `architect`
+**Objective:** Define precisely what we are looking for and why.
 
-**Checklist :**
-- [ ] Identifier le problème ou le besoin à l'origine de la veille
-- [ ] Définir les critères de sélection (performance, maturité, licence, coût, courbe d'apprentissage…)
-- [ ] Identifier les contraintes non-négociables (compatibilité stack actuelle, RGPD, support…)
-- [ ] Définir le scope : évaluation rapide ou étude approfondie ?
-- [ ] Lister les options déjà connues ou pressenties
-
----
-
-### Étape 2 — Collecte
-**Agent :** `data-analyst`
-**Objectif :** Rassembler des données fiables et comparables sur chaque option.
-
-**Checklist :**
-- [ ] Collecter les données clés pour chaque option (version, activité du projet, adoption, benchmarks)
-- [ ] Vérifier la date des sources (les infos tech périsent vite)
-- [ ] Identifier les cas d'usage similaires au projet (retours d'expérience, case studies)
-- [ ] Repérer les limitations connues et les problèmes fréquemment remontés
-- [ ] Structurer les données dans un tableau comparatif
+**Checklist:**
+- [ ] Identify the problem or need behind the watch
+- [ ] Define selection criteria (performance, maturity, licence, cost, learning curve…)
+- [ ] Identify non-negotiable constraints (current stack compatibility, GDPR, support…)
+- [ ] Define the scope: quick evaluation or in-depth study?
+- [ ] List options already known or anticipated
 
 ---
 
-### Étape 3 — Analyse & Recommandation
-**Agent :** `architect`
-**Objectif :** Produire une recommandation argumentée et contextuelle.
+### Step 2 — Data collection
+**Agent:** `data-analyst`
+**Objective:** Gather reliable, comparable data on each option.
 
-**Checklist :**
-- [ ] Croiser les données avec les critères définis à l'étape 1
-- [ ] Identifier les 2-3 finalistes
-- [ ] Évaluer le coût de migration / d'adoption pour chaque option
-- [ ] Formuler une recommandation principale + une alternative
-- [ ] Justifier les choix avec les données, pas uniquement des opinions
-
----
-
-### Étape 4 — Sécurité
-**Agent :** `security-engineer`
-**Objectif :** S'assurer que les options retenues n'introduisent pas de risques.
-
-**Checklist :**
-- [ ] Vérifier l'historique CVE de chaque option finaliste
-- [ ] Évaluer la politique de maintenance et de patch sécurité
-- [ ] Identifier les modèles de données ou d'accès introduits
-- [ ] Vérifier la conformité avec les exigences RGPD / compliance du projet
+**Checklist:**
+- [ ] Collect key data for each option (version, project activity, adoption, benchmarks)
+- [ ] Check the date of sources (tech information ages quickly)
+- [ ] Identify similar use cases to the project (experience reports, case studies)
+- [ ] Note known limitations and frequently reported issues
+- [ ] Structure the data in a comparison table
 
 ---
 
-### Étape 5 — Rapport
-**Agent :** `tech-writer`
-**Objectif :** Produire un document de référence exploitable et archivable.
+### Step 3 — Analysis & Recommendation
+**Agent:** `architect`
+**Objective:** Produce an argued, contextual recommendation.
 
-**Checklist :**
-- [ ] Rédiger un résumé exécutif (1 paragraphe)
-- [ ] Inclure le tableau comparatif des options
-- [ ] Documenter la recommandation et ses justifications
-- [ ] Lister les prochaines étapes si la recommandation est acceptée
-- [ ] Archiver le document dans la doc projet
+**Checklist:**
+- [ ] Cross-reference data with the criteria defined in step 1
+- [ ] Identify the 2–3 finalists
+- [ ] Evaluate the migration / adoption cost for each option
+- [ ] Formulate a primary recommendation + one alternative
+- [ ] Justify choices with data, not just opinions
 
 ---
 
-## ✅ Définition de "terminé"
+### Step 4 — Security
+**Agent:** `security-engineer`
+**Objective:** Ensure the shortlisted options do not introduce risks.
 
-- [ ] Rapport de veille rédigé et archivé
-- [ ] Recommandation validée par le décideur concerné
-- [ ] Prochaines étapes identifiées (POC, adoption, abandon)
+**Checklist:**
+- [ ] Check the CVE history of each finalist option
+- [ ] Evaluate the maintenance and security patch policy
+- [ ] Identify data or access models introduced
+- [ ] Verify compliance with the project's GDPR / compliance requirements
 
-## 🔗 Workflows liés
+---
 
-- `feature-development.md` — si la veille débouche sur l'adoption d'un outil à intégrer
+### Step 5 — Report
+**Agent:** `tech-writer`
+**Objective:** Produce a usable, archivable reference document.
+
+**Checklist:**
+- [ ] Write an executive summary (1 paragraph)
+- [ ] Include the option comparison table
+- [ ] Document the recommendation and its justifications
+- [ ] List next steps if the recommendation is accepted
+- [ ] Archive the document in the project docs
+
+---
+
+## ✅ Definition of done
+
+- [ ] Watch report written and archived
+- [ ] Recommendation validated by the relevant decision-maker
+- [ ] Next steps identified (POC, adoption, drop)
+
+## 🔗 Related workflows
+
+- `feature-development.md` — if the watch leads to adopting a tool to integrate

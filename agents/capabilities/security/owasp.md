@@ -1,12 +1,12 @@
 # OWASP — Application Security Best Practices
 
 <!-- CAPABILITY REFERENCE
-Fiche de best practices sécurité applicative basée sur l'OWASP Top 10.
-À combiner avec un rôle (ex: roles/security-compliance/security-engineer.md) et une capacité langage/framework.
+Application security best practices card based on the OWASP Top 10.
+To combine with a role (e.g. roles/security-compliance/security-engineer.md) and a language/framework capability.
 -->
 
-> **Référence :** OWASP Top 10 (2021) | **Dernière mise à jour :** 2026-02
-> **Docs officielles :** [owasp.org/Top10](https://owasp.org/www-project-top-ten/) | [Cheat Sheet Series](https://cheatsheetseries.owasp.org/)
+> **Reference:** OWASP Top 10 (2021) | **Last updated:** 2026-02
+> **Official docs:** [owasp.org/Top10](https://owasp.org/www-project-top-ten/) | [Cheat Sheet Series](https://cheatsheetseries.owasp.org/)
 
 ---
 
@@ -14,31 +14,31 @@ Fiche de best practices sécurité applicative basée sur l'OWASP Top 10.
 
 ### A01 — Broken Access Control
 
-Le contrôle d'accès cassé est la vulnérabilité #1. Un utilisateur peut accéder à des ressources qui ne lui appartiennent pas.
+Broken access control is the #1 vulnerability. A user can access resources that do not belong to them.
 
 ```
-Prévention :
-- Deny by default : tout est interdit sauf autorisation explicite
-- Vérifier les permissions côté serveur à CHAQUE requête
-- Ne jamais se fier au client pour le contrôle d'accès
-- IDOR : valider que l'utilisateur a accès à la ressource demandée
-- Rate limiting sur les endpoints sensibles
-- Désactiver le directory listing du serveur web
-- Logger les échecs d'accès et alerter sur les patterns suspects
+Prevention:
+- Deny by default: everything is forbidden unless explicitly authorised
+- Check permissions server-side on EVERY request
+- Never trust the client for access control
+- IDOR: validate that the user has access to the requested resource
+- Rate limiting on sensitive endpoints
+- Disable web server directory listing
+- Log access failures and alert on suspicious patterns
 ```
 
 ### A02 — Cryptographic Failures
 
-Données sensibles exposées par un chiffrement absent ou défaillant.
+Sensitive data exposed by absent or defective encryption.
 
 ```
-Prévention :
-- Classifier les données (sensibles vs non-sensibles)
-- HTTPS partout (HSTS, TLS 1.2+)
-- Mots de passe : bcrypt ou argon2id (jamais MD5/SHA1/SHA256 seul)
-- Chiffrement AES-256-GCM pour les données sensibles au repos
-- Pas de secrets dans le code source ou les logs
-- Rotation des clés de chiffrement
+Prevention:
+- Classify data (sensitive vs non-sensitive)
+- HTTPS everywhere (HSTS, TLS 1.2+)
+- Passwords: bcrypt or argon2id (never MD5/SHA1/SHA256 alone)
+- AES-256-GCM encryption for sensitive data at rest
+- No secrets in source code or logs
+- Rotate encryption keys
 ```
 
 ### A03 — Injection
@@ -46,12 +46,12 @@ Prévention :
 SQL injection, NoSQL injection, OS command injection, LDAP injection...
 
 ```
-Prévention :
-- Prepared statements / requêtes paramétrées (OBLIGATOIRE)
-- ORM avec query builder (jamais de concaténation)
-- Validation et sanitization des entrées (whitelist)
-- Échapper les sorties (context-aware : HTML, JS, SQL, URL)
-- Principle of least privilege BDD (pas de DROP, pas de GRANT)
+Prevention:
+- Prepared statements / parameterised queries (MANDATORY)
+- ORM with query builder (never concatenation)
+- Input validation and sanitisation (whitelist)
+- Escape outputs (context-aware: HTML, JS, SQL, URL)
+- Principle of least privilege for the DB (no DROP, no GRANT)
 ```
 
 ```php
@@ -59,149 +59,149 @@ Prévention :
 $stmt = $pdo->prepare('SELECT * FROM user WHERE email = :email');
 $stmt->execute(['email' => $userInput]);
 
-// ❌ Concaténation (SQL injection)
+// ❌ Concatenation (SQL injection)
 $query = "SELECT * FROM user WHERE email = '" . $userInput . "'";
 ```
 
 ### A04 — Insecure Design
 
-Faiblesses dans la conception même de l'application.
+Weaknesses in the application's own design.
 
 ```
-Prévention :
-- Threat modeling en phase de design
+Prevention:
+- Threat modelling during the design phase
 - Security user stories / abuse cases
-- Séparer les couches (présentation, métier, données)
-- Limiter la consommation de ressources (rate limit, quotas)
-- Tests de sécurité automatisés dans la CI
+- Separate layers (presentation, business, data)
+- Limit resource consumption (rate limiting, quotas)
+- Automated security tests in CI
 ```
 
 ### A05 — Security Misconfiguration
 
-Configurations par défaut, services inutiles, headers manquants.
+Default configurations, unnecessary services, missing headers.
 
 ```
-Prévention :
-- Supprimer les configurations et comptes par défaut
-- Headers de sécurité HTTP :
+Prevention:
+- Remove default configurations and accounts
+- HTTP security headers:
   Content-Security-Policy
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Strict-Transport-Security
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy
-- Désactiver les features et services non utilisés
-- Revue de configuration automatisée (CIS Benchmarks)
-- Pas de stack traces / debug en production
+- Disable unused features and services
+- Automated configuration review (CIS Benchmarks)
+- No stack traces / debug in production
 ```
 
 ### A06 — Vulnerable and Outdated Components
 
-Composants tiers (bibliothèques, frameworks) avec des CVE connues.
+Third-party components (libraries, frameworks) with known CVEs.
 
 ```
-Prévention :
-- Audit régulier des dépendances (composer audit, npm audit, pip audit)
-- Automatiser avec Dependabot / Renovate / Snyk
-- Surveiller les CVE (NVD, GitHub Security Advisories)
-- Supprimer les dépendances non utilisées
-- Politique de mise à jour : patch dans la semaine, minor dans le mois
+Prevention:
+- Regular dependency audits (composer audit, npm audit, pip audit)
+- Automate with Dependabot / Renovate / Snyk
+- Monitor CVEs (NVD, GitHub Security Advisories)
+- Remove unused dependencies
+- Update policy: patches within the week, minors within the month
 ```
 
 ### A07 — Identification and Authentication Failures
 
-Authentification cassée, session mal gérée.
+Broken authentication, poorly managed sessions.
 
 ```
-Prévention :
-- MFA pour les comptes à privilèges
-- Pas de credentials par défaut
-- Rate limiting + lockout sur les tentatives de login
-- Sessions : expiration, rotation d'ID après login, invalidation au logout
-- Mots de passe : longueur > complexité (min 12 chars, pas de règles absurdes)
-- JWT : vérifier signature + expiration + issuer + audience
+Prevention:
+- MFA for privileged accounts
+- No default credentials
+- Rate limiting + lockout on login attempts
+- Sessions: expiration, ID rotation after login, invalidation on logout
+- Passwords: length > complexity (min 12 chars, no absurd rules)
+- JWT: verify signature + expiration + issuer + audience
 ```
 
 ### A08 — Software and Data Integrity Failures
 
-Pipelines CI/CD compromis, mises à jour non vérifiées.
+Compromised CI/CD pipelines, unverified updates.
 
 ```
-Prévention :
-- Vérifier les signatures et checksums des dépendances
-- CI/CD sécurisée (accès restreint aux pipelines, secrets protégés)
+Prevention:
+- Verify dependency signatures and checksums
+- Secure CI/CD (restricted access to pipelines, protected secrets)
 - Signed commits (GPG)
-- Review obligatoire avant merge
+- Mandatory review before merge
 - SBOM (Software Bill of Materials)
 ```
 
 ### A09 — Security Logging and Monitoring Failures
 
-Pas de logs, pas de monitoring, pas de détection.
+No logs, no monitoring, no detection.
 
 ```
-Prévention :
-- Logger tous les événements d'authentification (succès + échecs)
-- Logger tous les échecs de contrôle d'accès
-- Format structuré (JSON) avec contexte (user, IP, action, timestamp)
-- NE JAMAIS logger : mots de passe, tokens, données personnelles
-- Centraliser les logs (ELK, Loki, Datadog)
-- Alertes sur les patterns suspects (brute force, mass enumeration)
-- Plan de réponse aux incidents
+Prevention:
+- Log all authentication events (successes + failures)
+- Log all access control failures
+- Structured format (JSON) with context (user, IP, action, timestamp)
+- NEVER log: passwords, tokens, personal data
+- Centralise logs (ELK, Loki, Datadog)
+- Alerts on suspicious patterns (brute force, mass enumeration)
+- Incident response plan
 ```
 
 ### A10 — Server-Side Request Forgery (SSRF)
 
-L'application fetch une URL fournie par l'utilisateur sans validation.
+The application fetches a URL provided by the user without validation.
 
 ```
-Prévention :
-- Valider et sanitizer les URLs fournies par l'utilisateur
-- Whitelist des domaines/IPs autorisés
-- Bloquer les requêtes vers les réseaux internes (169.254.x.x, 10.x.x.x, etc.)
-- Pas de redirection ouverte
-- Segmentation réseau
+Prevention:
+- Validate and sanitise user-provided URLs
+- Whitelist authorised domains/IPs
+- Block requests to internal networks (169.254.x.x, 10.x.x.x, etc.)
+- No open redirects
+- Network segmentation
 ```
 
 ---
 
-## 🔧 Intégration dans la CI
+## 🔧 CI integration
 
 ```yaml
-# Exemple : pipeline de sécurité
+# Example: security pipeline
 security:
   stages:
     - name: SAST
       tool: semgrep / phpstan-security / eslint-security
-      quand: À chaque commit
+      when: On every commit
 
     - name: Dependency Check
       tool: composer audit / npm audit / trivy
-      quand: À chaque commit
+      when: On every commit
 
     - name: DAST
       tool: OWASP ZAP / Nuclei
-      quand: Sur staging, avant chaque release
+      when: On staging, before each release
 
     - name: Secret Detection
       tool: gitleaks / trufflehog
-      quand: Pre-commit hook + CI
+      when: Pre-commit hook + CI
 ```
 
 ---
 
-## ✅ Checklist rapide
+## ✅ Quick checklist
 
 ```
-- [ ] Prepared statements partout (zéro concaténation SQL)
-- [ ] HTTPS + HSTS (pas de HTTP)
-- [ ] Headers de sécurité configurés
-- [ ] Authentification robuste (rate limit, MFA, session management)
-- [ ] Autorisation vérifiée côté serveur à chaque requête
-- [ ] Mots de passe hashés (bcrypt/argon2id)
-- [ ] Secrets hors du code (env vars, vault)
-- [ ] Dépendances auditées et à jour
-- [ ] Logging structuré (sans données sensibles)
-- [ ] SAST + Dependency check dans la CI
-- [ ] Pas de debug/stack traces en production
+- [ ] Prepared statements everywhere (zero SQL concatenation)
+- [ ] HTTPS + HSTS (no HTTP)
+- [ ] Security headers configured
+- [ ] Robust authentication (rate limit, MFA, session management)
+- [ ] Authorisation verified server-side on every request
+- [ ] Passwords hashed (bcrypt/argon2id)
+- [ ] Secrets outside the code (env vars, vault)
+- [ ] Dependencies audited and up to date
+- [ ] Structured logging (without sensitive data)
+- [ ] SAST + Dependency check in CI
+- [ ] No debug/stack traces in production
 ```

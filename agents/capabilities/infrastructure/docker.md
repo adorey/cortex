@@ -1,23 +1,23 @@
 # Docker — Best Practices
 
 <!-- CAPABILITY REFERENCE
-Fiche de best practices pour Docker (conteneurisation).
-À combiner avec un rôle (ex: roles/engineering/platform-engineer.md).
+Best practices card for Docker (containerisation).
+To combine with a role (e.g. roles/engineering/platform-engineer.md).
 -->
 
-> **Version de référence :** Docker Engine 27.x / Docker Compose v2 | **Dernière mise à jour :** 2026-02
-> **Docs officielles :** [docs.docker.com](https://docs.docker.com/)
+> **Reference version:** Docker Engine 27.x / Docker Compose v2 | **Last updated:** 2026-02
+> **Official docs:** [docs.docker.com](https://docs.docker.com/)
 
 ---
 
-## 🏛️ Principes fondamentaux
+## 🏛️ Fundamental principles
 
-### 1. Images minimales
+### 1. Minimal images
 
 ```dockerfile
-# ✅ Multi-stage build — image finale minimale
+# ✅ Multi-stage build — minimal final image
 FROM php:8.3-fpm-alpine AS base
-# ...dépendances runtime...
+# ...runtime dependencies...
 
 FROM base AS builder
 COPY . /app
@@ -30,18 +30,18 @@ EXPOSE 9000
 CMD ["php-fpm"]
 ```
 
-| Image | Taille typique |
+| Image | Typical size |
 |---|---|
 | `ubuntu:24.04` | ~78 MB |
 | `alpine:3.19` | ~7 MB |
 | `distroless/static` | ~2 MB |
 
-**Règle :** Utilisez `alpine` ou `distroless` en production. Jamais `latest`.
+**Rule:** Use `alpine` or `distroless` in production. Never `latest`.
 
-### 2. Un processus par conteneur
+### 2. One process per container
 
 ```yaml
-# ✅ Séparation des responsabilités
+# ✅ Separation of concerns
 services:
   app:
     image: myapp:1.0
@@ -52,55 +52,55 @@ services:
   nginx:
     image: nginx:alpine
 
-# ❌ Tout dans un conteneur
-# (Apache + PHP + MySQL + Redis dans la même image)
+# ❌ Everything in one container
+# (Apache + PHP + MySQL + Redis in the same image)
 ```
 
-### 3. User non-root
+### 3. Non-root user
 
 ```dockerfile
-# ✅ Créer et utiliser un utilisateur non-root
+# ✅ Create and use a non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-# ❌ Tourner en root (défaut)
-# Pas de directive USER = root = danger
+# ❌ Running as root (default)
+# No USER directive = root = dangerous
 ```
 
-### 4. Tags explicites — jamais `latest`
+### 4. Explicit tags — never `latest`
 
 ```dockerfile
-# ✅ Version explicite + digest pour la reproductibilité
+# ✅ Explicit version + digest for reproducibility
 FROM php:8.3.2-fpm-alpine3.19
 
-# ❌ Imprévisible
+# ❌ Unpredictable
 FROM php:latest
 FROM node
 ```
 
-### 5. Layer caching — dépendances d'abord
+### 5. Layer caching — dependencies first
 
 ```dockerfile
-# ✅ Cache efficace — les dépendances changent rarement
+# ✅ Efficient cache — dependencies rarely change
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts
 
 COPY . .
 RUN composer dump-autoload --optimize
 
-# ❌ Cache cassé à chaque changement de code
+# ❌ Cache busted on every code change
 COPY . .
 RUN composer install
 ```
 
 ---
 
-## 📐 Patterns recommandés
+## 📐 Recommended patterns
 
-### Dockerfile multi-stage
+### Multi-stage Dockerfile
 
 ```dockerfile
-# Stage 1: Dépendances
+# Stage 1: Dependencies
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -124,7 +124,7 @@ EXPOSE 3000
 CMD ["node", "dist/main.js"]
 ```
 
-### Docker Compose — bonnes pratiques
+### Docker Compose — best practices
 
 ```yaml
 # docker-compose.yml
@@ -164,7 +164,7 @@ volumes:
 ### .dockerignore
 
 ```
-# ✅ Toujours avoir un .dockerignore
+# ✅ Always include a .dockerignore
 .git
 .env
 .env.local
@@ -188,58 +188,58 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 ## 🚫 Anti-patterns
 
 ```dockerfile
-# ❌ RUN multiples (→ layers inutiles)
+# ❌ Multiple RUN statements (→ unnecessary layers)
 RUN apt-get update
 RUN apt-get install -y curl
 RUN apt-get install -y git
 
-# ✅ Un seul RUN + cleanup
+# ✅ Single RUN + cleanup
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# ❌ Secrets dans le Dockerfile
+# ❌ Secrets in the Dockerfile
 ENV DB_PASSWORD=mysecretpassword
 COPY .env /app/.env
 
-# ✅ Variables d'environnement au runtime ou Docker secrets
+# ✅ Environment variables at runtime or Docker secrets
 # docker run -e DB_PASSWORD_FILE=/run/secrets/db_pass
 
-# ❌ COPY . . en premier
+# ❌ COPY . . first
 COPY . .
-RUN npm install  # cache cassé à chaque changement
+RUN npm install  # cache busted on every change
 
-# ❌ Volumes en écriture sur des répertoires sensibles
-# volumes: /:/host  # accès root au host
+# ❌ Write volumes on sensitive directories
+# volumes: /:/host  # root access to the host
 ```
 
 ---
 
-## 🔒 Sécurité
+## 🔒 Security
 
 ```
-- [ ] Images scannées (Trivy, Snyk, docker scout)
-- [ ] User non-root obligatoire
-- [ ] Pas de secrets dans les images/layers
-- [ ] Images signées (Docker Content Trust)
-- [ ] Read-only filesystem quand possible
-- [ ] Capabilities droppées (--cap-drop ALL + --cap-add nécessaires)
-- [ ] Réseau isolé par service
+- [ ] Images scanned (Trivy, Snyk, docker scout)
+- [ ] Non-root user mandatory
+- [ ] No secrets in images/layers
+- [ ] Signed images (Docker Content Trust)
+- [ ] Read-only filesystem where possible
+- [ ] Dropped capabilities (--cap-drop ALL + --cap-add as needed)
+- [ ] Network isolated per service
 ```
 
 ---
 
-## ✅ Checklist rapide
+## ✅ Quick checklist
 
 ```
-- [ ] Images minimales (alpine / distroless)
-- [ ] Tags versionnés (jamais latest)
+- [ ] Minimal images (alpine / distroless)
+- [ ] Versioned tags (never latest)
 - [ ] Multi-stage builds
-- [ ] Un processus par conteneur
-- [ ] User non-root
-- [ ] Layer caching optimisé (dépendances avant code)
-- [ ] .dockerignore complet
-- [ ] Healthchecks définis
-- [ ] Secrets via env/secrets (jamais dans l'image)
-- [ ] docker-compose avec depends_on + conditions
+- [ ] One process per container
+- [ ] Non-root user
+- [ ] Optimised layer caching (dependencies before code)
+- [ ] Complete .dockerignore
+- [ ] Healthchecks defined
+- [ ] Secrets via env/secrets (never baked into the image)
+- [ ] docker-compose with depends_on + conditions
 ```

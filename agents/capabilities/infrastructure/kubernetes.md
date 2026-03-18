@@ -1,21 +1,21 @@
 # Kubernetes — Best Practices
 
 <!-- CAPABILITY REFERENCE
-Fiche de best practices pour Kubernetes.
-À combiner avec capabilities/infrastructure/docker.md et un rôle (ex: roles/engineering/platform-engineer.md).
+Best practices card for Kubernetes.
+To combine with capabilities/infrastructure/docker.md and a role (e.g. roles/engineering/platform-engineer.md).
 -->
 
-> **Version de référence :** Kubernetes 1.30+ | **Dernière mise à jour :** 2026-02
-> **Docs officielles :** [kubernetes.io/docs](https://kubernetes.io/docs/)
+> **Reference version:** Kubernetes 1.30+ | **Last updated:** 2026-02
+> **Official docs:** [kubernetes.io/docs](https://kubernetes.io/docs/)
 
 ---
 
-## 🏛️ Principes fondamentaux
+## 🏛️ Fundamental principles
 
-### 1. Déclaratif — tout est YAML (ou Helm, Kustomize)
+### 1. Declarative — everything is YAML (or Helm, Kustomize)
 
 ```yaml
-# ✅ Déclaratif — état désiré versionné
+# ✅ Declarative — desired state versioned
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,7 +37,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: myapp/api:1.2.3  # tag explicite
+          image: myapp/api:1.2.3  # explicit tag
           resources:
             requests:
               cpu: 100m
@@ -47,30 +47,30 @@ spec:
               memory: 512Mi
 ```
 
-**Règle :** Jamais de `kubectl run` ou `kubectl create` en production. Tout passe par des manifestes versionnés.
+**Rule:** Never `kubectl run` or `kubectl create` in production. Everything goes through versioned manifests.
 
-### 2. Resource requests & limits — obligatoires
+### 2. Resource requests & limits — mandatory
 
 ```yaml
-# ✅ Toujours spécifier requests ET limits
+# ✅ Always specify requests AND limits
 resources:
   requests:
-    cpu: 100m       # Ce que le pod a besoin normalement
+    cpu: 100m       # What the pod normally needs
     memory: 128Mi
   limits:
-    cpu: 500m       # Maximum autorisé (throttling au-delà)
-    memory: 512Mi   # OOMKilled au-delà
+    cpu: 500m       # Maximum allowed (throttled beyond)
+    memory: 512Mi   # OOMKilled beyond this
 ```
 
-| Sans resources | Risque |
+| Without resources | Risk |
 |---|---|
-| Pas de requests | Le scheduler ne peut pas placer le pod correctement |
-| Pas de limits | Un pod peut consommer TOUT le node |
+| No requests | The scheduler cannot place the pod correctly |
+| No limits | A pod can consume the entire node |
 
 ### 3. Probes — liveness, readiness, startup
 
 ```yaml
-# ✅ Les 3 probes
+# ✅ All 3 probes
 livenessProbe:
   httpGet:
     path: /health/live
@@ -93,16 +93,16 @@ startupProbe:
   periodSeconds: 10
 ```
 
-| Probe | Rôle | Si KO |
+| Probe | Role | If failing |
 |---|---|---|
-| Startup | L'app a-t-elle fini de démarrer ? | Attend |
-| Readiness | L'app peut-elle recevoir du trafic ? | Retire du Service |
-| Liveness | L'app est-elle vivante ? | Restart le pod |
+| Startup | Has the app finished starting? | Waits |
+| Readiness | Can the app receive traffic? | Removed from Service |
+| Liveness | Is the app alive? | Restarts the pod |
 
-### 4. Namespaces pour l'isolation
+### 4. Namespaces for isolation
 
 ```yaml
-# ✅ Un namespace par environnement ou par domaine
+# ✅ One namespace per environment or domain
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -119,7 +119,7 @@ namespaces/
 └── ingress
 ```
 
-### 5. Labels et annotations — systématiques
+### 5. Labels and annotations — systematic
 
 ```yaml
 metadata:
@@ -130,13 +130,13 @@ metadata:
     app.kubernetes.io/part-of: myplatform
     app.kubernetes.io/managed-by: helm
   annotations:
-    description: "API backend principale"
+    description: "Main backend API"
     owner: "team-backend"
 ```
 
 ---
 
-## 📐 Patterns recommandés
+## 📐 Recommended patterns
 
 ### HPA — Horizontal Pod Autoscaler
 
@@ -164,13 +164,13 @@ spec:
 ### PodDisruptionBudget
 
 ```yaml
-# ✅ Garantir la disponibilité pendant les mises à jour
+# ✅ Guarantee availability during updates
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: api-pdb
 spec:
-  minAvailable: 1   # ou maxUnavailable: 1
+  minAvailable: 1   # or maxUnavailable: 1
   selector:
     matchLabels:
       app: myapp
@@ -180,7 +180,7 @@ spec:
 ### NetworkPolicy
 
 ```yaml
-# ✅ Zero-trust : deny all par défaut, whitelist explicite
+# ✅ Zero-trust: deny all by default, explicit whitelist
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -209,10 +209,10 @@ spec:
         - port: 3306
 ```
 
-### Secrets — jamais en clair
+### Secrets — never in plaintext
 
 ```yaml
-# ✅ ExternalSecrets ou Sealed Secrets
+# ✅ ExternalSecrets or Sealed Secrets
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
@@ -235,46 +235,46 @@ spec:
 ## 🚫 Anti-patterns
 
 ```yaml
-# ❌ Image latest
+# ❌ Latest image
 image: myapp:latest
 
-# ❌ Pas de resources
+# ❌ No resources
 containers:
   - name: api
     image: myapp:1.0
-    # resources: ???  → va consommer tout le node
+    # resources: ???  → will consume the entire node
 
-# ❌ Pas de probes
-# → K8s ne sait pas si l'app est vivante ou prête
+# ❌ No probes
+# → K8s does not know if the app is alive or ready
 
-# ❌ kubectl apply sur un fichier local non versionné
-# → Pas de traçabilité, pas de rollback
+# ❌ kubectl apply on a non-versioned local file
+# → No traceability, no rollback
 
-# ❌ Secrets en base64 dans les manifestes YAML commités
-# base64 n'est PAS du chiffrement
+# ❌ Secrets in base64 in committed YAML manifests
+# base64 is NOT encryption
 
-# ❌ hostPath volumes en production
+# ❌ hostPath volumes in production
 volumes:
   - name: data
     hostPath:
-      path: /data  # couplage au node
+      path: /data  # node coupling
 ```
 
 ---
 
-## ✅ Checklist rapide
+## ✅ Quick checklist
 
 ```
-- [ ] Manifestes versionnés (Git) — pas de kubectl impératif en prod
-- [ ] Tags d'image explicites (jamais latest)
-- [ ] Resources requests + limits sur chaque container
-- [ ] Les 3 probes (startup, readiness, liveness)
-- [ ] Labels kubernetes.io standards
-- [ ] Namespaces pour l'isolation
+- [ ] Versioned manifests (Git) — no imperative kubectl in production
+- [ ] Explicit image tags (never latest)
+- [ ] Resources requests + limits on every container
+- [ ] All 3 probes (startup, readiness, liveness)
+- [ ] Standard kubernetes.io labels
+- [ ] Namespaces for isolation
 - [ ] NetworkPolicies (deny all + whitelist)
-- [ ] Secrets chiffrés (External Secrets, Sealed Secrets, Vault)
-- [ ] PodDisruptionBudget pour la haute disponibilité
-- [ ] HPA pour le scaling auto
-- [ ] RBAC : principe du moindre privilège
+- [ ] Encrypted secrets (External Secrets, Sealed Secrets, Vault)
+- [ ] PodDisruptionBudget for high availability
+- [ ] HPA for auto-scaling
+- [ ] RBAC: principle of least privilege
 - [ ] Pod Security Standards (restricted)
 ```

@@ -1,60 +1,60 @@
-# Workflow : [Nom du workflow]
+# Workflow: [Workflow name]
 
-<!-- WORKFLOW SPÉCIFIQUE PROJET
-     Placez ce fichier dans {projet}/agents/workflows/
-     Il surchargera automatiquement le workflow générique cortex du même nom, s'il existe.
+<!-- PROJECT-SPECIFIC WORKFLOW
+     Place this file in {project}/agents/workflows/
+     It will automatically override the cortex generic workflow of the same name, if it exists.
 -->
 
-## 🎯 Déclencheurs
+## 🎯 Triggers
 
-Ce workflow s'active lorsque le prompt contient des formulations du type :
-<!-- Listez les mots-clés, expressions ou contextes qui déclenchent ce workflow -->
-- "[expression déclencheuse 1]"
-- "[expression déclencheuse 2]"
+This workflow activates when the prompt contains formulations of the type:
+<!-- List the keywords, phrases or contexts that trigger this workflow -->
+- "[trigger expression 1]"
+- "[trigger expression 2]"
 
-## 👥 Agents impliqués
+## 👥 Agents involved
 
-| Étape | Rôle | Responsabilité |
+| Step | Role | Responsibility |
 |---|---|---|
-| 1 | `roles/[role].md` | [Responsabilité] |
-| 2 | `roles/[role].md` | [Responsabilité] |
+| 1 | `roles/[role].md` | [Responsibility] |
+| 2 | `roles/[role].md` | [Responsibility] |
 
-## 📋 Étapes
+## 📋 Steps
 
-### Étape 1 — [Nom de l'étape]
-**Agent :** `[role]`
-**Objectif :** [Ce que cette étape doit produire ou vérifier.]
+### Step 1 — [Step name]
+**Agent:** `[role]`
+**Objective:** [What this step must produce or verify.]
 
-**Checklist :**
-- [ ] [Point à vérifier ou action à réaliser]
-- [ ] [Point à vérifier ou action à réaliser]
-- [ ] [Point à vérifier ou action à réaliser]
+**Checklist:**
+- [ ] [Point to check or action to perform]
+- [ ] [Point to check or action to perform]
+- [ ] [Point to check or action to perform]
 
-**Livrable :** [Ce qui doit exister à la fin de cette étape avant de passer à la suivante.]
-
----
-
-### Étape 2 — [Nom de l'étape]
-**Agent :** `[role]`
-**Objectif :** [Ce que cette étape doit produire ou vérifier.]
-
-**Checklist :**
-- [ ] [Point à vérifier ou action à réaliser]
-- [ ] [Point à vérifier ou action à réaliser]
-
-**Livrable :** [Livrable attendu.]
+**Deliverable:** [What must exist at the end of this step before moving on.]
 
 ---
 
-<!-- Ajoutez autant d'étapes que nécessaire -->
+### Step 2 — [Step name]
+**Agent:** `[role]`
+**Objective:** [What this step must produce or verify.]
 
-## ✅ Définition de "terminé"
+**Checklist:**
+- [ ] [Point to check or action to perform]
+- [ ] [Point to check or action to perform]
 
-<!-- Critères objectifs et vérifiables pour considérer le workflow complété -->
-- [ ] [Critère 1]
-- [ ] [Critère 2]
+**Deliverable:** [Expected deliverable.]
 
-## 🔗 Workflows liés
+---
 
-<!-- Workflows qui peuvent précéder, suivre ou s'enchaîner avec celui-ci -->
-- `[workflow].md` — [Contexte de l'enchaînement]
+<!-- Add as many steps as needed -->
+
+## ✅ Definition of "done"
+
+<!-- Objective and verifiable criteria to consider the workflow complete -->
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
+
+## 🔗 Related workflows
+
+<!-- Workflows that can precede, follow or chain with this one -->
+- `[workflow].md` — [Context of the chaining]

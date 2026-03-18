@@ -1,20 +1,20 @@
 # Symfony — Best Practices
 
 <!-- CAPABILITY REFERENCE
-Fiche de best practices pour le framework Symfony.
-À combiner avec capabilities/languages/php.md pour les best practices PHP générales.
+Best practices card for the Symfony framework.
+To combine with capabilities/languages/php.md for general PHP best practices.
 -->
 
-> **Version de référence :** Symfony 7.x (LTS : 6.4) | **Dernière mise à jour :** 2026-02
-> **Docs officielles :** [symfony.com/doc](https://symfony.com/doc/current/index.html) | [Best Practices](https://symfony.com/doc/current/best_practices.html)
+> **Reference version:** Symfony 7.x (LTS: 6.4) | **Last updated:** 2026-02
+> **Official docs:** [symfony.com/doc](https://symfony.com/doc/current/index.html) | [Best Practices](https://symfony.com/doc/current/best_practices.html)
 
 ---
 
-## 🏛️ Principes fondamentaux
+## 🏛️ Fundamental principles
 
-### 1. Structure Bundle-less
+### 1. Bundle-less structure
 
-Symfony recommande depuis la v4 de **ne pas créer de bundles** pour le code applicatif.
+Since v4, Symfony recommends **not creating bundles** for application code.
 
 ```
 src/
@@ -29,7 +29,7 @@ src/
 └── Kernel.php
 ```
 
-Pour les gros projets, préférer une organisation par **domaine métier** :
+For large projects, prefer organising by **business domain**:
 
 ```
 src/
@@ -48,10 +48,10 @@ src/
     └── Service/
 ```
 
-### 2. Controllers minces
+### 2. Thin controllers
 
 ```php
-// ✅ Controller mince — délègue au service
+// ✅ Thin controller — delegates to service
 #[Route('/api/orders', name: 'order_')]
 final class OrderController extends AbstractController
 {
@@ -66,7 +66,7 @@ final class OrderController extends AbstractController
     }
 }
 
-// ❌ Controller obèse — logique métier dedans
+// ❌ Fat controller — business logic inside
 #[Route('/api/orders')]
 class OrderController extends AbstractController
 {
@@ -74,18 +74,18 @@ class OrderController extends AbstractController
     public function create(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-        // 50 lignes de validation...
-        // 30 lignes de logique métier...
-        // 20 lignes de persistance...
+        // 50 lines of validation...
+        // 30 lines of business logic...
+        // 20 lines of persistence...
         return $this->json($result);
     }
 }
 ```
 
-### 3. Injection de dépendances — autowiring
+### 3. Dependency injection — autowiring
 
 ```php
-// ✅ Constructor injection (préféré)
+// ✅ Constructor injection (preferred)
 final class OrderService
 {
     public function __construct(
@@ -102,25 +102,25 @@ class OrderService
 
     public function doSomething(): void
     {
-        $repo = $this->container->get(OrderRepository::class); // NON
+        $repo = $this->container->get(OrderRepository::class); // NO
     }
 }
 ```
 
-### 4. Attributs PHP 8 (plus de YAML/XML pour le routing)
+### 4. PHP 8 attributes (no more YAML/XML for routing)
 
 ```php
-// ✅ Attributs natifs
+// ✅ Native attributes
 #[Route('/api/users/{id}', methods: ['GET'])]
 #[IsGranted('ROLE_USER')]
 #[Cache(maxage: 3600)]
 public function show(int $id): JsonResponse { /* ... */ }
 ```
 
-### 5. Events pour le découplage
+### 5. Events for decoupling
 
 ```php
-// ✅ Événement métier
+// ✅ Domain event
 final readonly class OrderCreatedEvent
 {
     public function __construct(
@@ -129,25 +129,25 @@ final readonly class OrderCreatedEvent
     ) {}
 }
 
-// ✅ Listener déclaré par attribut
+// ✅ Listener declared via attribute
 #[AsEventListener(event: OrderCreatedEvent::class)]
 final class SendOrderConfirmationListener
 {
     public function __invoke(OrderCreatedEvent $event): void
     {
-        // Envoyer l'email de confirmation
+        // Send confirmation email
     }
 }
 ```
 
 ---
 
-## 📐 Patterns recommandés
+## 📐 Recommended patterns
 
-### DTOs avec MapRequestPayload
+### DTOs with MapRequestPayload
 
 ```php
-// ✅ DTO avec validation intégrée
+// ✅ DTO with built-in validation
 final readonly class CreateOrderDTO
 {
     public function __construct(
@@ -166,10 +166,10 @@ final readonly class CreateOrderDTO
 }
 ```
 
-### Repository custom — QueryBuilder
+### Custom repository — QueryBuilder
 
 ```php
-// ✅ Repository avec méthodes métier
+// ✅ Repository with business methods
 final class OrderRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
@@ -192,10 +192,10 @@ final class OrderRepository extends ServiceEntityRepository
 }
 ```
 
-### Voters pour les autorisations
+### Voters for authorisation
 
 ```php
-// ✅ Voter — logique d'autorisation centralisée
+// ✅ Voter — centralised authorisation logic
 final class OrderVoter extends Voter
 {
     protected function supports(string $attribute, mixed $subject): bool
@@ -217,7 +217,7 @@ final class OrderVoter extends Voter
 }
 ```
 
-### Messenger pour l'asynchrone
+### Messenger for async processing
 
 ```php
 // ✅ Message + Handler
@@ -234,49 +234,49 @@ final class SendNotificationHandler
 {
     public function __invoke(SendNotification $message): void
     {
-        // Traitement asynchrone
+        // Async processing
     }
 }
 ```
 
 ---
 
-## 🚫 Anti-patterns Symfony
+## 🚫 Symfony anti-patterns
 
 ```php
-// ❌ Logique métier dans les Entity
+// ❌ Business logic in Entities
 class Order
 {
-    public function sendConfirmationEmail(): void { /* NON */ }
+    public function sendConfirmationEmail(): void { /* NO */ }
 }
 
-// ❌ $container->get() dans le code applicatif
+// ❌ $container->get() in application code
 $service = $this->container->get('my.service');
 
-// ❌ Requêtes DQL/SQL dans les controllers
+// ❌ DQL/SQL queries in controllers
 $this->getDoctrine()->getManager()->createQuery('SELECT ...');
 
-// ❌ Annotations legacy (utilisez les attributs PHP 8)
+// ❌ Legacy annotations (use PHP 8 attributes)
 /** @Route("/api/users") */
 
-// ❌ Serialization groups dans les entities (préférer les DTOs)
+// ❌ Serialization groups on entities (prefer DTOs)
 /** @Groups({"api"}) */
 private string $password; // DANGER
 ```
 
 ---
 
-## ✅ Checklist rapide
+## ✅ Quick checklist
 
 ```
-- [ ] Controllers < 20 lignes par action
-- [ ] Logique métier dans les Services, pas les Controllers ni les Entities
-- [ ] DTOs pour les entrées/sorties API (MapRequestPayload)
-- [ ] Autowiring (constructor injection uniquement)
-- [ ] Attributs PHP 8 pour routing, validation, sécurité
-- [ ] Events/Messenger pour le découplage
-- [ ] Voters pour les autorisations complexes
-- [ ] Pas de container->get() dans le code applicatif
-- [ ] Migrations versionnées (make:migration, jamais de SQL manuel)
-- [ ] .env.local pour les secrets locaux, Vault en prod
+- [ ] Controllers < 20 lines per action
+- [ ] Business logic in Services, not Controllers or Entities
+- [ ] DTOs for API inputs/outputs (MapRequestPayload)
+- [ ] Autowiring (constructor injection only)
+- [ ] PHP 8 attributes for routing, validation, security
+- [ ] Events/Messenger for decoupling
+- [ ] Voters for complex authorisation
+- [ ] No container->get() in application code
+- [ ] Versioned migrations (make:migration, never manual SQL)
+- [ ] .env.local for local secrets, Vault in production
 ```

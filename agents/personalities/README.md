@@ -1,27 +1,27 @@
-# Personnalités — Thèmes Cortex
+# Personalities — Cortex Themes
 
-> Chaque sous-dossier contient un **thème de personnalité** applicable à l'équipe d'agents.
+> Each subdirectory contains a **personality theme** applicable to the agent team.
 
-## Principe
+## Principle
 
-Un thème de personnalité est une **couche optionnelle** qui se superpose aux rôles génériques pour donner un ton, un style et une identité aux agents IA.
+A personality theme is an **optional layer** that overlays the generic roles to give a tone, style and identity to the AI agents.
 
-## Structure d'un thème
+## Structure of a theme
 
 ```
 personalities/
-└── {nom-du-theme}/
-    ├── README.md         # Description du thème, instructions d'utilisation
-    ├── theme.md          # Ton global, règles de communication, références
-    └── characters.md     # Mapping rôle → personnage + traits + citations
+└── {theme-name}/
+    ├── README.md         # Theme description, usage instructions
+    ├── theme.md          # Global tone, communication rules, references
+    └── characters.md     # Role → character mapping + traits + quotes
 ```
 
-## Thèmes disponibles
+## Available themes
 
-| Thème | Inspiré de | Style |
-|-------|-----------|-------|
-| `h2g2/` | Le Guide du voyageur galactique | Humour british, SF, absurde bienveillant |
+| Theme | Inspired by | Style |
+|-------|-------------|-------|
+| `h2g2/` | The Hitchhiker's Guide to the Galaxy | British humour, SF, benevolent absurdity |
 
-## Créer un thème
+## Creating a theme
 
-Voir le guide complet : [../../docs/creating-a-theme.md](../../docs/creating-a-theme.md)
+See the full guide: [../../docs/creating-a-theme.md](../../docs/creating-a-theme.md)

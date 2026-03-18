@@ -1,19 +1,19 @@
 # TypeScript — Best Practices
 
 <!-- CAPABILITY REFERENCE
-Fiche de best practices pour le langage TypeScript.
-À combiner avec un rôle (ex: roles/engineering/lead-frontend.md) et un framework (ex: capabilities/frameworks/nuxt.md).
-Ne contient AUCUNE référence à un framework spécifique — uniquement le langage.
+Best practices card for the TypeScript language.
+To combine with a role (e.g. roles/engineering/lead-frontend.md) and a framework (e.g. capabilities/frameworks/nuxt.md).
+Contains NO framework-specific references — language only.
 -->
 
-> **Version de référence :** TypeScript 5.x | **Dernière mise à jour :** 2026-02
-> **Docs officielles :** [typescriptlang.org](https://www.typescriptlang.org/docs/)
+> **Reference version:** TypeScript 5.x | **Last updated:** 2026-02
+> **Official docs:** [typescriptlang.org](https://www.typescriptlang.org/docs/)
 
 ---
 
-## 🏛️ Principes fondamentaux
+## 🏛️ Fundamental principles
 
-### 1. Strict mode — non négociable
+### 1. Strict mode — non-negotiable
 
 ```json
 // tsconfig.json
@@ -27,29 +27,29 @@ Ne contient AUCUNE référence à un framework spécifique — uniquement le lan
 }
 ```
 
-`strict: true` active : `strictNullChecks`, `strictFunctionTypes`, `strictBindCallApply`, `strictPropertyInitialization`, `noImplicitAny`, `noImplicitThis`, `alwaysStrict`.
+`strict: true` enables: `strictNullChecks`, `strictFunctionTypes`, `strictBindCallApply`, `strictPropertyInitialization`, `noImplicitAny`, `noImplicitThis`, `alwaysStrict`.
 
-### 2. Types — jamais `any`
+### 2. Types — never `any`
 
 ```typescript
-// ✅ Bien — types explicites
+// ✅ Good — explicit types
 function calculateTotal(price: number, quantity: number): number {
   return price * quantity;
 }
 
-// ✅ Bien — types utilitaires
+// ✅ Good — utility types
 type PartialUser = Pick<User, 'id' | 'name'>;
 type ReadonlyConfig = Readonly<Config>;
 
-// ❌ Mal
+// ❌ Bad
 function calculateTotal(price: any, quantity: any): any {
   return price * quantity;
 }
 ```
 
-**Règle :** `any` est interdit sauf dans les rares cas de compatibilité avec des libs non typées. Utiliser `unknown` si le type est inconnu.
+**Rule:** `any` is forbidden except in rare compatibility cases with untyped libraries. Use `unknown` when the type is not known.
 
-### 3. `unknown` plutôt que `any`
+### 3. `unknown` rather than `any`
 
 ```typescript
 // ✅ unknown + type guard
@@ -63,51 +63,51 @@ function processInput(input: unknown): string {
   return String(input);
 }
 
-// ❌ any = aucune vérification
+// ❌ any = no checking
 function processInput(input: any): string {
-  return input.toUpperCase(); // boom à runtime si ce n'est pas un string
+  return input.toUpperCase(); // runtime crash if not a string
 }
 ```
 
-### 4. Interfaces pour les contrats, types pour les compositions
+### 4. Interfaces for contracts, types for compositions
 
 ```typescript
-// ✅ Interface — contrat extensible
+// ✅ Interface — extensible contract
 interface Repository<T> {
   findById(id: string): Promise<T | null>;
   save(entity: T): Promise<void>;
   delete(id: string): Promise<void>;
 }
 
-// ✅ Type — composition et unions
+// ✅ Type — composition and unions
 type Result<T> = { success: true; data: T } | { success: false; error: string };
 type UserId = string & { readonly __brand: unique symbol };
 ```
 
-### 5. Const assertions et satisfies
+### 5. Const assertions and satisfies
 
 ```typescript
-// ✅ const assertion — types littéraux
+// ✅ const assertion — literal types
 const ROLES = ['admin', 'editor', 'viewer'] as const;
 type Role = (typeof ROLES)[number]; // 'admin' | 'editor' | 'viewer'
 
-// ✅ satisfies — typage + inférence
+// ✅ satisfies — typing + inference
 const config = {
   api: 'https://api.example.com',
   timeout: 5000,
   retries: 3,
 } satisfies Record<string, string | number>;
-// config.timeout est inféré comme number (pas string | number)
+// config.timeout is inferred as number (not string | number)
 ```
 
 ---
 
-## 📐 Patterns recommandés
+## 📐 Recommended patterns
 
 ### Discriminated Unions
 
 ```typescript
-// ✅ Pattern discriminant — exhaustif et type-safe
+// ✅ Discriminant pattern — exhaustive and type-safe
 type ApiResponse<T> =
   | { status: 'loading' }
   | { status: 'success'; data: T }
@@ -119,10 +119,10 @@ function handleResponse<T>(response: ApiResponse<T>): void {
       showSpinner();
       break;
     case 'success':
-      render(response.data); // TS sait que data existe
+      render(response.data); // TS knows data exists
       break;
     case 'error':
-      showError(response.error); // TS sait que error existe
+      showError(response.error); // TS knows error exists
       break;
   }
 }
@@ -131,7 +131,7 @@ function handleResponse<T>(response: ApiResponse<T>): void {
 ### Branded Types
 
 ```typescript
-// ✅ Types nominaux — pas de confusion entre IDs
+// ✅ Nominal types — no confusion between IDs
 type UserId = string & { readonly __brand: 'UserId' };
 type OrderId = string & { readonly __brand: 'OrderId' };
 
@@ -140,13 +140,13 @@ function createUserId(id: string): UserId {
 }
 
 function getUser(id: UserId): Promise<User> { /* ... */ }
-// getUser(orderId) → erreur de compilation ✅
+// getUser(orderId) → compilation error ✅
 ```
 
-### Zod pour la validation runtime
+### Zod for runtime validation
 
 ```typescript
-// ✅ Schéma de validation + inférence de type
+// ✅ Validation schema + type inference
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -158,14 +158,14 @@ const UserSchema = z.object({
 
 type User = z.infer<typeof UserSchema>;
 
-// Parse en runtime — type-safe
+// Parse at runtime — type-safe
 const user = UserSchema.parse(unknownData);
 ```
 
 ### Error handling
 
 ```typescript
-// ✅ Result type — pas d'exceptions pour le contrôle de flux
+// ✅ Result type — no exceptions for control flow
 type Result<T, E = Error> =
   | { ok: true; value: T }
   | { ok: false; error: E };
@@ -180,66 +180,66 @@ function divide(a: number, b: number): Result<number, string> {
 
 ## 🚫 Anti-patterns
 
-### Ne JAMAIS faire
+### NEVER do this
 
 ```typescript
 // ❌ any
 const data: any = fetchData();
 
-// ❌ Type assertion non vérifiée
-const user = data as User; // dangereux sans validation
+// ❌ Unchecked type assertion
+const user = data as User; // dangerous without validation
 
 // ❌ Non-null assertion abuse
-const name = user!.name!.first!; // cache des bugs
+const name = user!.name!.first!; // hides bugs
 
-// ❌ Enum numérique (préférer les string unions ou const objects)
+// ❌ Numeric enum (prefer string unions or const objects)
 enum Direction { Up, Down, Left, Right }
 
 // ❌ namespace (legacy)
 namespace MyApp { /* ... */ }
 
-// ❌ Exporter des types mutables
-export let config = { /* ... */ }; // utilisez export const
+// ❌ Exporting mutable types
+export let config = { /* ... */ }; // use export const
 ```
 
-### Préférer
+### Prefer
 
-| ❌ Ne pas | ✅ Préférer |
+| ❌ Avoid | ✅ Prefer |
 |---|---|
 | `any` | `unknown` + type guards |
-| `as Type` non vérifié | `satisfies` ou validation Zod |
+| Unchecked `as Type` | `satisfies` or Zod validation |
 | `!` non-null assertion | Optional chaining `?.` + nullish coalescing `??` |
-| `enum` numérique | `as const` + type union |
-| `namespace` | Modules ES |
-| `var` | `const` (et `let` si mutation nécessaire) |
-| `Function` type | Signature explicite `(arg: T) => R` |
+| Numeric `enum` | `as const` + type union |
+| `namespace` | ES modules |
+| `var` | `const` (and `let` if mutation is needed) |
+| `Function` type | Explicit signature `(arg: T) => R` |
 
 ---
 
-## 🔧 Outillage recommandé
+## 🔧 Recommended tooling
 
-| Outil | Rôle |
+| Tool | Role |
 |---|---|
 | ESLint + typescript-eslint | Linting |
-| Prettier | Formatage |
+| Prettier | Formatting |
 | Vitest / Jest | Tests |
-| Zod | Validation runtime |
-| tsx / ts-node | Exécution directe |
-| tsc --noEmit | Vérification de types en CI |
+| Zod | Runtime validation |
+| tsx / ts-node | Direct execution |
+| tsc --noEmit | Type checking in CI |
 
 ---
 
-## ✅ Checklist rapide
+## ✅ Quick checklist
 
 ```
-- [ ] strict: true dans tsconfig.json
-- [ ] Zéro `any` (ou justifié + eslint-disable)
-- [ ] unknown pour les données externes
-- [ ] Interfaces pour les contrats, types pour les compositions
-- [ ] Discriminated unions pour les états
-- [ ] as const pour les valeurs littérales
-- [ ] Validation runtime (Zod) aux frontières (API, forms)
-- [ ] Pas de non-null assertion (!) sauf cas prouvé
-- [ ] ESLint + Prettier configurés
-- [ ] tsc --noEmit dans la CI
+- [ ] strict: true in tsconfig.json
+- [ ] Zero `any` (or justified + eslint-disable)
+- [ ] unknown for external data
+- [ ] Interfaces for contracts, types for compositions
+- [ ] Discriminated unions for states
+- [ ] as const for literal values
+- [ ] Runtime validation (Zod) at boundaries (API, forms)
+- [ ] No non-null assertion (!) unless proven
+- [ ] ESLint + Prettier configured
+- [ ] tsc --noEmit in CI
 ```

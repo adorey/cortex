@@ -1,163 +1,163 @@
 # Getting Started — Cortex
 
-> *"Don't Panic. Et lis ce guide avant de faire quoi que ce soit."* — Arthur Dent
+> *"Don't Panic. And read this guide before doing anything else."* — Arthur Dent
 
-Ce guide pas à pas couvre les deux modes d'installation : **projet unique** et **workspace multi-services**.
-
----
-
-## Prérequis
-
-- Un dépôt Git (ou un dossier workspace pour le mode multi-repo)
-- Un IDE compatible avec les instructions Copilot : VS Code + GitHub Copilot, Cursor, etc.
-- Git installé (pour le submodule)
+This step-by-step guide covers both installation modes: **single project** and **multi-service workspace**.
 
 ---
 
-## 🚀 Mode 1 — Projet unique
+## Prerequisites
 
-### Étape 1 — Ajouter Cortex comme submodule
+- A Git repository (or a workspace folder for multi-repo mode)
+- An IDE compatible with Copilot instructions: VS Code + GitHub Copilot, Cursor, etc.
+- Git installed (for the submodule)
+
+---
+
+## 🚀 Mode 1 — Single project
+
+### Step 1 — Add Cortex as a submodule
 
 ```bash
-cd mon-projet/
-git submodule add <url-cortex> cortex
+cd my-project/
+git submodule add <cortex-url> cortex
 ```
 
-### Étape 2 — Lancer le script d'installation
+### Step 2 — Run the setup script
 
 ```bash
-# Avec le thème H2G2 (défaut)
+# With the H2G2 theme (default)
 ./cortex/setup.sh
 
-# Sans personnalité (agents professionnels neutres)
+# Without personality (neutral professional agents)
 ./cortex/setup.sh --no-personality
 
-# Avec un thème custom
+# With a custom theme
 ./cortex/setup.sh --theme star-wars
 ```
 
-Le script crée automatiquement :
-- `.github/copilot-instructions.md` — bootstrap lu par votre IDE à chaque session
-- `project-overview.md` — à remplir : vision, acteurs, flux métier
-- `project-context.md` — à remplir : stack, conventions, outils
+The script automatically creates:
+- `.github/copilot-instructions.md` — bootstrap read by your IDE at every session
+- `project-overview.md` — to fill in: vision, stakeholders, business flows
+- `project-context.md` — to fill in: stack, conventions, tools
 
-### Étape 3 — Remplir les fichiers de contexte
+### Step 3 — Fill in the context files
 
-**`project-overview.md`** (le QUOI et le POURQUOI) :
+**`project-overview.md`** (the WHAT and WHY):
 ```markdown
-@alias: mon-projet
+@alias: my-project
 
 ## 🎯 Mission
-Plateforme B2B de gestion de contrats — SaaS, marché PME France.
+B2B contract management platform — SaaS, SME market.
 
-## 👥 Acteurs
-- Admin entreprise, Manager, Employé
+## 👥 Stakeholders
+- Company admin, Manager, Employee
 
-## 🔄 Flux principaux
-- Création / validation / signature de contrat
-- Gestion des droits par rôle
+## 🔄 Main flows
+- Contract creation / validation / signing
+- Role-based permission management
 
-## ⚠️ Contraintes
-- RGPD, données hébergées en France
-- SLA 99,9%
+## ⚠️ Constraints
+- GDPR, data hosted in EU
+- SLA 99.9%
 ```
 
-**`project-context.md`** (le COMMENT et OÙ) :
+**`project-context.md`** (the HOW and WHERE):
 ```markdown
-@alias: mon-projet
+@alias: my-project
 
-## 🛠️ Stack technique
+## 🛠️ Tech stack
 - PHP 8.3 / Symfony 7.2
 - MySQL 8.0
 - Docker + Kubernetes
 
 ## 📐 Conventions
-- PSR-12, DDD, API REST
-- Tests PHPUnit, couverture min 80%
+- PSR-12, DDD, REST API
+- PHPUnit tests, minimum 80% coverage
 ```
 
-### Étape 4 — Première interaction
+### Step 4 — First interaction
 
-Dans votre IDE, mentionnez simplement l'agent souhaité.
+In your IDE, simply mention the desired agent.
 
-**Avec le thème H2G2 :**
+**With the H2G2 theme:**
 ```
-@Oolon je veux ajouter un système de pagination sur l'API /contracts
-```
-
-**Sans thème (rôle direct) :**
-```
-@prompt-manager je veux ajouter un système de pagination sur l'API /contracts
+@Oolon I want to add a pagination system on the /contracts API
 ```
 
-### Étape 5 — Comment fonctionne le dispatch
+**Without a theme (direct role):**
+```
+@prompt-manager I want to add a pagination system on the /contracts API
+```
 
-Quand vous appelez `@Oolon` (ou `@prompt-manager`) :
+### Step 5 — How dispatch works
 
-1. **Analyse** — Oolon reformule et clarifie votre demande
-2. **Workflow** — Il cherche un workflow adapté dans `agents/workflows/` (générique) puis dans votre `agents/workflows/` (projet)
-3. **Dispatch** — Il identifie l'expert : *"Je passe la main à @Hactar (Lead Backend)"*
-4. **Capacités** — Il charge les fichiers `capabilities/` correspondant à votre stack (ex: `php.md`, `symfony.md`, `mysql.md`)
-5. **Transmission** — L'expert répond avec le contexte complet de votre projet
+When you call `@Oolon` (or `@prompt-manager`):
+
+1. **Analysis** — Oolon reformulates and clarifies your request
+2. **Workflow** — Searches for a matching workflow in `agents/workflows/` (generic) then in your `agents/workflows/` (project)
+3. **Dispatch** — Identifies the expert: *"Handing over to @Hactar (Lead Backend)"*
+4. **Capabilities** — Loads the `capabilities/` files matching your stack (e.g. `php.md`, `symfony.md`, `mysql.md`)
+5. **Delivery** — The expert responds with your project's full context
 
 ---
 
-## 🏢 Mode 2 — Workspace multi-services
+## 🏢 Mode 2 — Multi-service workspace
 
-Pour un workspace contenant plusieurs services (microservices, monorepo, multi-repo) :
+For a workspace containing multiple services (microservices, monorepo, multi-repo):
 
 ```
 workspace/
-├── cortex/          ← submodule partagé
+├── cortex/          ← shared submodule
 ├── api-backend/
 ├── front-web/
-└── service-notif/
+└── notif-service/
 ```
 
-### Étape 1 — Placer Cortex dans le dossier parent
+### Step 1 — Place Cortex in the parent folder
 
 ```bash
 cd workspace/
-git submodule add <url-cortex> cortex
+git submodule add <cortex-url> cortex
 ```
 
-### Étape 2 — Lancer en mode workspace
+### Step 2 — Run in workspace mode
 
 ```bash
 ./cortex/setup.sh --workspace
-# Le script demande les noms de services à initialiser :
-# → Nom du service (ex: api-backend, front-web) : api-backend
-# → Nom du service (ex: api-backend, front-web) : front-web
-# → Nom du service (ex: api-backend, front-web) :  ← entrée vide pour terminer
+# The script asks for service names to initialise:
+# → Service name (e.g. api-backend, front-web): api-backend
+# → Service name (e.g. api-backend, front-web): front-web
+# → Service name (e.g. api-backend, front-web):  ← empty entry to finish
 ```
 
-Le script crée pour chaque service :
-- `{service}/project-overview.md` — avec `@alias: {service}` pré-rempli
-- `{service}/project-context.md` — avec `@alias: {service}` pré-rempli
+The script creates for each service:
+- `{service}/project-overview.md` — with `@alias: {service}` pre-filled
+- `{service}/project-context.md` — with `@alias: {service}` pre-filled
 
-Et à la racine workspace (optionnel) :
-- `project-overview.md` — vision globale (acteurs partagés, contraintes communes)
-- `project-context.md` — conventions partagées (linting, CI/CD, versionning)
+And at the workspace root (optional):
+- `project-overview.md` — global vision (shared stakeholders, common constraints)
+- `project-context.md` — shared conventions (linting, CI/CD, versioning)
 
-### Étape 3 — Copier le bootstrap workspace
+### Step 3 — Copy the workspace bootstrap
 
 ```bash
 cp cortex/templates/copilot-instructions-workspace.md .github/copilot-instructions.md
 ```
 
-### Étape 4 — Remplir les contextes par service
+### Step 4 — Fill in the context per service
 
-Chaque service a ses propres fichiers de contexte. L'`@alias` permet de cibler un service :
+Each service has its own context files. The `@alias` targets a specific service:
 
-**`api-backend/project-overview.md`** :
+**`api-backend/project-overview.md`**:
 ```markdown
 <!-- @alias: api-backend -->
 
 ## 🎯 Mission
-API REST — gestion des contrats, authentification JWT
+REST API — contract management, JWT authentication
 ```
 
-**`front-web/project-context.md`** :
+**`front-web/project-context.md`**:
 ```markdown
 <!-- @alias: front-web -->
 
@@ -166,36 +166,36 @@ API REST — gestion des contrats, authentification JWT
 - Vite, TailwindCSS
 ```
 
-### Étape 5 — Cibler un service dans vos prompts
+### Step 5 — Target a service in your prompts
 
 ```
-@api-backend Ajoute un endpoint de pagination sur /contracts
-@front-web   Crée un composant de tableau avec tri et filtres
+@api-backend Add a pagination endpoint on /contracts
+@front-web   Create a table component with sorting and filters
 ```
 
-Si vous n'utilisez pas d'alias, Cortex déduit le service depuis les fichiers ouverts dans l'IDE.
+If you don't use an alias, Cortex infers the service from the files open in the IDE.
 
 ---
 
-## ➕ Aller plus loin
+## ➕ Going further
 
-### Créer un workflow projet
+### Create a project workflow
 
-Les workflows Cortex sont dans `cortex/agents/workflows/` (génériques, partagés entre projets).
+Cortex workflows are in `cortex/agents/workflows/` (generic, shared across projects).
 
-Pour créer un workflow spécifique à votre projet :
+To create a workflow specific to your project:
 
 ```bash
 mkdir -p agents/workflows/engineering/
-cp cortex/templates/workflow.md.template agents/workflows/engineering/mon-workflow.md
-# Remplissez le template
+cp cortex/templates/workflow.md.template agents/workflows/engineering/my-workflow.md
+# Fill in the template
 ```
 
-Le PM cherche d'abord dans votre `agents/workflows/` (prioritaire), puis dans `cortex/agents/workflows/`.
+The PM looks first in your `agents/workflows/` (higher priority), then in `cortex/agents/workflows/`.
 
-### Ajouter une capability
+### Add a capability
 
-Les capabilities sont dans `cortex/agents/capabilities/`. Pour en ajouter une au framework :
+Capabilities are in `cortex/agents/capabilities/`. To add one to the framework:
 
 ```
 cortex/agents/capabilities/
@@ -205,49 +205,49 @@ cortex/agents/capabilities/
 └── security/     owasp.md
 ```
 
-Copiez le format d'une capability existante, puis déclarez-la dans la section `🔌 Capacités` du rôle concerné.
+Copy the format of an existing capability, then declare it in the `🔌 Capabilities` section of the relevant role.
 
-### Créer un thème de personnalité
+### Create a personality theme
 
-Consultez [`docs/creating-a-theme.md`](creating-a-theme.md) pour le guide complet.
+See [`docs/creating-a-theme.md`](creating-a-theme.md) for the full guide.
 
 ```bash
-./cortex/setup.sh --theme mon-theme
+./cortex/setup.sh --theme my-theme
 ```
 
-### Ajouter un rôle
+### Add a role
 
-1. Créez `cortex/agents/roles/{categorie}/mon-role.md` en suivant le format existant
-2. Ajoutez une section `🔌 Capacités` si c'est un rôle technique
-3. Si thème actif : ajoutez le personnage dans `characters.md` et créez sa fiche `.md`
+1. Create `cortex/agents/roles/{category}/my-role.md` following the existing format
+2. Add a `🔌 Capabilities` section if it's a technical role
+3. If a theme is active: add the character to `characters.md` and create their `.md` card
 
 ---
 
-## 🗺️ Récapitulatif des 5 couches
+## 🗺️ Overview of the 5 layers
 
-| Couche | Fichiers | Répond à |
+| Layer | Files | Answers |
 |---|---|---|
-| **Roles** | `cortex/agents/roles/{cat}/` | *QUOI* faire (compétences métier) |
-| **Capabilities** | `cortex/agents/capabilities/` | *CE QUE JE SAIS FAIRE* (stack tech) |
-| **Personalities** | `cortex/agents/personalities/{theme}/` | *QUI* tu es (ton, style) |
-| **Context** | `project-overview.md` + `project-context.md` | *OÙ / POURQUOI* tu travailles |
-| **Workflows** | `agents/workflows/` ou `cortex/agents/workflows/` | *COMMENT et AVEC QUI* orchestrer |
+| **Roles** | `cortex/agents/roles/{cat}/` | *WHAT* to do (business skills) |
+| **Capabilities** | `cortex/agents/capabilities/` | *WHAT I KNOW HOW TO DO* (tech stack) |
+| **Personalities** | `cortex/agents/personalities/{theme}/` | *WHO* you are (tone, style) |
+| **Context** | `project-overview.md` + `project-context.md` | *WHERE / WHY* you work |
+| **Workflows** | `agents/workflows/` or `cortex/agents/workflows/` | *HOW and WITH WHOM* to orchestrate |
 
 ---
 
-## ❓ FAQ rapide
+## ❓ Quick FAQ
 
-**Q : Dois-je utiliser un thème de personnalité ?**
-Non. `--no-personality` donne des agents sans fioritures, professionnels et neutres.
+**Q: Do I need to use a personality theme?**
+No. `--no-personality` gives you streamlined, professional, neutral agents.
 
-**Q : Je n'ai pas de workflow qui correspond. Que se passe-t-il ?**
-Le PM dispatch directement au bon expert sans trame. Si le cas est récurrent, il proposera de créer un workflow via le template.
+**Q: I don't have a matching workflow. What happens?**
+The PM dispatches directly to the right expert without a template. If the case recurs, it will suggest creating a workflow using the template.
 
-**Q : Puis-je appeler un agent directement sans passer par le PM ?**
-Oui. `@Hactar` invoque directement le Lead Backend. Mais passer par le PM garantit l'optimisation du prompt et le chargement des capacités.
+**Q: Can I call an agent directly without going through the PM?**
+Yes. `@Hactar` invokes the Lead Backend directly. But going through the PM guarantees prompt optimisation and capability loading.
 
-**Q : Le submodule Cortex est-il mis à jour automatiquement ?**
-Non. Pour mettre à jour : `git submodule update --remote cortex`. Vérifiez le changelog avant de mettre à jour en production.
+**Q: Is the Cortex submodule updated automatically?**
+No. To update: `git submodule update --remote cortex`. Check the changelog before updating in production.
 
-**Q : Puis-je utiliser Cortex sans Git submodule ?**
-Oui, avec l'option manuelle : copiez les templates à la main (voir [README.md](../README.md#option-2--manuel)).
+**Q: Can I use Cortex without a Git submodule?**
+Yes, using the manual option: copy the templates by hand (see [README.md](../README.md#option-2--manual)).

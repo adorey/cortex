@@ -1,66 +1,66 @@
 # Workflows
 
-> *"Un plan, c'est une liste de choses qui ne se passeront pas exactement comme prévu — mais qui cadre quand même mieux que l'improvisation totale."* — Ford Prefect
+> *"A plan is a list of things that won't happen exactly as planned — but it's still better framing than total improvisation."* — Ford Prefect
 
-## 🎯 Qu'est-ce qu'un workflow ?
+## 🎯 What is a workflow?
 
-Un workflow est une **trame d'orchestration** : une séquence d'étapes, d'agents et de checklists à suivre pour un contexte récurrent.
+A workflow is an **orchestration template**: a sequence of steps, agents and checklists to follow for a recurring context.
 
-Ce n'est pas un script rigide. C'est un filet de sécurité pour ne rien oublier.
+It is not a rigid script. It is a safety net to ensure nothing is forgotten.
 
-| Couche | Répond à |
+| Layer | Answers |
 |---|---|
-| `roles/` | **QUOI** faire |
-| `capabilities/` | **CE QUE JE SAIS FAIRE** |
-| `personalities/` | **QUI** tu es |
-| `project-context.md` | **OÙ** tu travailles |
-| `workflows/` | **DANS QUEL ORDRE et AVEC QUI** |
+| `roles/` | **WHAT** to do |
+| `capabilities/` | **WHAT I KNOW HOW TO DO** |
+| `personalities/` | **WHO** you are |
+| `project-context.md` | **WHERE** you work |
+| `workflows/` | **IN WHAT ORDER and WITH WHOM** |
 
-## 📁 Deux niveaux
+## 📁 Two levels
 
 ```
-cortex/agents/workflows/                 ← Workflows génériques (ce dossier)
-    ├── engineering/                         ← Développement & technique
+cortex/agents/workflows/                 ← Generic workflows (this folder)
+    ├── engineering/                         ← Development & technical
     │   └── feature-development.md
-    ├── intelligence/                        ← Veille & analyse
+    ├── intelligence/                        ← Research & analysis
     │   └── tech-watch.md
-    ├── ops/                                 ← Déploiement & incident (futur)
-    └── product/                             ← Discovery & roadmap (futur)
+    ├── ops/                                 ← Deployment & incident (future)
+    └── product/                             ← Discovery & roadmap (future)
 
-{projet}/agents/workflows/               ← Workflows spécifiques au projet hôte
+{project}/agents/workflows/              ← Workflows specific to the host project
     ├── engineering/
-    │   └── mon-workflow.md
+    │   └── my-workflow.md
     └── ...
 ```
 
-**Règle de priorité :** le workflow projet prime sur le workflow générique portant le même nom.
+**Priority rule:** the project workflow overrides the generic workflow with the same name.
 
-## 🔄 Rôle du Prompt Manager
+## 🔄 Prompt Manager role
 
-Le Prompt Manager est le **seul point d'entrée**. À chaque demande il :
+The Prompt Manager is the **single entry point**. For every request it:
 
-1. Analyse le prompt
-2. Recherche un workflow correspondant — d'abord dans `{projet}/agents/workflows/`, puis ici
-3a. **Workflow trouvé** → l'annonce, l'active et orchestre les étapes
-3b. **Pas de workflow** → dispatch classique vers l'expert
-3c. **Cas récurrent sans workflow** → propose d'en créer un
+1. Analyses the prompt
+2. Searches for a matching workflow — first in `{project}/agents/workflows/`, then here
+3a. **Workflow found** → announces it, activates it and orchestrates the steps
+3b. **No workflow** → classic dispatch to the expert
+3c. **Recurring case without a workflow** → proposes creating one
 
-## 📝 Workflows disponibles
+## 📝 Available workflows
 
-| Catégorie | Fichier | Contexte de déclenchement |
+| Category | File | Activation context |
 |---|---|---|
-| `engineering/` | `feature-development.md` | Développement d'une nouvelle fonctionnalité |
-| `intelligence/` | `tech-watch.md` | Veille technologique sur un sujet ou outil |
+| `engineering/` | `feature-development.md` | Developing a new feature |
+| `intelligence/` | `tech-watch.md` | Technology watch on a subject or tool |
 
-## 🗂️ Catégories
+## 🗂️ Categories
 
-| Catégorie | Vocation | Exemples de workflows futurs |
+| Category | Purpose | Examples of future workflows |
 |---|---|---|
-| `engineering/` | Développement & technique | `bug-fix`, `code-review`, `refactoring` |
-| `intelligence/` | Veille & analyse | `security-audit`, `competitive-watch` |
-| `ops/` | Déploiement & incident | `deployment`, `incident-response` |
+| `engineering/` | Development & technical | `bug-fix`, `code-review`, `refactoring` |
+| `intelligence/` | Research & analysis | `security-audit`, `competitive-watch` |
+| `ops/` | Deployment & incident | `deployment`, `incident-response` |
 | `product/` | Discovery & roadmap | `backlog-grooming`, `user-story-mapping` |
 
-## ➕ Créer un workflow projet
+## ➕ Creating a project workflow
 
-Utilisez le template `cortex/templates/workflow.md.template` et placez votre fichier dans `{projet}/agents/workflows/{catégorie}/`.
+Use the `cortex/templates/workflow.md.template` template and place your file in `{project}/agents/workflows/{category}/`.

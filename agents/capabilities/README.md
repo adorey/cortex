@@ -1,91 +1,91 @@
-# Capabilities — Compétences techniques chargeables
+# Capabilities — Loadable technical skills
 
-> *"Si je peux comprendre ces best practices en peignoir et sans café, alors la doc est bonne."* — Arthur Dent
+> *"If I can understand these best practices in a dressing gown and without coffee, then the docs are good."* — Arthur Dent
 
-## 🎯 À quoi ça sert ?
+## 🎯 What is this for?
 
-Les capacités sont des **modules de compétences techniques chargeables**. Chaque fichier contient les best practices universelles d'une technologie — indépendamment de tout projet, rôle ou personnalité.
+Capabilities are **loadable technical skill modules**. Each file contains the universal best practices for a technology — independently of any project, role or personality.
 
-Un rôle déclare les **catégories de capacités** dont il a besoin. Le Prompt Manager charge les fichiers correspondants en croisant avec la stack déclarée dans `project-context.md`.
+A role declares the **capability categories** it needs. The Prompt Manager loads the corresponding files by cross-referencing with the stack declared in `project-context.md`.
 
-**La différence avec les autres couches :**
+**The difference from other layers:**
 
-| Couche | Répond à | Exemple |
+| Layer | Answers | Example |
 |---|---|---|
-| `roles/` | **QUOI** faire | "Un lead backend structure, review, mentore" |
-| `capabilities/` | **CE QUE JE SAIS FAIRE** | "En PHP : PSR-12, injection de dépendances..." |
-| `personalities/` | **QUI** je suis | "Hactar, méthodique, élégant" |
-| `project-context.md` | **OÙ** je travaille | "Ce projet : Symfony 7.2, PHP 8.3, MySQL 8" |
+| `roles/` | **WHAT** to do | "A lead backend structures, reviews, mentors" |
+| `capabilities/` | **WHAT I KNOW HOW TO DO** | "In PHP: PSR-12, dependency injection..." |
+| `personalities/` | **WHO** I am | "Hactar, methodical, elegant" |
+| `project-context.md` | **WHERE** I work | "This project: Symfony 7.2, PHP 8.3, MySQL 8" |
 
 ## 📁 Structure
 
 ```
 capabilities/
-├── README.md                 # Ce fichier
+├── README.md                 # This file
 ├── languages/
-│   ├── php.md                # Best practices PHP
-│   ├── typescript.md         # Best practices TypeScript
+│   ├── php.md                # PHP best practices
+│   ├── typescript.md         # TypeScript best practices
 │   └── ...
 ├── frameworks/
-│   ├── symfony.md            # Best practices Symfony
+│   ├── symfony.md            # Symfony best practices
 │   └── ...
 ├── infrastructure/
-│   ├── docker.md             # Best practices Docker
-│   └── kubernetes.md         # Best practices Kubernetes
+│   ├── docker.md             # Docker best practices
+│   └── kubernetes.md         # Kubernetes best practices
 ├── databases/
-│   └── mysql.md              # Best practices MySQL
+│   └── mysql.md              # MySQL best practices
 └── security/
     └── owasp.md              # OWASP Top 10 & best practices
 ```
 
-## 🔄 Mécanisme de chargement
+## 🔄 Loading mechanism
 
-### 1. Le rôle déclare ses catégories requises
+### 1. The role declares its required categories
 
-Chaque rôle technique possède une section `## 🔌 Capacités` qui liste les catégories à charger :
+Each technical role has a `## 🔌 Capabilities` section listing the categories to load:
 
 ```markdown
-## 🔌 Capacités
-- `languages/` → charger le langage backend du projet
-- `frameworks/` → charger le framework backend du projet
-- `databases/` → charger le SGBD du projet
-- `security/` → toujours charger `security/owasp.md`
+## 🔌 Capabilities
+- `languages/` → load the project's backend language
+- `frameworks/` → load the project's backend framework
+- `databases/` → load the project's DBMS
+- `security/` → always load `security/owasp.md`
 ```
 
-### 2. Le Prompt Manager résout les fichiers
+### 2. The Prompt Manager resolves the files
 
-À l'activation d'un rôle, le PM lit sa section `🔌 Capacités`, croise avec la stack déclarée dans `project-context.md`, et charge les fichiers correspondants avant de produire la réponse.
+When a role is activated, the PM reads its `🔌 Capabilities` section, cross-references with the stack declared in `project-context.md`, and loads the corresponding files before producing the response.
 
-**Exemple** — projet PHP/Symfony/MySQL, rôle `lead-backend` :
+**Example** — PHP/Symfony/MySQL project, `lead-backend` role:
 ```
-Rôle déclare : languages/, frameworks/, databases/, security/
-project-context.md déclare : PHP 8.3, Symfony 7.2, MySQL 8
+Role declares : languages/, frameworks/, databases/, security/
+project-context.md declares : PHP 8.3, Symfony 7.2, MySQL 8
 
-PM charge :
+PM loads:
   capabilities/languages/php.md
   capabilities/frameworks/symfony.md
   capabilities/databases/mysql.md
   capabilities/security/owasp.md
 ```
 
-### Composition d'un agent complet
+### Composing a complete agent
 
 ```
-lead-backend.md (QUOI) + php.md + symfony.md (CE QUE JE SAIS FAIRE) + Hactar.md (QUI) + project-context.md (OÙ)
+lead-backend.md (WHAT) + php.md + symfony.md (WHAT I KNOW HOW TO DO) + Hactar.md (WHO) + project-context.md (WHERE)
 ```
 
-## ➕ Ajouter une capacité
+## ➕ Adding a capability
 
-Créez votre fichier dans la catégorie appropriée et référencez-le dans `project-context.md`. Le PM le chargera automatiquement si le rôle actif déclare la catégorie correspondante.
+Create your file in the appropriate category and reference it in `project-context.md`. The PM will load it automatically if the active role declares the corresponding category.
 
-## ✍️ Créer une nouvelle fiche stack
+## ✍️ Creating a new stack card
 
-Chaque fiche stack suit cette structure :
+Each stack card follows this structure:
 
-1. **En-tête** avec version/date et liens officiels
-2. **Principes fondamentaux** (les règles non négociables)
-3. **Patterns recommandés** (avec exemples de code)
-4. **Anti-patterns** (ce qu'il ne faut JAMAIS faire, avec exemples)
-5. **Checklist** rapide
+1. **Header** with version/date and official links
+2. **Fundamental principles** (the non-negotiable rules)
+3. **Recommended patterns** (with code examples)
+4. **Anti-patterns** (what you should NEVER do, with examples)
+5. **Quick checklist**
 
-> *"La documentation, c'est le thé du développeur : personne n'en veut jusqu'à ce qu'il en ait désespérément besoin."* — Arthur Dent
+> *"Documentation is the developer's tea: nobody wants it until they desperately need it."* — Arthur Dent

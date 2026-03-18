@@ -1,108 +1,108 @@
-# Workflow : Développement d'une nouvelle feature
+# Workflow: Developing a new feature
 
-<!-- WORKFLOW GÉNÉRIQUE — cortex
-     Peut être surchargé par {projet}/agents/workflows/feature-development.md
+<!-- GENERIC WORKFLOW — cortex
+     Can be overridden by {project}/agents/workflows/feature-development.md
 -->
 
-## 🎯 Déclencheurs
+## 🎯 Triggers
 
-Ce workflow s'active lorsque le prompt contient des formulations du type :
-- "nouvelle feature", "nouvelle fonctionnalité", "nouvelle page", "nouveau module"
-- "développer", "implémenter", "créer" + composant applicatif
-- "besoin fonctionnel", "user story", "ticket de dev"
+This workflow activates when the prompt contains formulations such as:
+- "new feature", "new functionality", "new page", "new module"
+- "develop", "implement", "create" + application component
+- "functional need", "user story", "dev ticket"
 
-## 👥 Agents impliqués
+## 👥 Agents involved
 
-| Étape | Rôle | Responsabilité |
+| Step | Role | Responsibility |
 |---|---|---|
-| 1 | `roles/engineering/architect.md` | Design & découpage technique |
-| 2 | `roles/engineering/lead-backend.md` et/ou `roles/engineering/lead-frontend.md` | Implémentation |
-| 3 | `roles/engineering/qa-automation.md` | Stratégie de test |
-| 4 | `roles/security-compliance/security-engineer.md` | Revue sécurité |
+| 1 | `roles/engineering/architect.md` | Technical design & breakdown |
+| 2 | `roles/engineering/lead-backend.md` and/or `roles/engineering/lead-frontend.md` | Implementation |
+| 3 | `roles/engineering/qa-automation.md` | Test strategy |
+| 4 | `roles/security-compliance/security-engineer.md` | Security review |
 | 5 | `roles/communication/tech-writer.md` | Documentation |
 
-## 📋 Étapes
+## 📋 Steps
 
-### Étape 1 — Cadrage & Design
-**Agent :** `architect`
-**Objectif :** Comprendre le besoin, proposer une solution technique cohérente avec l'existant.
+### Step 1 — Scoping & Design
+**Agent:** `architect`
+**Objective:** Understand the need, propose a technical solution consistent with the existing system.
 
-**Checklist :**
-- [ ] Comprendre le besoin fonctionnel (quoi, pour qui, pourquoi)
-- [ ] Identifier les impacts sur l'architecture existante
-- [ ] Proposer le découpage en composants/modules
-- [ ] Identifier les dépendances externes (API, services tiers, BDD)
-- [ ] Définir les contrats d'interface (API, events, DTOs)
-- [ ] Estimer grossièrement la complexité
-- [ ] Valider l'approche avec le Product Owner si nécessaire
+**Checklist:**
+- [ ] Understand the functional need (what, for whom, why)
+- [ ] Identify the impact on the existing architecture
+- [ ] Propose the breakdown into components/modules
+- [ ] Identify external dependencies (APIs, third-party services, DB)
+- [ ] Define interface contracts (API, events, DTOs)
+- [ ] Roughly estimate complexity
+- [ ] Validate the approach with the Product Owner if necessary
 
-**Livrable :** Proposition technique validée avant toute implémentation.
-
----
-
-### Étape 2 — Implémentation
-**Agent :** `lead-backend` et/ou `lead-frontend` selon le périmètre
-**Objectif :** Produire le code selon les standards de la stack projet.
-
-**Checklist :**
-- [ ] Respecter les conventions définies dans `capabilities/` et `project-context.md`
-- [ ] Implémenter la logique métier
-- [ ] Gérer les cas d'erreur et les edge cases
-- [ ] Écrire les tests unitaires en parallèle
-- [ ] Respecter les principes SOLID / clean code
-- [ ] Commiter avec des messages clairs et atomiques
-- [ ] Ouvrir une PR avec une description complète
+**Deliverable:** Validated technical proposal before any implementation.
 
 ---
 
-### Étape 3 — Tests & QA
-**Agent :** `qa-automation`
-**Objectif :** Définir et valider la stratégie de test.
+### Step 2 — Implementation
+**Agent:** `lead-backend` and/or `lead-frontend` depending on scope
+**Objective:** Produce code according to the project stack standards.
 
-**Checklist :**
-- [ ] Définir les cas de test (nominal, limites, erreurs)
-- [ ] Vérifier la couverture des tests unitaires
-- [ ] Prévoir les tests d'intégration nécessaires
-- [ ] Tester les régressions sur les modules impactés
-- [ ] Valider le comportement en conditions dégradées
-
----
-
-### Étape 4 — Revue sécurité
-**Agent :** `security-engineer`
-**Objectif :** S'assurer qu'aucune surface d'attaque n'est introduite.
-
-**Checklist :**
-- [ ] Vérifier la validation et la sanitisation des entrées
-- [ ] Contrôler les autorisations (authentication / authorization)
-- [ ] Vérifier l'absence de secrets en clair (code, logs, réponses API)
-- [ ] Identifier les risques OWASP pertinents pour la feature
-- [ ] Vérifier les dépendances ajoutées (vulnérabilités connues)
+**Checklist:**
+- [ ] Follow the conventions defined in `capabilities/` and `project-context.md`
+- [ ] Implement business logic
+- [ ] Handle error cases and edge cases
+- [ ] Write unit tests in parallel
+- [ ] Follow SOLID / clean code principles
+- [ ] Commit with clear, atomic messages
+- [ ] Open a PR with a complete description
 
 ---
 
-### Étape 5 — Documentation
-**Agent :** `tech-writer`
-**Objectif :** Garantir que la feature est documentée et maintenable.
+### Step 3 — Tests & QA
+**Agent:** `qa-automation`
+**Objective:** Define and validate the test strategy.
 
-**Checklist :**
-- [ ] Documenter les endpoints ou interfaces exposés
-- [ ] Mettre à jour le README ou la doc existante si nécessaire
-- [ ] Documenter les décisions techniques (ADR si applicable)
-- [ ] Vérifier que les commentaires de code sont suffisants
-- [ ] Mettre à jour le changelog si le projet en a un
+**Checklist:**
+- [ ] Define test cases (nominal, boundaries, errors)
+- [ ] Verify unit test coverage
+- [ ] Plan the necessary integration tests
+- [ ] Test regressions on affected modules
+- [ ] Validate behaviour under degraded conditions
 
 ---
 
-## ✅ Définition de "terminé"
+### Step 4 — Security review
+**Agent:** `security-engineer`
+**Objective:** Ensure no new attack surface is introduced.
 
-- [ ] Code mergé sur la branche principale
-- [ ] Tests passants en CI
-- [ ] Revue sécurité signée
-- [ ] Documentation à jour
-- [ ] Product Owner a validé fonctionnellement
+**Checklist:**
+- [ ] Verify input validation and sanitisation
+- [ ] Check authorisations (authentication / authorisation)
+- [ ] Verify absence of plaintext secrets (code, logs, API responses)
+- [ ] Identify relevant OWASP risks for the feature
+- [ ] Check added dependencies (known vulnerabilities)
 
-## 🔗 Workflows liés
+---
 
-- `code-review.md` — peut être déclenché à l'étape 2 (PR)
-- `tech-watch.md` — si une technologie inconnue est introduite
+### Step 5 — Documentation
+**Agent:** `tech-writer`
+**Objective:** Ensure the feature is documented and maintainable.
+
+**Checklist:**
+- [ ] Document exposed endpoints or interfaces
+- [ ] Update the README or existing docs if necessary
+- [ ] Document technical decisions (ADR if applicable)
+- [ ] Verify that code comments are sufficient
+- [ ] Update the changelog if the project has one
+
+---
+
+## ✅ Definition of done
+
+- [ ] Code merged to the main branch
+- [ ] Tests passing in CI
+- [ ] Security review signed off
+- [ ] Documentation up to date
+- [ ] Product Owner has validated functionally
+
+## 🔗 Related workflows
+
+- `code-review.md` — can be triggered at step 2 (PR)
+- `tech-watch.md` — if an unknown technology is introduced

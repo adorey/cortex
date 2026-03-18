@@ -1,19 +1,19 @@
 # PHP — Best Practices
 
 <!-- CAPABILITY REFERENCE
-Fiche de best practices pour le langage PHP.
-À combiner avec un rôle (ex: roles/engineering/lead-backend.md) et un framework (ex: capabilities/frameworks/symfony.md).
-Ne contient AUCUNE référence à un framework spécifique — uniquement le langage.
+Best practices card for the PHP language.
+To combine with a role (e.g. roles/engineering/lead-backend.md) and a framework (e.g. capabilities/frameworks/symfony.md).
+Contains NO framework-specific references — language only.
 -->
 
-> **Version de référence :** PHP 8.2+ | **Dernière mise à jour :** 2026-02
-> **Docs officielles :** [php.net](https://www.php.net/docs.php) | **Standards :** [PHP-FIG](https://www.php-fig.org/)
+> **Reference version:** PHP 8.2+ | **Last updated:** 2026-02
+> **Official docs:** [php.net](https://www.php.net/docs.php) | **Standards:** [PHP-FIG](https://www.php-fig.org/)
 
 ---
 
-## 🏛️ Principes fondamentaux
+## 🏛️ Fundamental principles
 
-### 1. Typage strict — toujours
+### 1. Strict typing — always
 
 ```php
 <?php
@@ -21,39 +21,39 @@ Ne contient AUCUNE référence à un framework spécifique — uniquement le lan
 declare(strict_types=1);
 ```
 
-Chaque fichier PHP commence par `declare(strict_types=1)`. Pas d'exception. Pas de "juste pour ce fichier". **Toujours.**
+Every PHP file starts with `declare(strict_types=1)`. No exceptions. Not "just for this file". **Always.**
 
-- Typer tous les paramètres, retours et propriétés
-- Utiliser les union types (`string|int`) plutôt que `mixed`
-- Utiliser `mixed` uniquement quand c'est réellement nécessaire
-- Préférer les enums PHP 8.1+ aux constantes pour les valeurs finies
+- Type all parameters, return values and properties
+- Use union types (`string|int`) rather than `mixed`
+- Use `mixed` only when genuinely necessary
+- Prefer PHP 8.1+ enums over constants for finite values
 
 ```php
-// ✅ Bien
+// ✅ Good
 function calculateTotal(float $price, int $quantity): float
 {
     return $price * $quantity;
 }
 
-// ❌ Mal
+// ❌ Bad
 function calculateTotal($price, $quantity)
 {
     return $price * $quantity;
 }
 ```
 
-### 2. Standards PSR
+### 2. PSR standards
 
-| PSR | Sujet | Statut |
+| PSR | Subject | Status |
 |---|---|---|
-| PSR-1 | Basic Coding Standard | Obligatoire |
-| PSR-4 | Autoloading | Obligatoire |
-| PSR-12 | Extended Coding Standard (ou PER-CS 2.0) | Obligatoire |
-| PSR-3 | Logger Interface | Recommandé |
-| PSR-7 | HTTP Message Interface | Selon besoin |
-| PSR-11 | Container Interface | Recommandé |
+| PSR-1 | Basic Coding Standard | Mandatory |
+| PSR-4 | Autoloading | Mandatory |
+| PSR-12 | Extended Coding Standard (or PER-CS 2.0) | Mandatory |
+| PSR-3 | Logger Interface | Recommended |
+| PSR-7 | HTTP Message Interface | As needed |
+| PSR-11 | Container Interface | Recommended |
 
-### 3. Readonly par défaut
+### 3. Readonly by default
 
 ```php
 // ✅ PHP 8.2+ — Readonly classes
@@ -75,12 +75,12 @@ final class User
 }
 ```
 
-**Règle :** Si une propriété n'a pas besoin d'être modifiée après construction, elle est `readonly`.
+**Rule:** If a property does not need to be modified after construction, it is `readonly`.
 
-### 4. Enums plutôt que constantes
+### 4. Enums rather than constants
 
 ```php
-// ✅ Bien — Enum (PHP 8.1+)
+// ✅ Good — Enum (PHP 8.1+)
 enum Status: string
 {
     case Active = 'active';
@@ -88,7 +88,7 @@ enum Status: string
     case Suspended = 'suspended';
 }
 
-// ❌ Mal — Constantes en vrac
+// ❌ Bad — Scattered constants
 class Status
 {
     const ACTIVE = 'active';
@@ -97,34 +97,34 @@ class Status
 }
 ```
 
-### 5. Named arguments pour la lisibilité
+### 5. Named arguments for readability
 
 ```php
-// ✅ Lisible
+// ✅ Readable
 $response = new JsonResponse(
     data: $result,
     status: Response::HTTP_CREATED,
     headers: ['X-Custom' => 'value'],
 );
 
-// ❌ Obscur
+// ❌ Obscure
 $response = new JsonResponse($result, 201, ['X-Custom' => 'value']);
 ```
 
 ---
 
-## 📐 Patterns recommandés
+## 📐 Recommended patterns
 
 ### Architecture
 
-- **Injection de dépendances** : toujours injecter via le constructeur, jamais `new` dans le code métier
-- **Single Responsibility** : une classe = une responsabilité = une raison de changer
-- **Value Objects** : encapsuler les concepts métier (`Money`, `Email`, `DateRange`)
-- **Final par défaut** : déclarer les classes `final` sauf besoin explicite d'héritage
-- **Composition over inheritance** : préférer l'injection à l'héritage
+- **Dependency injection**: always inject via the constructor, never `new` in business code
+- **Single Responsibility**: one class = one responsibility = one reason to change
+- **Value Objects**: encapsulate business concepts (`Money`, `Email`, `DateRange`)
+- **Final by default**: declare classes `final` unless explicit inheritance is needed
+- **Composition over inheritance**: prefer injection to inheritance
 
 ```php
-// ✅ Injection de dépendances
+// ✅ Dependency injection
 final class OrderService
 {
     public function __construct(
@@ -134,21 +134,21 @@ final class OrderService
     ) {}
 }
 
-// ❌ Instanciation manuelle
+// ❌ Manual instantiation
 class OrderService
 {
     public function process(): void
     {
-        $repo = new OrderRepository();  // couplage fort
-        $gateway = new StripeGateway();  // impossible à tester
+        $repo = new OrderRepository();  // tight coupling
+        $gateway = new StripeGateway();  // impossible to test
     }
 }
 ```
 
-### Gestion d'erreurs
+### Error handling
 
 ```php
-// ✅ Exceptions métier typées
+// ✅ Typed domain exceptions
 final class InsufficientFundsException extends \DomainException
 {
     public static function forAmount(Money $requested, Money $available): self
@@ -161,14 +161,14 @@ final class InsufficientFundsException extends \DomainException
     }
 }
 
-// ❌ Exceptions génériques
+// ❌ Generic exceptions
 throw new \Exception('Not enough money');
 ```
 
-### Collections typées
+### Typed collections
 
 ```php
-// ✅ Collection typée (PHP 8.2+)
+// ✅ Typed collection (PHP 8.2+)
 /** @template T */
 final readonly class Collection
 {
@@ -193,9 +193,9 @@ $country = $user?->getAddress()?->getCountry()?->getCode();
 
 // ✅ Match expression (PHP 8.0+)
 $label = match($status) {
-    Status::Active => 'Actif',
-    Status::Inactive => 'Inactif',
-    Status::Suspended => 'Suspendu',
+    Status::Active => 'Active',
+    Status::Inactive => 'Inactive',
+    Status::Suspended => 'Suspended',
 };
 ```
 
@@ -203,25 +203,25 @@ $label = match($status) {
 
 ## 🚫 Anti-patterns
 
-### Ne JAMAIS faire
+### NEVER do this
 
 ```php
-// ❌ Variables dynamiques
+// ❌ Variable variables
 $$varName = 'value';
 
 // ❌ @ error suppression
 $value = @file_get_contents($path);
 
 // ❌ eval()
-eval($userInput);  // faille de sécurité critique
+eval($userInput);  // critical security flaw
 
 // ❌ extract()
-extract($_POST);   // injection de variables
+extract($_POST);   // variable injection
 
-// ❌ Concaténation SQL
+// ❌ SQL concatenation
 $query = "SELECT * FROM users WHERE id = " . $id;
 
-// ❌ echo/die pour le debug
+// ❌ echo/die for debugging
 echo "DEBUG: " . $variable;
 die('something went wrong');
 
@@ -230,47 +230,47 @@ class UserService
 {
     public static function find(int $id): User { /* ... */ }
 }
-// Impossible à tester, impossible à mocker
+// Impossible to test, impossible to mock
 ```
 
-### Préférer
+### Prefer
 
-| ❌ Ne pas | ✅ Préférer |
+| ❌ Avoid | ✅ Prefer |
 |---|---|
-| `array` pour tout | Value Objects, DTOs, Collections typées |
-| `static` methods | Injection de dépendances |
-| `isset()` partout | Null coalescing `??`, nullsafe `?->` |
-| `switch` long | `match` expression |
-| Héritage profond | Composition + interfaces |
-| `new` dans le code métier | Constructor injection |
-| `@suppress` | Gestion d'exceptions propre |
+| `array` for everything | Value Objects, DTOs, typed collections |
+| `static` methods | Dependency injection |
+| `isset()` everywhere | Null coalescing `??`, nullsafe `?->` |
+| long `switch` | `match` expression |
+| Deep inheritance | Composition + interfaces |
+| `new` in business code | Constructor injection |
+| `@suppress` | Proper exception handling |
 
 ---
 
-## 🔧 Outillage recommandé
+## 🔧 Recommended tooling
 
-| Outil | Rôle |
+| Tool | Role |
 |---|---|
-| PHPStan / Psalm | Analyse statique (level max) |
-| PHP CS Fixer / PHP_CodeSniffer | Formatage PSR-12 / PER |
-| PHPUnit | Tests unitaires et intégration |
-| Rector | Refactoring automatisé, montée de version |
-| Composer | Gestion des dépendances |
-| Xdebug / pcov | Coverage et debugging |
+| PHPStan / Psalm | Static analysis (max level) |
+| PHP CS Fixer / PHP_CodeSniffer | PSR-12 / PER formatting |
+| PHPUnit | Unit and integration tests |
+| Rector | Automated refactoring, version upgrades |
+| Composer | Dependency management |
+| Xdebug / pcov | Coverage and debugging |
 
 ---
 
-## ✅ Checklist rapide
+## ✅ Quick checklist
 
 ```
-- [ ] declare(strict_types=1) en haut de chaque fichier
-- [ ] Tous les paramètres/retours/propriétés typés
-- [ ] Classes final par défaut
-- [ ] Readonly properties/classes quand possible
-- [ ] Enums pour les valeurs finies
-- [ ] Injection de dépendances (pas de new dans le métier)
-- [ ] Exceptions métier typées (pas de \Exception générique)
-- [ ] Pas de static sauf constantes/factories
-- [ ] PHPStan level 8+ (ou max)
-- [ ] PSR-12 / PER-CS respecté
+- [ ] declare(strict_types=1) at the top of every file
+- [ ] All parameters/return values/properties typed
+- [ ] Classes final by default
+- [ ] Readonly properties/classes where possible
+- [ ] Enums for finite values
+- [ ] Dependency injection (no new in business code)
+- [ ] Typed domain exceptions (no generic \Exception)
+- [ ] No static except constants/factories
+- [ ] PHPStan level 8+ (or max)
+- [ ] PSR-12 / PER-CS respected
 ```
