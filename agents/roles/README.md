@@ -1,57 +1,96 @@
-# Rôles — Agents Cortex
+# Roles — Cortex Agents
 
-> Chaque fichier de ce dossier définit un **rôle métier générique**, indépendant de toute stack technique ou personnalité.
+> Each file in this folder defines a **generic business role**, independent of any tech stack or personality.
 
-## Principe
+## Principle
 
-Un rôle contient :
-- Les **responsabilités** du poste
-- Les **principes universels** à respecter
-- Les **checklists** et **frameworks** réutilisables
-- Les **interactions** avec les autres rôles
+A role contains:
+- The **responsibilities** of the position
+- The **universal principles** to follow
+- Reusable **checklists** and **frameworks**
+- **Interactions** with other roles
+- The **`🔌 Capabilities`** section declaring categories to load from `capabilities/`
 
-Un rôle ne contient **PAS** :
-- De stack technique spécifique (→ voir `project-context.md`)
-- De personnalité ou de ton (→ voir `personalities/`)
-- De données métier d'un projet (→ voir `project-context.md`)
+A role does **NOT** contain:
+- A specific tech stack (→ see `capabilities/`)
+- Personality or tone (→ see `personalities/`)
+- Project-specific data (→ see `project-context.md`)
 
-## Rôles disponibles
+## Available roles
 
-| Fichier | Rôle | Domaine |
+### Entry Point
+
+| File | Role | Description |
+|---------|------|-------------|
+| `prompt-manager.md` | Prompt Manager | Analysis, dispatch, workflow lookup, capability loading |
+
+### `engineering/` — Design & technical delivery
+
+| File | Role | Domain |
 |---------|------|---------|
-| `prompt-manager.md` | Prompt Manager | Communication IA, optimisation des prompts |
-| `architect.md` | Lead Architect | Architecture système, design patterns |
-| `lead-backend.md` | Lead Backend | Développement backend, API, services |
-| `lead-frontend.md` | Lead UI/UX & Frontend | Interface utilisateur, composants, UX |
-| `security-engineer.md` | Security Engineer (RSSI) | Sécurité applicative, infra, données |
-| `qa-automation.md` | QA Automation Engineer | Tests unitaires, intégration, E2E |
+| `architect.md` | Lead Architect | System architecture, design patterns |
+| `lead-backend.md` | Lead Backend | Backend development, APIs, services |
+| `lead-frontend.md` | Lead UI/UX & Frontend | User interface, components, UX |
+| `dba.md` | Database Administrator | DB, SQL optimization, migrations |
 | `platform-engineer.md` | Platform & DevOps Lead | Infrastructure, CI/CD, IDP |
-| `product-owner.md` | Product Owner | Vision produit, backlog, priorisation |
+| `performance-engineer.md` | Performance Engineer | Optimization, scalability, monitoring |
+| `consultant-platform.md` | Consultant Platform | Audit, strategic advice, governance |
+| `qa-automation.md` | QA Automation Engineer | Unit, integration, E2E tests |
+
+### `product/` — Product vision & business
+
+| File | Role | Domain |
+|---------|------|---------|
+| `product-owner.md` | Product Owner | Product vision, backlog, prioritization |
+| `business-analyst.md` | Business Analyst | Functional specifications, business needs |
+
+### `security-compliance/` — Security & compliance
+
+| File | Role | Domain |
+|---------|------|---------|
+| `security-engineer.md` | Security Engineer (CISO) | Application, infra, data security |
+| `compliance-officer.md` | Compliance Officer | GDPR, compliance, ethics |
+
+### `data/` — Data & analytics
+
+| File | Role | Domain |
+|---------|------|---------|
+| `data-analyst.md` | Data Analyst | Data analysis, dashboards, KPIs |
+
+### `communication/` — Content & documentation
+
+| File | Role | Domain |
+|---------|------|---------|
 | `tech-writer.md` | Technical Writer | Documentation, onboarding |
-| `data-analyst.md` | Data Analyst | Analyse de données, dashboards, KPIs |
-| `compliance-officer.md` | Compliance Officer | RGPD, conformité, éthique |
-| `dba.md` | Database Administrator | BDD, optimisation SQL, migrations |
-| `business-analyst.md` | Business Analyst | Spécifications fonctionnelles, besoins métier |
-| `performance-engineer.md` | Performance Engineer | Optimisation, scalabilité, monitoring |
-| `consultant-platform.md` | Consultant Platform | Audit, conseil stratégique, gouvernance |
 
-## Comment ça fonctionne
+## How it works
 
-Au runtime, un agent est composé de 3 couches :
+At runtime, an agent is composed of 5 layers:
 
 ```
 ┌─────────────────────────────────┐
-│   project-context.md            │  ← Stack, règles métier, conventions
+│   project-context.md            │  ← Stack, business rules, conventions
 ├─────────────────────────────────┤
-│   personalities/{theme}/        │  ← Ton, citations, traits (optionnel)
+│   capabilities/{category}/      │  ← Loaded technical skills
 ├─────────────────────────────────┤
-│   roles/{role}.md               │  ← Compétences, responsabilités
+│   personalities/{theme}/        │  ← Tone, quotes, traits (optional)
+├─────────────────────────────────┤
+│   roles/{category}/{role}.md    │  ← Skills, responsibilities
+├─────────────────────────────────┤
+│   workflows/{context}.md        │  ← Orchestration template (optional)
 └─────────────────────────────────┘
 ```
 
-## Ajouter un rôle
+## Adding a role
 
-1. Créer `roles/mon-nouveau-role.md`
-2. Suivre la structure : Profil → Mission → Responsabilités → Principes → Checklists → Interactions
-3. Rester **agnostique** techniquement (pas de framework, pas de langage spécifique)
-4. Si un thème de personnalité est actif, ajouter le mapping dans `personalities/{theme}/characters.md`
+1. Identify the appropriate **category** (or create a new one)
+2. Create `roles/{category}/my-new-role.md`
+3. Follow the structure: Profile → Mission → Responsibilities → Principles → `🔌 Capabilities` → Checklists → Interactions
+4. Stay **technically agnostic** (no specific framework or language)
+5. If a personality theme is active, add the mapping in `personalities/{theme}/characters.md`
+
+## Planned future categories
+
+- `management/` — CTO, Team Lead, HR Manager, Engineering Manager...
+- `sales-marketing/` — Sales Engineer, Content Strategist, Growth...
+- `legal-finance/` — Legal Counsel, CFO, Financial Controller...

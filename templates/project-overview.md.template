@@ -1,0 +1,74 @@
+<!-- @alias: my-project -->
+<!--
+  @alias: short identifier used to target this project/service in a prompt.
+  Examples: @backend, @frontend, @auth-service, @admin...
+  In workspace mode, mention this alias in your prompt to target this context.
+  If absent, the Prompt Manager infers the service from the files open in the IDE.
+-->
+
+# Overview: [Project / service name]
+
+<!--
+  This file describes WHAT the project does: vision, actors, business flows, constraints.
+  It is read FIRST by the Prompt Manager to understand the domain before acting.
+  Does NOT contain tech stack → see project-context.md
+-->
+
+## 📋 General information
+
+**Name:** <!-- e.g. API Gateway, Authentication Service, Admin Back-office -->
+**Description:** <!-- One sentence: what this project/service does -->
+**Business domain:** <!-- e.g. E-commerce, SaaS B2B, Fintech, Healthcare, Logistics -->
+**Team:** <!-- Size and composition, e.g. 3 backend devs, 1 PO -->
+**Status:** <!-- e.g. Production, Beta, In development -->
+
+## 🎯 Main actors
+
+<!-- Who uses this project? What roles? What permissions? -->
+
+| Actor | Description | Access level |
+|-------|-------------|--------------|
+| <!-- e.g. End user --> | <!-- Description --> | <!-- Read / Write / Admin --> |
+| <!-- e.g. Administrator --> | <!-- Description --> | <!-- Admin --> |
+
+## 🔄 Key business processes
+
+<!-- The main functional flows. What the system must do, not how. -->
+
+### [Process 1 — e.g. Registration & Authentication]
+<!-- Description of the flow in a few steps -->
+
+### [Process 2 — e.g. Order & Payment]
+<!-- Description of the flow -->
+
+## 📏 Important business rules
+
+<!-- Rules that impact development decisions -->
+
+- <!-- e.g. A user cannot order without a validated delivery address -->
+- <!-- e.g. Displayed prices are VAT-inclusive for individuals, VAT-exclusive for businesses -->
+
+## 🔗 Dependencies & integrations
+
+<!-- Which other systems/services does this project interact with? -->
+
+| System | Type | Description |
+|--------|------|-------------|
+| <!-- e.g. Stripe --> | <!-- External API --> | <!-- Payments --> |
+| <!-- e.g. service-auth --> | <!-- Internal service --> | <!-- Authentication --> |
+
+## 🔒 Non-technical constraints
+
+### Compliance & regulation
+<!-- e.g. GDPR, PCI-DSS, HDS, ISO 27001... -->
+
+### Business constraints
+<!-- e.g. 24/7 availability, 99.9% customer SLA, data hosted in EU -->
+
+## 📚 Resources & documentation
+
+<!-- Links to existing docs, Confluence, Notion, wiki, etc. -->
+
+- **Product documentation:** <!-- link -->
+- **Functional specifications:** <!-- link -->
+- **Mockups / Figma:** <!-- link -->

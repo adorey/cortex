@@ -4,69 +4,82 @@
   <img src="assets/logo.png" alt="Cortex — AI Agent Framework" width="200" height="300" />
 </p>
 
-Cortex est un framework d'agents IA spécialisés, prêts à être intégrés dans n'importe quel projet.
+Cortex is a framework of specialized AI agents, ready to integrate into any project.
 
 ## 🚀 Concept
 
-Chaque agent est composé de **4 couches indépendantes** :
+Each agent is composed of **5 independent layers**:
 
 ```
 ┌─────────────────────────────────┐
-│   project-context.md            │  ← Vos règles métier, conventions locales
+│   project-overview.md           │  ← Vision, stakeholders, business constraints
+│   project-context.md            │  ← Stack, conventions, tools
 ├─────────────────────────────────┤
-│   stacks/{techno}.md            │  ← Best practices techno (PHP, Docker…)
+│   capabilities/{techno}.md      │  ← Loadable technical skills (PHP, Docker…)
 ├─────────────────────────────────┤
-│   personalities/{theme}/        │  ← Personnalité optionnelle (ex: H2G2)
+│   personalities/{theme}/        │  ← Optional personality (e.g. H2G2)
 ├─────────────────────────────────┤
-│   roles/{role}.md               │  ← Compétences métier génériques
+│   roles/{role}.md               │  ← Generic business skills
+├─────────────────────────────────┤
+│   workflows/{context}.md        │  ← Multi-agent orchestration templates
 └─────────────────────────────────┘
 ```
 
-> *"Expliquons ça comme si la Terre venait d'être détruite et qu'on devait repartir de zéro."* — Arthur Dent
+> *"Let's explain this as if Earth had just been destroyed and we had to start from scratch."* — Arthur Dent
 
-| Couche | Répond à | Exemple |
+| Layer | Answers | Example |
 |---|---|---|
-| `roles/` | **QUOI** faire | "Un lead backend structure, review, mentore" |
-| `stacks/` | **COMMENT** le faire | "En PHP : PSR-12, injection de dépendances..." |
-| `personalities/` | **QUI** tu es | "Hactar, méthodique, élégant" |
-| `project-context.md` | **OÙ** tu travailles | "Ce projet : Symfony 7.2, PHP 8.3, PostgreSQL 16" |
+| `roles/` | **WHAT** to do | "A lead backend structures, reviews, mentors" |
+| `capabilities/` | **WHAT I CAN DO** | "In PHP: PSR-12, dependency injection..." |
+| `personalities/` | **WHO** you are | "Hactar, methodical, elegant" |
+| `project-overview.md` | **WHY** you work | "Mission: B2B platform, stakeholders, business constraints" |
+| `project-context.md` | **WHERE / HOW** you work | "This project: Symfony 7.2, PHP 8.3, MySQL 8" |
+| `workflows/` | **IN WHAT ORDER and WITH WHOM** | "Feature dev: architect → backend → QA → security → doc" |
 
-Cette séparation permet de :
-- Changer de **personnalité** (H2G2, Star Wars, corporate…) sans toucher aux compétences
-- Réutiliser les **rôles** sur n'importe quelle stack technique
-- Partager les **best practices** d'une techno entre tous les projets qui l'utilisent
-- Personnaliser le **contexte projet** sans modifier les agents
+This separation allows:
+- Changing **personality** (H2G2, Star Wars, corporate…) without touching the skills
+- Reusing **roles** across any tech stack
+- Sharing **best practices** for a technology across all projects that use it
+- Customizing the **project context** without modifying the agents
+- Defining reusable **workflows** (generic in cortex) or project-specific (in the host project via `agents/workflows/`)
 
 ## 📁 Structure
 
 ```
 cortex/
-├── README.md                          # Ce fichier
-├── setup.sh                           # Script d'installation
+├── README.md                          # This file
+├── setup.sh                           # Installation script
 ├── templates/
-│   └── copilot-instructions.md        # Template de référence
+│   ├── copilot-instructions.md              # Bootstrap — single project mode
+│   ├── copilot-instructions-workspace.md    # Bootstrap — multi-project workspace mode
+│   ├── project-overview.md.template         # Template: project overview (vision & business)
+│   ├── project-context.md.template          # Template: technical context
+│   └── workflow.md.template                 # Template for creating a project workflow
 │
 ├── agents/
-│   ├── project-context.md.template    # Template project-context
+│   ├── roles/                         # Layer 1: Business roles (stack-agnostic)
+│   │   ├── prompt-manager.md         # Entry point (root, always active)
+│   │   ├── engineering/               # Design & technical delivery
+│   │   │   ├── architect.md
+│   │   │   ├── lead-backend.md
+│   │   │   ├── lead-frontend.md
+│   │   │   ├── dba.md
+│   │   │   ├── platform-engineer.md
+│   │   │   ├── performance-engineer.md
+│   │   │   ├── consultant-platform.md
+│   │   │   └── qa-automation.md
+│   │   ├── product/                   # Product vision & business
+│   │   │   ├── product-owner.md
+│   │   │   └── business-analyst.md
+│   │   ├── security-compliance/       # Security & compliance
+│   │   │   ├── security-engineer.md
+│   │   │   └── compliance-officer.md
+│   │   ├── data/                      # Data & analytics
+│   │   │   └── data-analyst.md
+│   │   └── communication/             # Content & documentation
+│   │       └── tech-writer.md
 │   │
-│   ├── roles/                         # Couche 1 : Compétences (agnostique)
-│   │   ├── prompt-manager.md
-│   │   ├── architect.md
-│   │   ├── lead-backend.md
-│   │   ├── lead-frontend.md
-│   │   ├── security-engineer.md
-│   │   ├── qa-automation.md
-│   │   ├── platform-engineer.md
-│   │   ├── product-owner.md
-│   │   ├── tech-writer.md
-│   │   ├── data-analyst.md
-│   │   ├── compliance-officer.md
-│   │   ├── dba.md
-│   │   ├── business-analyst.md
-│   │   ├── performance-engineer.md
-│   │   └── consultant-platform.md
-│   │
-│   ├── stacks/                        # Couche 2 : Best practices techniques
+│   ├── capabilities/                   # Layer 2: Loadable technical skills
 │   │   ├── languages/
 │   │   │   ├── php.md
 │   │   │   └── typescript.md
@@ -80,216 +93,86 @@ cortex/
 │   │   └── security/
 │   │       └── owasp.md
 │   │
-│   └── personalities/                 # Couche 3 : Thèmes de personnalité
-│       └── h2g2/                      # Thème H2G2 (Guide du voyageur galactique)
-│           ├── theme.md
-│           ├── characters.md
-│           └── {personnage}.md        # Fiches personnalité individuelles
+│   ├── personalities/                 # Layer 3: Personality themes
+│   │   └── h2g2/                      # H2G2 theme (The Hitchhiker's Guide)
+│   │       ├── theme.md
+│   │       ├── characters.md
+│   │       └── {character}.md        # Individual personality card
+│   │
+│   └── workflows/                     # Layer 4: Multi-agent orchestration templates
+│       ├── engineering/               # Development & technical
+│       │   └── feature-development.md
+│       ├── intelligence/              # Research & analysis
+│       │   └── tech-watch.md
+│       └── README.md
 │
 └── docs/
-    └── creating-a-theme.md            # Guide pour créer un thème
+    ├── getting-started.md             # Step-by-step installation guide
+    └── creating-a-theme.md            # Guide for creating a theme
 ```
 
 ## 🔧 Installation
 
-### Prérequis
-
-- Git
-- Un IDE avec support Copilot (VS Code, Cursor, etc.)
-
-### Étape 1 — Ajouter Cortex au projet
+### Option 1: Automatic script (recommended)
 
 ```bash
-# En submodule Git (recommandé — partagé entre projets)
-git submodule add <url-cortex> cortex
-git submodule update --init --recursive
-```
+# Add as a Git submodule
+git submodule add <cortex-url> cortex
 
-### Étape 2 — Lancer le setup
-
-**Chaque développeur** doit lancer le setup sur sa machine :
-
-```bash
-./cortex/setup.sh
-```
-
-C'est tout. Le script fait le reste automatiquement.
-
-> ⚠️ Les fichiers générés (`.github/copilot-instructions.md`, `.vscode/settings.json`) sont **personnels** au développeur — ils dépendent du thème choisi. Ils doivent être dans le `.gitignore` du projet.
-
-### Ce que `setup.sh` fait
-
-Le script effectue **4 actions** :
-
-| # | Action | Fichier généré | Description |
-|---|--------|----------------|-------------|
-| 1 | **Vérifie le thème** | — | Vérifie que le thème existe, résout le personnage `prompt-manager` depuis `characters.md` |
-| 2 | **Génère le bootstrap IA** | `.github/copilot-instructions.md` | Instructions système pour Copilot, avec nommage direct du personnage prompt-manager |
-| 3 | **Copie le contexte projet** | `project-context.md` | Template à remplir avec les infos de votre projet (stack, conventions, domaine) |
-| 4 | **Configure VS Code** | `.vscode/settings.json` | Injecte les fichiers personnalité via `codeGeneration.instructions` pour un chargement automatique |
-
-### Options de `setup.sh`
-
-```bash
-# Thème par défaut (H2G2)
+# Install — single project (H2G2 theme by default)
 ./cortex/setup.sh
 
-# Thème spécifique
-./cortex/setup.sh --theme star-wars
-
-# Sans personnalité (rôles techniques uniquement)
+# Without personality
 ./cortex/setup.sh --no-personality
 
-# Projet cible différent
-./cortex/setup.sh /chemin/vers/autre-projet
-
-# Aide
-./cortex/setup.sh --help
+# With a specific theme
+./cortex/setup.sh --theme star-wars
 ```
 
-### Étape 3 — Remplir le contexte projet
+### Workspace mode — multi-projects
 
-Éditez `project-context.md` à la racine du projet avec :
-- Le nom et la description du projet
-- La stack technique (framework, langage, BDD, infra)
-- Les conventions de code
-- Le domaine métier et les règles importantes
-
-> ⚠️ **Ce fichier est le "Guide du Voyageur Galactique" de votre projet.** C'est la source de vérité que tous les agents consultent. Plus il est complet, meilleures sont les réponses.
-
-### Résultat après setup
-
-```
-mon-projet/
-├── cortex/                            ← Submodule Git (committé)
-├── project-context.md                 ← Committé — rempli une fois pour le projet
-├── .github/
-│   └── copilot-instructions.md        ← Gitignored — généré par setup.sh
-├── .vscode/
-│   └── settings.json                  ← Gitignored — généré par setup.sh
-└── ... (votre code)
-```
-
-### Gitignore recommandé
-
-Ajoutez ces lignes au `.gitignore` du projet :
-
-```gitignore
-# Cortex — Fichiers générés par setup.sh (personnalisés par développeur)
-.github/copilot-instructions.md
-
-# IDE (inclut les settings Cortex)
-.vscode/
-```
-
-### Onboarding d'un nouveau développeur
+For a workspace containing multiple services/repos (microservices, monorepo, multi-repo VSCode):
 
 ```bash
-# 1. Cloner le projet
-git clone <url-projet>
-cd mon-projet
+# Place cortex in the parent folder (not necessarily a git repo)
+# workspace/
+# ├── cortex/
+# ├── service-a/
+# └── service-b/
 
-# 2. Initialiser le submodule Cortex
-git submodule update --init --recursive
-
-# 3. Lancer le setup (choisir son thème)
-./cortex/setup.sh                    # H2G2 par défaut
-./cortex/setup.sh --theme star-wars  # ou un autre thème
-
-# 4. Ouvrir le projet dans VS Code
-code .
-
-# → Cortex est prêt, la personnalité se charge dès la première conversation Copilot
+./cortex/setup.sh --workspace
+# The script interactively asks for the names of services to initialize
+# It creates project-overview.md and project-context.md in each service
+# with the correct @alias pre-filled
 ```
 
-## 🔄 Workflow au quotidien
-
-### Comment Cortex fonctionne avec Copilot
-
-La personnalité est chargée via **deux mécanismes complémentaires** :
-
+Each service declares its `@alias` in its `project-overview.md`. To target a service in a prompt:
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Mécanisme 1 : .github/copilot-instructions.md         │
-│  → Injecté dans le system prompt à chaque conversation  │
-│  → Ordonne à l'IA de lire les fichiers personnalité    │
-│  → Nomme directement le personnage prompt-manager       │
-├─────────────────────────────────────────────────────────┤
-│  Mécanisme 2 : .vscode/settings.json                   │
-│  → codeGeneration.instructions avec refs fichiers       │
-│  → VS Code injecte le CONTENU des fichiers directement  │
-│  → Fonctionne même si l'IA "oublie" de lire les fichiers│
-└─────────────────────────────────────────────────────────┘
+@backend Add a pagination endpoint on /users
+@frontend Create a sortable table component
 ```
+If no alias is mentioned, Cortex infers the service from the files open in the IDE.
 
-### Invoquer un agent
+### Option 2: Manual
 
-Mentionnez le personnage par son alias dans votre prompt :
+1. Copy `cortex/templates/copilot-instructions.md` into `.github/copilot-instructions.md`
+2. Copy `cortex/templates/project-overview.md.template` → `project-overview.md` and fill in the vision
+3. Copy `cortex/templates/project-context.md.template` → `project-context.md` and fill in the stack
+4. Invoke an agent via `@AgentName` in your IDE (Copilot, Cursor, etc.)
 
-```
-@Hactar : implémente ce service en PHP
-@Slartibartfast : review cette architecture
-@Marvin : audite la sécurité de ce code
-@Trillian : écris les tests pour cette feature
-@Vogon : optimise cette requête SQL
-```
+## 📚 Documentation
 
-> Voir `cortex/agents/personalities/h2g2/characters.md` pour la table complète des 15 agents.
+- [**Getting Started**](docs/getting-started.md) — step-by-step installation guide (single project & workspace)
+- [**Creating a theme**](docs/creating-a-theme.md) — customize the tone and style of agents
 
-### Dispatch automatique
+## 🎯 Philosophy
 
-Le Prompt Manager (Oolon Colluphid en thème H2G2) analyse votre demande et dispatche automatiquement vers l'expert le plus pertinent :
+- **Zero project dependency**: roles are stack-agnostic, the stack lives in `project-context.md`
+- **Plug & Play**: `setup.sh` and you're ready — single project mode or multi-project workspace
+- **Composable**: role + capabilities + personality + context + workflow = complete agent
+- **Two context files**: `project-overview.md` (vision & business) + `project-context.md` (stack & conventions) — separated to never mix the WHAT and the HOW
+- **Loadable capabilities**: `capabilities/` cards are reusable across projects, automatically loaded by the PM based on the active role and project stack
+- **Multi-project**: workspace mode with `@alias` per service — Cortex detects the active service from the prompt or open files
+- **Scalable**: add your own roles, capabilities, themes, workflows or services
 
-```
-Vous : "Cette requête SQL est lente en production"
-→ @Oolon analyse → dispatche vers @Deep-Thought (performance) + @Vogon (DBA)
-→ Réponse dans le style des personnages, avec la rigueur technique des rôles
-```
-
-## ⚠️ Points importants
-
-### Ouvrir le projet directement
-
-Cortex est conçu pour que vous ouvriez **le dossier du projet directement** dans VS Code (`code mon-projet/`). Les fichiers `.github/copilot-instructions.md` sont résolus relativement au dossier ouvert.
-
-```
-# ✅ Recommandé : ouvrir le projet directement
-code mon-projet/
-→ VS Code trouve .github/copilot-instructions.md ✅
-→ Les chemins cortex/agents/... se résolvent ✅
-
-# ⚠️ Workspace multi-root : chaque folder doit avoir son propre .github/
-```
-
-> **Pas besoin de fichier `.code-workspace`** — ouvrez simplement le dossier du projet.
-
-### Mise à jour de Cortex
-
-```bash
-# Mettre à jour le submodule
-cd cortex && git pull origin main && cd ..
-
-# Re-run setup si le template a changé
-./cortex/setup.sh
-```
-
-### La personnalité ne s'applique pas ?
-
-Checklist de diagnostic :
-
-1. ✅ `.github/copilot-instructions.md` existe **dans le projet** (pas dans un dossier parent)
-2. ✅ Les chemins dans ce fichier sont relatifs au projet (`cortex/agents/...`)
-3. ✅ `project-context.md` existe à la racine du projet et est rempli
-4. ✅ `.vscode/settings.json` contient `github.copilot.chat.codeGeneration.instructions`
-5. ✅ Le submodule `cortex/` est initialisé (`git submodule update --init`)
-6. ✅ Relancez une **nouvelle conversation** Copilot (les instructions se chargent au début)
-
-## 🎯 Philosophie
-
-- **Zéro dépendance projet** : les rôles sont agnostiques, la stack est dans `project-context.md`
-- **Plug & Play** : `setup.sh` et c'est prêt — triple couche de fiabilité automatique
-- **Composable** : rôle + stack + personnalité + contexte = agent complet
-- **Best practices partagées** : les fiches `stacks/` sont réutilisables d'un projet à l'autre
-- **Évolutif** : ajoutez vos propres rôles, stacks ou thèmes de personnalité
-
-> *"La documentation, c'est le thé du développeur : personne n'en veut jusqu'à ce qu'il en ait désespérément besoin."* — Arthur Dent
+> *"Documentation is like the developer's tea: nobody wants it until they desperately need it."* — Arthur Dent

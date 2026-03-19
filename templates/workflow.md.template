@@ -1,0 +1,60 @@
+# Workflow: [Workflow name]
+
+<!-- PROJECT-SPECIFIC WORKFLOW
+     Place this file in {project}/agents/workflows/
+     It will automatically override the cortex generic workflow of the same name, if it exists.
+-->
+
+## 🎯 Triggers
+
+This workflow activates when the prompt contains formulations of the type:
+<!-- List the keywords, phrases or contexts that trigger this workflow -->
+- "[trigger expression 1]"
+- "[trigger expression 2]"
+
+## 👥 Agents involved
+
+| Step | Role | Responsibility |
+|---|---|---|
+| 1 | `roles/[role].md` | [Responsibility] |
+| 2 | `roles/[role].md` | [Responsibility] |
+
+## 📋 Steps
+
+### Step 1 — [Step name]
+**Agent:** `[role]`
+**Objective:** [What this step must produce or verify.]
+
+**Checklist:**
+- [ ] [Point to check or action to perform]
+- [ ] [Point to check or action to perform]
+- [ ] [Point to check or action to perform]
+
+**Deliverable:** [What must exist at the end of this step before moving on.]
+
+---
+
+### Step 2 — [Step name]
+**Agent:** `[role]`
+**Objective:** [What this step must produce or verify.]
+
+**Checklist:**
+- [ ] [Point to check or action to perform]
+- [ ] [Point to check or action to perform]
+
+**Deliverable:** [Expected deliverable.]
+
+---
+
+<!-- Add as many steps as needed -->
+
+## ✅ Definition of "done"
+
+<!-- Objective and verifiable criteria to consider the workflow complete -->
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
+
+## 🔗 Related workflows
+
+<!-- Workflows that can precede, follow or chain with this one -->
+- `[workflow].md` — [Context of the chaining]

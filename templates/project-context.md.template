@@ -1,0 +1,67 @@
+<!-- @alias: my-project -->
+<!--
+  @alias: short identifier to target this project/service from a prompt.
+  Must match the alias declared in project-overview.md.
+  Mainly useful in multi-project workspace mode.
+-->
+
+# Technical context: [Project / service name]
+
+<!--
+  This file describes HOW the project is built: stack, conventions, tools.
+  Read by the Prompt Manager to load the appropriate technical capabilities.
+  Does NOT contain business vision → see project-overview.md
+-->
+
+## 🏗️ Tech stack
+
+### Backend
+<!-- e.g. Symfony 7.2 / PHP 8.3, NestJS / TypeScript, Django / Python 3.12 -->
+
+### Frontend
+<!-- e.g. React 18 / TypeScript, Vue 3 / Nuxt, Next.js 14 -->
+
+### Database
+<!-- e.g. MySQL 8.0, PostgreSQL 16, MongoDB 7, Redis 7 -->
+
+### Infrastructure
+<!-- e.g. Docker + Kubernetes (GKE), AWS ECS, OVH VPS -->
+
+### CI/CD
+<!-- e.g. GitHub Actions, GitLab CI, CircleCI -->
+
+## 📁 Project structure
+
+<!-- Organisation of main folders and modules -->
+```
+project/
+├── src/
+├── docs/
+├── tests/
+└── ...
+```
+
+## 📝 Code conventions
+
+<!-- Linters, formatters, naming conventions, applied standards -->
+
+- **Linter / Formatter:** <!-- e.g. ESLint + Prettier, PHP CS Fixer PSR-12 -->
+- **Naming conventions:** <!-- e.g. camelCase variables, PascalCase classes -->
+- **Standards:** <!-- e.g. PSR-12, Conventional Commits, Semantic Versioning -->
+- **Code review:** <!-- e.g. 1 approval required, feature branches only -->
+
+## 🛠️ Development tools
+
+<!-- IDE, extensions, project-specific tools -->
+
+- **Recommended IDE:** <!-- e.g. VS Code + Cortex extensions -->
+- **Local tools:** <!-- e.g. Docker Desktop, TablePlus, Postman -->
+- **Environment variables:** <!-- e.g. see .env.example at the root -->
+
+## ⚡ Technical constraints
+
+### Performance
+<!-- SLOs, target metrics, e.g. API response < 200ms p95 -->
+
+### Security
+<!-- Specific requirements, e.g. OWASP Top 10, no hardcoded secrets -->
