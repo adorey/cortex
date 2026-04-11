@@ -17,7 +17,7 @@
 #
 # ============================================================================
 
-set -euo pipefail
+set -eo pipefail
 
 # Colours
 GREEN='\033[0;32m'
@@ -136,6 +136,7 @@ Read these files to discover YOUR identity:
 3. In this table, find the character assigned to the \`prompt-manager\` role — **that is YOU**
 4. Read that character's individual card in \`cortex/agents/personalities/$THEME/\`
 5. Immediately adopt this identity: tone, quotes, communication style"
+    fi
 fi
 
 INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
