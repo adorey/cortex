@@ -151,14 +151,18 @@ Each service declares its `@alias` in its `project-overview.md`. To target a ser
 @backend Add a pagination endpoint on /users
 @frontend Create a sortable table component
 ```
-If no alias is mentioned, Cortex infers the service from the files open in the IDE.
+If no alias is mentioned, Cortex infers the service from the active file context.
 
 ### Option 2: Manual
 
-1. Copy `cortex/templates/copilot-instructions.md` into `.github/copilot-instructions.md`
+1. Copy the appropriate template for your AI tool into the right location:
+   - **GitHub Copilot**: `cortex/templates/copilot-instructions.md` → `.github/copilot-instructions.md`
+   - **Cursor**: `cortex/templates/copilot-instructions.md` → `.cursor/rules/cortex.mdc`
+   - **Claude Code**: `cortex/templates/copilot-instructions.md` → `CLAUDE.md`
+   - **Codex / other**: `cortex/templates/copilot-instructions.md` → `AGENTS.md`
 2. Copy `cortex/templates/project-overview.md.template` → `project-overview.md` and fill in the vision
 3. Copy `cortex/templates/project-context.md.template` → `project-context.md` and fill in the stack
-4. Invoke an agent via `@AgentName` in your IDE (Copilot, Cursor, etc.)
+4. Invoke an agent by mentioning the desired role or character name in your prompt
 
 ## 📚 Documentation
 

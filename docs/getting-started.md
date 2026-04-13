@@ -9,7 +9,7 @@ This step-by-step guide covers both installation modes: **single project** and *
 ## Prerequisites
 
 - A Git repository (or a workspace folder for multi-repo mode)
-- An IDE compatible with Copilot instructions: VS Code + GitHub Copilot, Cursor, etc.
+- An AI coding tool: GitHub Copilot, Cursor, Claude Code, OpenAI Codex, or any tool that supports a custom system instructions file
 - Git installed (for the submodule)
 
 ---
@@ -26,8 +26,15 @@ git submodule add <cortex-url> cortex
 ### Step 2 — Run the setup script
 
 ```bash
-# With the H2G2 theme (default)
+# Default: H2G2 theme, GitHub Copilot
 ./cortex/setup.sh
+
+# Target a specific AI tool
+./cortex/setup.sh --tool copilot   # → .github/copilot-instructions.md (default)
+./cortex/setup.sh --tool cursor    # → .cursor/rules/cortex.mdc
+./cortex/setup.sh --tool claude    # → CLAUDE.md
+./cortex/setup.sh --tool agents    # → AGENTS.md (Codex, etc.)
+./cortex/setup.sh --tool custom --instructions-file path/to/file
 
 # Without personality (neutral professional agents)
 ./cortex/setup.sh --no-personality
@@ -37,7 +44,7 @@ git submodule add <cortex-url> cortex
 ```
 
 The script automatically creates:
-- `.github/copilot-instructions.md` — bootstrap read by your IDE at every session
+- The instructions file for your AI tool (path depends on `--tool`)
 - `project-overview.md` — to fill in: vision, stakeholders, business flows
 - `project-context.md` — to fill in: stack, conventions, tools
 
@@ -78,7 +85,7 @@ B2B contract management platform — SaaS, SME market.
 
 ### Step 4 — First interaction
 
-In your IDE, simply mention the desired agent.
+In your AI tool, simply mention the desired agent in your prompt.
 
 **With the H2G2 theme:**
 ```
@@ -131,6 +138,11 @@ git submodule add <cortex-url> cortex
 # → Service name (e.g. api-backend, front-web):  ← empty entry to finish
 ```
 
+Combine with `--tool` to target your AI tool:
+```bash
+./cortex/setup.sh --workspace --tool cursor
+```
+
 The script creates for each service:
 - `{service}/project-overview.md` — with `@alias: {service}` pre-filled
 - `{service}/project-context.md` — with `@alias: {service}` pre-filled
@@ -141,8 +153,18 @@ And at the workspace root (optional):
 
 ### Step 3 — Copy the workspace bootstrap
 
+Use the same `--tool` option as for single project mode. The script handles the correct file path automatically.
+
+For manual setup:
 ```bash
+# GitHub Copilot
 cp cortex/templates/copilot-instructions-workspace.md .github/copilot-instructions.md
+# Cursor
+cp cortex/templates/copilot-instructions-workspace.md .cursor/rules/cortex.mdc
+# Claude Code
+cp cortex/templates/copilot-instructions-workspace.md CLAUDE.md
+# Codex / other
+cp cortex/templates/copilot-instructions-workspace.md AGENTS.md
 ```
 
 ### Step 4 — Fill in the context per service
@@ -173,7 +195,7 @@ REST API — contract management, JWT authentication
 @front-web   Create a table component with sorting and filters
 ```
 
-If you don't use an alias, Cortex infers the service from the files open in the IDE.
+If you don't use an alias, Cortex infers the service from the active file context.
 
 ---
 

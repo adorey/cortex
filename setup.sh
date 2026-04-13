@@ -8,12 +8,16 @@
 #   ./setup.sh /path/to/project    # Setup in a specific project
 #   ./setup.sh --theme h2g2        # Specify a theme (default: h2g2)
 #   ./setup.sh --no-personality    # Without the personality layer
+#   ./setup.sh --tool copilot      # GitHub Copilot: .github/copilot-instructions.md (default)
+#   ./setup.sh --tool cursor       # Cursor: .cursor/rules/cortex.mdc
+#   ./setup.sh --tool claude       # Claude Code: CLAUDE.md
+#   ./setup.sh --tool agents       # Generic (Codex, etc.): AGENTS.md
+#   ./setup.sh --tool custom --instructions-file path/to/file  # Custom path
 #
 # Ce script :
 # 1. Vérifie le thème de personnalité
-# 2. Génère .github/copilot-instructions.md (bootstrap IA)
-# 3. Copie project-context.md (template à remplir)
-# 4. Configure .vscode/settings.json (injection personnalité Copilot)
+# 2. Génère le fichier d'instructions IA adapté à l'outil cible
+# 3. Copie project-context.md et project-overview.md (templates à remplir)
 #
 # ============================================================================
 
@@ -31,6 +35,8 @@ TARGET_DIR=""
 THEME="h2g2"
 NO_PERSONALITY=false
 WORKSPACE_MODE=false
+TOOL="copilot"
+CUSTOM_INSTRUCTIONS_FILE=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -47,15 +53,30 @@ while [[ $# -gt 0 ]]; do
             WORKSPACE_MODE=true
             shift
             ;;
+        --tool)
+            TOOL="$2"
+            shift 2
+            ;;
+        --instructions-file)
+            CUSTOM_INSTRUCTIONS_FILE="$2"
+            shift 2
+            ;;
         -h|--help)
-            echo "Usage: ./setup.sh [TARGET_DIR] [--theme THEME] [--no-personality] [--workspace]"
+            echo "Usage: ./setup.sh [TARGET_DIR] [--theme THEME] [--no-personality] [--workspace] [--tool TOOL]"
             echo ""
             echo "Options:"
-            echo "  TARGET_DIR          Target directory (default: cortex parent directory)"
-            echo "  --theme THEME       Personality theme to activate (default: h2g2)"
-            echo "  --no-personality    Disable the personality layer"
-            echo "  --workspace         Multi-project workspace mode (parent / services structure)"
-            echo "  -h, --help          Display this help"
+            echo "  TARGET_DIR                    Target directory (default: cortex parent directory)"
+            echo "  --theme THEME                 Personality theme to activate (default: h2g2)"
+            echo "  --no-personality              Disable the personality layer"
+            echo "  --workspace                   Multi-project workspace mode (parent / services structure)"
+            echo "  --tool TOOL                   AI tool target (default: copilot)"
+            echo "                                  copilot → .github/copilot-instructions.md"
+            echo "                                  cursor  → .cursor/rules/cortex.mdc"
+            echo "                                  claude  → CLAUDE.md"
+            echo "                                  agents  → AGENTS.md"
+            echo "                                  custom  → use --instructions-file"
+            echo "  --instructions-file PATH      Custom output path (requires --tool custom)"
+            echo "  -h, --help                    Display this help"
             exit 0
             ;;
         *)
@@ -96,11 +117,37 @@ else
     echo -e "${YELLOW}ℹ️${NC}  Personality disabled (roles-only mode)"
 fi
 
-# --- 2. Generate copilot-instructions.md ---
-GITHUB_DIR="$TARGET_DIR/.github"
-INSTRUCTIONS_FILE="$GITHUB_DIR/copilot-instructions.md"
+# --- 2. Resolve instructions file path based on --tool ---
+case "$TOOL" in
+    copilot)
+        INSTRUCTIONS_FILE="$TARGET_DIR/.github/copilot-instructions.md"
+        mkdir -p "$TARGET_DIR/.github"
+        ;;
+    cursor)
+        INSTRUCTIONS_FILE="$TARGET_DIR/.cursor/rules/cortex.mdc"
+        mkdir -p "$TARGET_DIR/.cursor/rules"
+        ;;
+    claude)
+        INSTRUCTIONS_FILE="$TARGET_DIR/CLAUDE.md"
+        ;;
+    agents)
+        INSTRUCTIONS_FILE="$TARGET_DIR/AGENTS.md"
+        ;;
+    custom)
+        if [ -z "$CUSTOM_INSTRUCTIONS_FILE" ]; then
+            echo -e "${RED}❌ --tool custom requires --instructions-file PATH${NC}"
+            exit 1
+        fi
+        INSTRUCTIONS_FILE="$CUSTOM_INSTRUCTIONS_FILE"
+        mkdir -p "$(dirname "$INSTRUCTIONS_FILE")"
+        ;;
+    *)
+        echo -e "${RED}❌ Unknown tool '$TOOL'. Valid values: copilot, cursor, claude, agents, custom${NC}"
+        exit 1
+        ;;
+esac
 
-mkdir -p "$GITHUB_DIR"
+echo -e "${GREEN}✅${NC} AI tool target: ${BLUE}$TOOL${NC} → $INSTRUCTIONS_FILE"
 
 # Build the content
 INSTRUCTIONS_CONTENT="# Cortex AI Team
@@ -262,21 +309,21 @@ else
     echo "   ├── project-context.md             ← Technical stack (TO FILL IN)"
 fi
 
-echo "   └── .github/copilot-instructions.md   ← Auto-generated"
+echo "   └── $INSTRUCTIONS_FILE"
 echo ""
 
 if [ "$WORKSPACE_MODE" = true ]; then
     echo "   Workspace mode — target a service with its @alias in your prompt:"
     echo "   → e.g. '@backend Add a pagination endpoint'"
-    echo "   → Or let Cortex infer from the files open in the IDE"
+    echo "   → Or let Cortex infer from the active file context"
 elif [ "$NO_PERSONALITY" = false ] && [ "$THEME" = "h2g2" ]; then
-    echo "   Invoke an agent in your IDE:"
+    echo "   Invoke an agent in your prompt:"
     echo "   → @Hactar for backend"
     echo "   → @Eddie for frontend"
     echo "   → @Marvin for security"
     echo "   → @Slartibartfast for architecture"
 else
-    echo "   Invoke an agent in your IDE:"
+    echo "   Invoke an agent in your prompt:"
     echo "   → Mention the desired role in your prompt"
 fi
 
