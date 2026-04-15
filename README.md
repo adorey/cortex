@@ -89,7 +89,9 @@ cortex/
 │   │   │   ├── docker.md
 │   │   │   └── kubernetes.md
 │   │   ├── databases/
-│   │   │   └── mysql.md
+│   │   │   ├── mysql.md
+│   │   │   ├── postgresql.md
+│   │   │   └── mongodb.md
 │   │   └── security/
 │   │       └── owasp.md
 │   │
@@ -107,8 +109,11 @@ cortex/
 │       └── README.md
 │
 └── docs/
-    ├── getting-started.md             # Step-by-step installation guide
-    └── creating-a-theme.md            # Guide for creating a theme
+│   ├── getting-started.md             # Step-by-step installation guide
+│   └── creating-a-theme.md            # Guide for creating a theme
+│
+└── changelog/                             # Release notes
+    └── 0.1.0.md                           # Current release
 ```
 
 ## 🔧 Installation
@@ -168,6 +173,12 @@ If no alias is mentioned, Cortex infers the service from the active file context
 
 - [**Getting Started**](docs/getting-started.md) — step-by-step installation guide (single project & workspace)
 - [**Creating a theme**](docs/creating-a-theme.md) — customize the tone and style of agents
+
+## 📋 Changelog
+
+> Latest release: **[v0.1.0](changelog/0.1.0.md)** — First stable foundation: 3-layer architecture, 15 agent roles with behavioral rules & anti-patterns, H2G2 theme, dispatch protocol, and 9 capability files.
+
+All releases are documented in the [`changelog/`](changelog/) directory.
 
 ## 🎯 Philosophy
 
