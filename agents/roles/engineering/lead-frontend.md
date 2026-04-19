@@ -141,4 +141,6 @@ Storybook       : {Component}.stories.{ext}
 <!-- The Prompt Manager loads matching files from `cortex/agents/capabilities/`
      by cross-referencing with the stack declared in `project-context.md` -->
 
-**Categories to load:**
+**Categories to load:**- `languages/` → load the project’s frontend language (TypeScript)
+- `frameworks/` → load the project's frontend framework (+ `frameworks/starlight.md` when the project uses Starlight)
+- `security/` → always load `security/owasp.md`

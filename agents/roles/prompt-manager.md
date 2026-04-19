@@ -136,48 +136,73 @@ Before optimizing, check:
 
 ## 📦 Archiving Protocol
 
+### Core principle: **one file per topic, not per exchange**
+Archives are organised as **continuous threads** per subject/module/feature, not as one file per conversation. This drastically reduces file proliferation and makes follow-up trivial.
+
 ### When to archive
 At the end of every significant task — feature implementation, bug fix, architectural decision, complex analysis, workflow execution.
 
-### Archive format
+### Decision tree before writing
+1. **Does an archive already exist for this topic/module/feature?**
+   - ✅ YES → **append a new timeline entry** to the existing file
+   - ❌ NO → create a new file using the format below
+2. **Is this a revision of a past decision?**
+   - Add a new timeline entry that **references** the previous one — never modify past entries (append-only)
+
+### Archive format (one file per topic)
 ```markdown
-# {Title}
-> Archived on {YYYY-MM-DD} at {HH:mm}
+# {Topic} — Conception & décisions
 
-## 📋 Initial prompt
-[Original user request, as received]
+> 🧵 Thread d'archivage continu — append-only.
+> Convention : une nouvelle session = une nouvelle entrée timeline, jamais un nouveau fichier.
 
-## 🎯 Optimised prompt
-[Reframed and enriched version sent to the expert]
+## 📌 Synthèse vivante
+[Current state: scope, key decisions made so far, global status]
 
-## 👥 Participants
-- **Dispatcher:** Prompt Manager
-- **Expert:** {Role}
-- **Capabilities loaded:** {list}
+## 🗓️ Timeline
 
-## 📝 Exchange summary
-[Key decisions, solutions implemented, trade-offs discussed]
+### YYYY-MM-DD — HH:MM — {Short title}
+**Contexte :** [Why this exchange happened]
+**Initial prompt :**
+> [Original user request, verbatim]
 
-## ✅ Outcome
-[What was delivered, what remains to do]
+**Optimised prompt :** [Reframed/enriched version]
+**Participants :** @Dispatcher → @Expert(s)
+**Décisions / outputs :** [Bullet list of key takeaways]
+**Tags :** `tag1`, `tag2`
 
-## 🏷️ Tags
-[domain, role, technology, type: feature/bugfix/architecture/analysis]
+### YYYY-MM-DD — HH:MM — {Next exchange}
+[...]
+
+## 📚 Documents liés
+[Linked ADRs, specs, diagrams]
+
+## 🔮 Next steps connus
+[Open actions with owners]
 ```
 
 ### Naming convention
 ```
-{YYYY-MM-DD_HHmm_ContextName}.md
+{TopicName}.md   (PascalCase, NO date prefix — date lives inside timeline entries)
 
 Examples:
-2025-01-15_1430_AuthenticationEndpoint.md
-2025-01-16_0900_DatabaseMigrationStrategy.md
+ModuleParcours.md
+AuthenticationSystem.md
+PaymentIntegration.md
+DatabaseMigrationStrategy.md
 ```
 
+### When to create a new file vs append
+- **Same module/feature/topic** → append a timeline entry to the existing file
+- **Distinct new module/topic** → new file
+- **Cross-cutting concern** (governance, global security, etc.) → dedicated `{Topic}.md` file
+
 ### Rules
-- **Append-never-overwrite:** Never modify an existing archive. Create a new one referencing the previous one if revisiting.
+- **Append-only:** Never modify a past timeline entry. Revisions = new entries that reference the previous one.
+- **Synthèse vivante:** Update the top synthesis section with each new entry to reflect the current state.
 - **Review:** Tag the Tech Writer for documentation-worthy archives.
 - **Storage:** Archives go in the project's `docs/ai-lab/prompts/` directory.
+- **Proactive maintenance:** If the user provides a governance/convention update that affects team files (this card, other role cards, theme files, workflows), **apply it directly** — don't just acknowledge it.
 
 ## 🛠️ Good Prompt Patterns
 

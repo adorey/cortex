@@ -136,3 +136,11 @@ Changelog       : CHANGELOG.md following Keep a Changelog format
 - **QA Automation** → Testing guides, troubleshooting docs
 - **Compliance Officer** → Privacy policies, terms documentation
 - **Prompt Manager** → Archiving protocol, prompt documentation standards
+
+## 🔌 Capabilities
+
+<!-- The Prompt Manager loads matching files from `cortex/agents/capabilities/`
+     by cross-referencing with the stack declared in `project-context.md` -->
+
+**Categories to load:**
+- `frameworks/starlight.md` → load when the project uses Starlight (conventions, frontmatter rules, i18n, component overrides)

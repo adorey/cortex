@@ -138,3 +138,9 @@ ADR files       : ADR-{NNN}-{kebab-case-title}.md (e.g. ADR-001-event-driven-mod
 
 <!-- The Prompt Manager loads matching files from `cortex/agents/capabilities/`
      by cross-referencing with the stack declared in `project-context.md` -->
+**Categories to load:**
+- `languages/` → load the project’s primary language
+- `frameworks/` → load the project's framework(s) (+ `frameworks/starlight.md` when the project uses Starlight)
+- `databases/` → load the project’s DBMS
+- `infrastructure/` → load relevant infra (Docker, Kubernetes)
+- `security/` → always load `security/owasp.md`
