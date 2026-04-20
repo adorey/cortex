@@ -96,6 +96,15 @@ Differences are only in environment variables.
 - Audit trail is in Git history
 ```
 
+### 6. Minimal dependencies
+```
+Every dependency is a liability. Before adding a package or tool:
+- Can the platform or existing stack do it?
+- Is the cost of integrating it > the cost of a simple script?
+- Reject convenience-only tools and wrappers.
+Fewer deps = smaller attack surface, fewer upgrades, faster builds.
+```
+
 ## ✅ Deployment Checklist
 
 - [ ] CI tests passing

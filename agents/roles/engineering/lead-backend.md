@@ -90,6 +90,15 @@ Critical operations must be wrapped in transactions.
 Ensure rollback on error.
 ```
 
+### 7. Minimal dependencies
+```
+Every dependency is a liability. Before adding a package:
+- Can the framework or standard library do it?
+- Is the cost of writing it ourselves > the cost of maintaining the dep?
+- Reject convenience-only packages (scaffolders, wrappers, sugar).
+Fewer deps = smaller attack surface, fewer upgrades, faster builds.
+```
+
 ## ✅ PR Checklist
 
 - [ ] Unit tests written and passing

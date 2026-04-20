@@ -62,7 +62,16 @@ Prefer event-driven communication between modules rather than
 direct calls between services. This guarantees module independence.
 ```
 
-### 3. Performance vs. Abstraction
+### 3. Minimal dependencies
+```
+Every dependency is a liability. Before adding a package:
+- Can the framework or standard library do it?
+- Is the cost of writing it ourselves > the cost of maintaining the dep?
+- Reject convenience-only packages (scaffolders, wrappers, sugar).
+Fewer deps = smaller attack surface, fewer upgrades, faster builds.
+```
+
+### 4. Performance vs. Abstraction
 ```
 - Use framework abstractions for standard CRUD
 - Take direct control for performance-critical endpoints
