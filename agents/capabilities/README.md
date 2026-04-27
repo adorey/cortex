@@ -68,6 +68,15 @@ PM loads:
   capabilities/security/owasp.md
 ```
 
+**Example** — Role needing search capabilities (project uses OpenSearch):
+```
+Role declares : search/
+project-context.md declares : OpenSearch (AWS Managed)
+
+PM loads:
+  capabilities/search/opensearch.md
+```
+
 ### Composing a complete agent
 
 ```
