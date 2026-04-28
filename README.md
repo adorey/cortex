@@ -43,6 +43,18 @@ This separation allows:
 - Customizing the **project context** without modifying the agents
 - Defining reusable **workflows** (generic in cortex) or project-specific (in the host project via `agents/workflows/`)
 
+### 🪜 Layered overrides (cascade)
+
+Every layer (`roles/`, `capabilities/`, `personalities/`, `workflows/`) supports a **3-tier cascade**: a host project can extend any base file with an overlay at workspace or service level, without forking cortex itself.
+
+```
+{service}/agents/{layer}/...                    ← priority 1 (most specific)
+{workspace_root}/agents/{layer}/...             ← priority 2 (workspace mode only)
+cortex/agents/{layer}/...                       ← priority 3 (default, ships with cortex)
+```
+
+Overlays are **additive** by default (rules are appended to the base), except for `workflows/` which use **replacement** (sequence-level override). See [docs/extending-layers.md](docs/extending-layers.md) for the practical guide and [ADR-001](docs/adr/ADR-001-layered-overrides.md) for the formal contract.
+
 ## 📁 Structure
 
 ```
@@ -50,8 +62,8 @@ cortex/
 ├── README.md                          # This file
 ├── setup.sh                           # Installation script
 ├── templates/
-│   ├── copilot-instructions.md              # Bootstrap — single project mode
-│   ├── copilot-instructions-workspace.md    # Bootstrap — multi-project workspace mode
+│   ├── bootstrap-instructions.md            # Bootstrap — single project mode (any AI tool)
+│   ├── bootstrap-instructions-workspace.md  # Bootstrap — multi-project workspace mode
 │   ├── project-overview.md.template         # Template: project overview (vision & business)
 │   ├── project-context.md.template          # Template: technical context
 │   └── workflow.md.template                 # Template for creating a project workflow
@@ -113,42 +125,58 @@ cortex/
 │   └── creating-a-theme.md            # Guide for creating a theme
 │
 └── changelog/                             # Release notes
-    └── 0.1.0.md                           # Current release
+    ├── 0.1.0.md                           # First stable foundation
+    └── 0.2.0.md                           # Layered overrides + ADRs
 ```
+
+> **Note on overlays:** the `agents/{roles,capabilities,personalities,workflows}/` trees described above also exist (mirrored) in host projects under `{workspace}/agents/...` and `{service}/agents/...` — those are the override locations, not part of cortex itself.
 
 ## 🔧 Installation
 
-### Option 1: Automatic script (recommended)
+Cortex can be consumed in **two ways**, depending on how your project is structured. Both are first-class — pick the one that fits your repo layout.
+
+| Mode | When to use | Workspace must be a git repo? |
+|---|---|---|
+| **Submodule** | Single project (one git repo) or monorepo containing multiple services | ✅ Yes |
+| **Standalone clone** | Multi-repo workspace where each service is its own git repo (cortex sits as a peer) | ❌ No |
+
+### Option 1A: Submodule (single project or monorepo)
 
 ```bash
-# Add as a Git submodule
+# From inside your project's git repo
 git submodule add <cortex-url> cortex
-
-# Install — single project (H2G2 theme by default)
-./cortex/setup.sh
-
-# Without personality
-./cortex/setup.sh --no-personality
-
-# With a specific theme
-./cortex/setup.sh --theme star-wars
+./cortex/setup.sh                       # single project
+./cortex/setup.sh --workspace           # monorepo with multiple services
 ```
 
-### Workspace mode — multi-projects
+Update cortex later: `git submodule update --remote cortex`.
 
-For a workspace containing multiple services/repos (microservices, monorepo, multi-repo VSCode):
+### Option 1B: Standalone clone (multi-repo workspace)
+
+When your workspace is just a folder containing several independent git repos (e.g. `backend/`, `frontend/`, `infra/`), cortex doesn't need to be a submodule of anything — it lives next to them as a sibling clone.
 
 ```bash
-# Place cortex in the parent folder (not necessarily a git repo)
+# In your workspace folder (not necessarily a git repo)
 # workspace/
-# ├── cortex/
-# ├── service-a/
-# └── service-b/
+# ├── cortex/         ← cloned here (not a submodule)
+# ├── service-a/      ← independent repo
+# └── service-b/      ← independent repo
 
+git clone <cortex-url> cortex
 ./cortex/setup.sh --workspace
-# The script interactively asks for the names of services to initialize
+# The script interactively asks for the names of services to initialize.
 # It creates project-overview.md and project-context.md in each service
-# with the correct @alias pre-filled
+# with the correct @alias pre-filled.
+```
+
+Update cortex later: `cd cortex && git pull`.
+
+### Common options (both modes)
+
+```bash
+./cortex/setup.sh --tool claude          # generate CLAUDE.md (vs Copilot's .github/copilot-instructions.md by default)
+./cortex/setup.sh --no-personality       # neutral professional agents (no theme)
+./cortex/setup.sh --theme star-wars      # use a specific theme
 ```
 
 Each service declares its `@alias` in its `project-overview.md`. To target a service in a prompt:
@@ -160,11 +188,13 @@ If no alias is mentioned, Cortex infers the service from the active file context
 
 ### Option 2: Manual
 
-1. Copy the appropriate template for your AI tool into the right location:
-   - **GitHub Copilot**: `cortex/templates/copilot-instructions.md` → `.github/copilot-instructions.md`
-   - **Cursor**: `cortex/templates/copilot-instructions.md` → `.cursor/rules/cortex.mdc`
-   - **Claude Code**: `cortex/templates/copilot-instructions.md` → `CLAUDE.md`
-   - **Codex / other**: `cortex/templates/copilot-instructions.md` → `AGENTS.md`
+1. Copy the appropriate bootstrap template for your AI tool into the right location:
+   - **GitHub Copilot**: `cortex/templates/bootstrap-instructions.md` → `.github/copilot-instructions.md`
+   - **Cursor**: `cortex/templates/bootstrap-instructions.md` → `.cursor/rules/cortex.mdc`
+   - **Claude Code**: `cortex/templates/bootstrap-instructions.md` → `CLAUDE.md`
+   - **Codex / other**: `cortex/templates/bootstrap-instructions.md` → `AGENTS.md`
+
+   For workspace mode, use `bootstrap-instructions-workspace.md` instead.
 2. Copy `cortex/templates/project-overview.md.template` → `project-overview.md` and fill in the vision
 3. Copy `cortex/templates/project-context.md.template` → `project-context.md` and fill in the stack
 4. Invoke an agent by mentioning the desired role or character name in your prompt
@@ -172,11 +202,16 @@ If no alias is mentioned, Cortex infers the service from the active file context
 ## 📚 Documentation
 
 - [**Getting Started**](docs/getting-started.md) — step-by-step installation guide (single project & workspace)
+- [**Extending layers**](docs/extending-layers.md) — overlay your project's rules onto roles, capabilities, personalities, and workflows
 - [**Creating a theme**](docs/creating-a-theme.md) — customize the tone and style of agents
+- [**Architecture Decision Records**](docs/adr/) — the *why* behind the framework's design
+- [**Contributing**](CONTRIBUTING.md) — how to add roles, capabilities, themes, workflows, or fix bugs
 
 ## 📋 Changelog
 
-> Latest release: **[v0.1.0](changelog/0.1.0.md)** — First stable foundation: 3-layer architecture, 15 agent roles with behavioral rules & anti-patterns, H2G2 theme, dispatch protocol, and 9 capability files.
+> Latest release: **[v0.2.0](changelog/0.2.0.md)** — Layered overrides: cascade resolution for all agent layers, ADR-001, validation tooling, contributor guide.
+>
+> Previous: **[v0.1.0](changelog/0.1.0.md)** — First stable foundation.
 
 All releases are documented in the [`changelog/`](changelog/) directory.
 
@@ -188,6 +223,8 @@ All releases are documented in the [`changelog/`](changelog/) directory.
 - **Two context files**: `project-overview.md` (vision & business) + `project-context.md` (stack & conventions) — separated to never mix the WHAT and the HOW
 - **Loadable capabilities**: `capabilities/` cards are reusable across projects, automatically loaded by the PM based on the active role and project stack
 - **Multi-project**: workspace mode with `@alias` per service — Cortex detects the active service from the prompt or open files
+- **Layered overrides**: every layer can be extended at workspace or service level via overlays — host projects teach Cortex their conventions without forking ([ADR-001](docs/adr/ADR-001-layered-overrides.md))
+- **Append-only ADRs**: significant design decisions are documented and traceable in [docs/adr/](docs/adr/)
 - **Scalable**: add your own roles, capabilities, themes, workflows or services
 
 > *"Documentation is like the developer's tea: nobody wants it until they desperately need it."* — Arthur Dent

@@ -8,20 +8,28 @@ This step-by-step guide covers both installation modes: **single project** and *
 
 ## Prerequisites
 
-- A Git repository (or a workspace folder for multi-repo mode)
+- Git (to clone or submodule cortex itself)
 - An AI coding tool: GitHub Copilot, Cursor, Claude Code, OpenAI Codex, or any tool that supports a custom system instructions file
-- Git installed (for the submodule)
+- Either:
+  - A Git repository (single project or monorepo) — cortex will be added as a **submodule**, **or**
+  - A workspace folder containing several independent repos — cortex will sit alongside them as a **standalone clone** (the workspace itself doesn't need to be a git repo)
+
+> **Which installation mode applies to you?** See the table at the top of [README.md → Installation](../README.md#installation). TL;DR: submodule for one-repo projects, standalone clone for multi-repo workspaces.
 
 ---
 
-## 🚀 Mode 1 — Single project
+## 🚀 Mode 1 — Single project (one git repo)
 
-### Step 1 — Add Cortex as a submodule
+### Step 1 — Add Cortex to your project
+
+For a single-project git repo, **submodule** is the recommended path: it pins cortex's version inside your repo.
 
 ```bash
 cd my-project/
 git submodule add <cortex-url> cortex
 ```
+
+> If your project isn't a git repo and you don't want to add submodule machinery, you can also clone cortex directly: `git clone <cortex-url> cortex`. Updates then go through `cd cortex && git pull` instead of `git submodule update --remote`.
 
 ### Step 2 — Run the setup script
 
@@ -111,22 +119,46 @@ When you call `@Oolon` (or `@prompt-manager`):
 
 ## 🏢 Mode 2 — Multi-service workspace
 
-For a workspace containing multiple services (microservices, monorepo, multi-repo):
+For a workspace containing multiple services. **Two flavors** depending on your repo layout:
+
+### Flavor 2.A — Monorepo (one git repo, services as subfolders)
 
 ```
-workspace/
-├── cortex/          ← shared submodule
-├── api-backend/
+workspace/                ← single git repo
+├── cortex/               ← shared, as Git submodule
+├── api-backend/          ← subfolder of the monorepo
 ├── front-web/
 └── notif-service/
 ```
 
+### Flavor 2.B — Multi-repo workspace (each service is its own git repo)
+
+```
+workspace/                ← just a folder, NOT a git repo (or a separate one)
+├── cortex/               ← standalone clone (NOT a submodule)
+├── api-backend/          ← independent git repo
+├── front-web/            ← independent git repo
+└── notif-service/        ← independent git repo
+```
+
 ### Step 1 — Place Cortex in the parent folder
 
+**Flavor 2.A (monorepo):**
+
 ```bash
-cd workspace/
+cd workspace/      # the monorepo root
 git submodule add <cortex-url> cortex
 ```
+
+**Flavor 2.B (multi-repo):**
+
+```bash
+cd workspace/      # any folder containing your service clones
+git clone <cortex-url> cortex
+# No submodule machinery — cortex is just a sibling clone of your services.
+```
+
+The rest of the steps are identical for both flavors.
 
 ### Step 2 — Run in workspace mode
 
@@ -158,13 +190,13 @@ Use the same `--tool` option as for single project mode. The script handles the 
 For manual setup:
 ```bash
 # GitHub Copilot
-cp cortex/templates/copilot-instructions-workspace.md .github/copilot-instructions.md
+cp cortex/templates/bootstrap-instructions-workspace.md .github/copilot-instructions.md
 # Cursor
-cp cortex/templates/copilot-instructions-workspace.md .cursor/rules/cortex.mdc
+cp cortex/templates/bootstrap-instructions-workspace.md .cursor/rules/cortex.mdc
 # Claude Code
-cp cortex/templates/copilot-instructions-workspace.md CLAUDE.md
+cp cortex/templates/bootstrap-instructions-workspace.md CLAUDE.md
 # Codex / other
-cp cortex/templates/copilot-instructions-workspace.md AGENTS.md
+cp cortex/templates/bootstrap-instructions-workspace.md AGENTS.md
 ```
 
 ### Step 4 — Fill in the context per service
@@ -201,23 +233,50 @@ If you don't use an alias, Cortex infers the service from the active file contex
 
 ## ➕ Going further
 
+### Override a base layer for your project (the cascade)
+
+You don't need to fork Cortex to teach an agent your project's conventions. Every layer (`roles/`, `capabilities/`, `personalities/`, `workflows/`) supports **overlays** at workspace and/or service level.
+
+Quick example — teach `@Hactar` (Lead Backend) your project's namespace rule:
+
+```bash
+# 1. Mirror the path of the base file
+mkdir -p agents/roles/engineering/
+cat > agents/roles/engineering/lead-backend.md <<'EOF'
+<!-- OVERLAY
+     Base: cortex/agents/roles/engineering/lead-backend.md
+     Scope: workspace
+     Semantic: additive
+-->
+
+# Lead Backend — Overlay (project conventions)
+
+## 📏 Project rules (additive)
+- Namespace `Waste\` (not `App\Waste\`)
+- `bin/linters fix && bin/linters lint` mandatory before commit
+EOF
+
+# 2. Validate (recommended)
+./cortex/bin/validate-overlays.sh
+```
+
+The Prompt Manager loads `cortex/agents/roles/engineering/lead-backend.md` first, then layers your overlay on top.
+
+📖 **Full guide:** [extending-layers.md](extending-layers.md) — covers all four layers, examples, edge cases, and validation.
+
 ### Create a project workflow
 
-Cortex workflows are in `cortex/agents/workflows/` (generic, shared across projects).
-
-To create a workflow specific to your project:
+Workflows are a special case of overlay (semantic: replacement).
 
 ```bash
 mkdir -p agents/workflows/engineering/
 cp cortex/templates/workflow.md.template agents/workflows/engineering/my-workflow.md
-# Fill in the template
+# Fill in the template (don't forget the OVERLAY header)
 ```
 
-The PM looks first in your `agents/workflows/` (higher priority), then in `cortex/agents/workflows/`.
+### Add a capability (contributing to cortex)
 
-### Add a capability
-
-Capabilities are in `cortex/agents/capabilities/`. To add one to the framework:
+Capabilities live in `cortex/agents/capabilities/`. To add a *new* capability to the framework (PR upstream):
 
 ```
 cortex/agents/capabilities/
@@ -227,7 +286,9 @@ cortex/agents/capabilities/
 └── security/     owasp.md
 ```
 
-Copy the format of an existing capability, then declare it in the `🔌 Capabilities` section of the relevant role.
+Copy the format of an existing capability, then declare it in the `🔌 Capabilities` section of the relevant role. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+For project-specific capability flavor (your conventions, your tooling) → use an overlay, not a contribution.
 
 ### Create a personality theme
 
@@ -237,23 +298,28 @@ See [`docs/creating-a-theme.md`](creating-a-theme.md) for the full guide.
 ./cortex/setup.sh --theme my-theme
 ```
 
-### Add a role
+> Theme-level reassignment (changing which character plays which role) is **not** done via overlay — it requires a full theme fork. Per-character flavor (extra quotes, project-specific behavior) **is** an overlay. See [extending-layers.md](extending-layers.md).
+
+### Add a role (contributing to cortex)
 
 1. Create `cortex/agents/roles/{category}/my-role.md` following the existing format
 2. Add a `🔌 Capabilities` section if it's a technical role
 3. If a theme is active: add the character to `characters.md` and create their `.md` card
+4. Open a PR — see [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ---
 
 ## 🗺️ Overview of the 5 layers
 
-| Layer | Files | Answers |
-|---|---|---|
-| **Roles** | `cortex/agents/roles/{cat}/` | *WHAT* to do (business skills) |
-| **Capabilities** | `cortex/agents/capabilities/` | *WHAT I KNOW HOW TO DO* (tech stack) |
-| **Personalities** | `cortex/agents/personalities/{theme}/` | *WHO* you are (tone, style) |
-| **Context** | `project-overview.md` + `project-context.md` | *WHERE / WHY* you work |
-| **Workflows** | `agents/workflows/` or `cortex/agents/workflows/` | *HOW and WITH WHOM* to orchestrate |
+| Layer | Base location | Override locations | Answers |
+|---|---|---|---|
+| **Roles** | `cortex/agents/roles/{cat}/` | `{workspace_root}/agents/roles/`, `{service}/agents/roles/` | *WHAT* to do |
+| **Capabilities** | `cortex/agents/capabilities/{cat}/` | `{workspace_root}/agents/capabilities/`, `{service}/agents/capabilities/` | *WHAT I KNOW HOW TO DO* |
+| **Personalities** | `cortex/agents/personalities/{theme}/` | Same paths under `{workspace_root}/` and `{service}/` (except `characters.md`) | *WHO* you are |
+| **Context** | `project-overview.md` + `project-context.md` (workspace and per-service) | n/a — these are **already** per-service | *WHERE / WHY* you work |
+| **Workflows** | `cortex/agents/workflows/{cat}/` | `{workspace_root}/agents/workflows/`, `{service}/agents/workflows/` | *HOW and WITH WHOM* to orchestrate |
+
+Override semantic: **additive** for roles/capabilities/personalities, **replacement** for workflows. See [extending-layers.md](extending-layers.md).
 
 ---
 
@@ -268,8 +334,15 @@ The PM dispatches directly to the right expert without a template. If the case r
 **Q: Can I call an agent directly without going through the PM?**
 Yes. `@Hactar` invokes the Lead Backend directly. But going through the PM guarantees prompt optimisation and capability loading.
 
-**Q: Is the Cortex submodule updated automatically?**
-No. To update: `git submodule update --remote cortex`. Check the changelog before updating in production.
+**Q: Is Cortex updated automatically?**
+No. The update command depends on how you installed it:
+- **Submodule:** `git submodule update --remote cortex`
+- **Standalone clone:** `cd cortex && git pull`
 
-**Q: Can I use Cortex without a Git submodule?**
-Yes, using the manual option: copy the templates by hand (see [README.md](../README.md#option-2--manual)).
+Check the [changelog](../changelog/) before updating in production.
+
+**Q: Can I use Cortex without Git at all?**
+Yes — you can copy the templates by hand (see [README.md](../README.md) → "Option 2: Manual"). You'll lose the ability to receive upstream updates easily, but the framework itself works.
+
+**Q: I have a multi-repo workspace where each service is its own git repo. Do I need a parent repo?**
+No. Cortex doesn't care whether the workspace folder is a git repo. Just `git clone <cortex-url> cortex` next to your service folders, run `./cortex/setup.sh --workspace`, and you're set. This is the **standalone clone** mode.

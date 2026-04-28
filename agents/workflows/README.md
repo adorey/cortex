@@ -16,32 +16,33 @@ It is not a rigid script. It is a safety net to ensure nothing is forgotten.
 | `project-context.md` | **WHERE** you work |
 | `workflows/` | **IN WHAT ORDER and WITH WHOM** |
 
-## 📁 Two levels
+## 📁 Three levels (workspace mode) / Two levels (single project)
 
 ```
-cortex/agents/workflows/                 ← Generic workflows (this folder)
-    ├── engineering/                         ← Development & technical
+cortex/agents/workflows/                       ← priority 3 — Generic workflows (this folder)
+    ├── engineering/                                 ← Development & technical
     │   └── feature-development.md
-    ├── intelligence/                        ← Research & analysis
+    ├── intelligence/                                ← Research & analysis
     │   └── tech-watch.md
-    ├── ops/                                 ← Deployment & incident (future)
-    └── product/                             ← Discovery & roadmap (future)
+    ├── ops/                                         ← Deployment & incident (future)
+    └── product/                                     ← Discovery & roadmap (future)
 
-{project}/agents/workflows/              ← Workflows specific to the host project
-    ├── engineering/
-    │   └── my-workflow.md
-    └── ...
+{workspace_root}/agents/workflows/             ← priority 2 — workspace-shared (workspace mode only)
+
+{service}/agents/workflows/                    ← priority 1 — service-specific
 ```
 
-**Priority rule:** the project workflow overrides the generic workflow with the same name.
+**Priority rule:** the most specific workflow with the same name **replaces** the generic one (semantic: `replacement`). This is the workflow-specific behavior; other layers (roles, capabilities, personalities) use **additive** overlays.
+
+For details on the cascade as it applies to all layers, see [docs/extending-layers.md](../../docs/extending-layers.md) and [ADR-001](../../docs/adr/ADR-001-layered-overrides.md).
 
 ## 🔄 Prompt Manager role
 
 The Prompt Manager is the **single entry point**. For every request it:
 
 1. Analyses the prompt
-2. Searches for a matching workflow — first in `{project}/agents/workflows/`, then here
-3a. **Workflow found** → announces it, activates it and orchestrates the steps
+2. Searches for a matching workflow — `{service}/agents/workflows/` → `{workspace_root}/agents/workflows/` → here
+3a. **Workflow found** → announces it, activates it and orchestrates the steps (most specific match wins)
 3b. **No workflow** → classic dispatch to the expert
 3c. **Recurring case without a workflow** → proposes creating one
 
@@ -63,4 +64,9 @@ The Prompt Manager is the **single entry point**. For every request it:
 
 ## ➕ Creating a project workflow
 
-Use the `cortex/templates/workflow.md.template` template and place your file in `{project}/agents/workflows/{category}/`.
+Use the `cortex/templates/workflow.md.template` template and place your file in either:
+
+- `{workspace_root}/agents/workflows/{category}/` — if the workflow is shared across services
+- `{service}/agents/workflows/{category}/` — if the workflow is specific to one service
+
+The workflow file **must** start with the OVERLAY header (Base, Scope, Semantic). See [docs/extending-layers.md](../../docs/extending-layers.md#example-4--workspace-workflow-override-replacement) for an example.
