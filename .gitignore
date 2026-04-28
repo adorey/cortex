@@ -1,2 +1,4 @@
-# Fichiers générés par setup.sh (spécifiques à chaque projet)
+# Files generated locally by setup.sh — never tracked by cortex itself
+# (they are per-project / per-developer choices, not framework-level state)
 agents/project-context.md
+agents/personalities/.active-theme

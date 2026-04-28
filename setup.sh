@@ -8,16 +8,20 @@
 #   ./setup.sh /path/to/project    # Setup in a specific project
 #   ./setup.sh --theme h2g2        # Specify a theme (default: h2g2)
 #   ./setup.sh --no-personality    # Without the personality layer
+#   ./setup.sh --workspace         # Multi-service workspace mode
 #   ./setup.sh --tool copilot      # GitHub Copilot: .github/copilot-instructions.md (default)
 #   ./setup.sh --tool cursor       # Cursor: .cursor/rules/cortex.mdc
 #   ./setup.sh --tool claude       # Claude Code: CLAUDE.md
 #   ./setup.sh --tool agents       # Generic (Codex, etc.): AGENTS.md
 #   ./setup.sh --tool custom --instructions-file path/to/file  # Custom path
 #
-# Ce script :
-# 1. Vérifie le thème de personnalité
-# 2. Génère le fichier d'instructions IA adapté à l'outil cible
-# 3. Copie project-context.md et project-overview.md (templates à remplir)
+# This script:
+# 1. Resolves the personality theme (validates folder exists)
+# 2. Loads the bootstrap content from cortex/templates/bootstrap-instructions[-workspace].md
+# 3. Applies theme substitution and personality strip if requested
+# 4. Writes the content to the AI tool's expected file (--tool option)
+# 5. Copies project-overview.md and project-context.md templates to fill in
+# 6. In --workspace mode: scaffolds project-overview/context.md per service
 #
 # ============================================================================
 
@@ -149,66 +153,40 @@ esac
 
 echo -e "${GREEN}✅${NC} AI tool target: ${BLUE}$TOOL${NC} → $INSTRUCTIONS_FILE"
 
-# Build the content
-INSTRUCTIONS_CONTENT="# Cortex AI Team
-
-## Bootstrap (MANDATORY at the start of every new conversation)
-
-At the start of every conversation, you MUST read these files in the order listed.
-NEVER respond without having first read and integrated these files.
-
-### Step 1 — Project context
-Read \`project-context.md\` (at the project root) to learn the stack, conventions and business rules."
-
-if [ "$NO_PERSONALITY" = false ]; then
-    if [ -n "$PM_CHARACTER" ] && [ -n "$PM_FILE" ]; then
-        # Mode résolu : on nomme directement le personnage
-        INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
-
-### Étape 2 — Personnalité active
-Lis ces fichiers pour découvrir et adopter TON identité :
-1. \`cortex/agents/personalities/$THEME/theme.md\` — Règles globales du thème $(echo "$THEME" | tr '[:lower:]' '[:upper:]')
-2. \`cortex/agents/personalities/$THEME/characters.md\` — Table de correspondance rôle → personnage
-3. \`cortex/agents/personalities/$THEME/$PM_FILE\` — **C'est TOI.** Tu es $PM_CHARACTER, le Prompt Manager.
-
-**Applique IMMÉDIATEMENT** : citation signature en début de réponse, ton analytique, références $(echo "$THEME" | tr '[:lower:]' '[:upper:]'), style de communication du personnage."
-    else
-        # Mode générique : le personnage n'a pas pu être résolu
-        INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
-
-### Step 2 — Active personality
-Read these files to discover YOUR identity:
-1. \`cortex/agents/personalities/$THEME/theme.md\` — Global rules for the active theme
-2. \`cortex/agents/personalities/$THEME/characters.md\` — Role to character mapping table
-3. In this table, find the character assigned to the \`prompt-manager\` role — **that is YOU**
-4. Read that character's individual card in \`cortex/agents/personalities/$THEME/\`
-5. Immediately adopt this identity: tone, quotes, communication style"
-    fi
+# --- 2bis. Load the bootstrap content from the appropriate template ---
+if [ "$WORKSPACE_MODE" = true ]; then
+    BOOTSTRAP_TEMPLATE="$CORTEX_DIR/templates/bootstrap-instructions-workspace.md"
+else
+    BOOTSTRAP_TEMPLATE="$CORTEX_DIR/templates/bootstrap-instructions.md"
 fi
 
-INSTRUCTIONS_CONTENT="$INSTRUCTIONS_CONTENT
+if [ ! -f "$BOOTSTRAP_TEMPLATE" ]; then
+    echo -e "${RED}❌ Bootstrap template not found: $BOOTSTRAP_TEMPLATE${NC}"
+    exit 1
+fi
 
-### Step 3 — Prompt Manager role
-Read \`cortex/agents/roles/prompt-manager.md\` — This is your default working protocol.
-You are the Prompt Manager. On every request:
-1. **Analyse** the prompt (clarity, completeness, ambiguities)
-2. **Lookup workflow** — Search for a workflow matching the context:
-   - First in \`agents/workflows/\` at the project root (specific, higher priority)
-   - Then in \`cortex/agents/workflows/\` (generic)
-   - If found: announce the activated workflow and orchestrate its steps
-   - If not found: fall back to classic dispatch
-   - If a recurring case has no workflow: suggest creating one
-3. **Dispatch** to the appropriate expert (consult \`characters.md\` for the role to character mapping)
-4. **Adopt** the dispatched expert's role and personality (read their card in \`roles/\` and their character card)
-5. **Load capabilities**: read the \`🔌 Capabilities\` section of the role card, cross-reference with the stack in \`project-context.md\`, load the corresponding files from \`cortex/agents/capabilities/\`
-6. **Produce** the technical response in the character's style
-7. **Propose** archiving at the end of the task
+echo -e "${GREEN}✅${NC} Bootstrap template: ${BLUE}$(basename "$BOOTSTRAP_TEMPLATE")${NC}"
 
-## References (read on demand depending on context)
-- **Agent roles:** \`cortex/agents/roles/\` — Skill cards by specialty
-- **Technical capabilities:** \`cortex/agents/capabilities/\` — Loadable skills by category (languages, frameworks, databases, infrastructure, security)
-- **Generic workflows:** \`cortex/agents/workflows/\` — Multi-agent orchestration templates
-- **Project workflows:** \`agents/workflows/\` — Project-specific workflows (higher priority)"
+INSTRUCTIONS_CONTENT="$(cat "$BOOTSTRAP_TEMPLATE")"
+
+# Strip the personality block if --no-personality
+# Templates wrap the personality section in <!-- PERSONALITY:BEGIN --> ... <!-- PERSONALITY:END -->
+if [ "$NO_PERSONALITY" = true ]; then
+    INSTRUCTIONS_CONTENT="$(echo "$INSTRUCTIONS_CONTENT" | sed '/<!-- PERSONALITY:BEGIN -->/,/<!-- PERSONALITY:END -->/d')"
+fi
+
+# --- 2ter. Write the active theme marker (single source of truth, INSIDE cortex) ---
+# The marker is a cortex concern (cortex decides which theme to load), so it lives in cortex.
+# Cortex's own .gitignore excludes it → each user has their local choice without polluting git.
+# Editable at any time post-setup to switch theme without re-running setup.sh.
+ACTIVE_THEME_MARKER="$CORTEX_DIR/agents/personalities/.active-theme"
+if [ "$NO_PERSONALITY" = true ]; then
+    echo "none" > "$ACTIVE_THEME_MARKER"
+    echo -e "${GREEN}✅${NC} Active theme marker → ${BLUE}none${NC} (no-personality mode)"
+else
+    echo "$THEME" > "$ACTIVE_THEME_MARKER"
+    echo -e "${GREEN}✅${NC} Active theme marker → ${BLUE}$THEME${NC} (edit cortex/agents/personalities/.active-theme to switch theme later)"
+fi
 
 if [ -f "$INSTRUCTIONS_FILE" ]; then
     echo ""

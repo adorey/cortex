@@ -123,16 +123,30 @@ Before optimizing, check:
 ## 🔄 Dispatch Protocol
 
 1. **Analytical display:** Show prompt analysis/reframe at the start of the response
-2. **Workflow lookup:** Search for a matching workflow for the detected context
-   - Check `{project}/agents/workflows/` first (project-specific, higher priority)
-   - Then `cortex/agents/workflows/` (generic)
+2. **Workflow lookup (cascade):** Search for a matching workflow for the detected context, walking the cascade:
+   - `{service}/agents/workflows/` (service-specific, highest priority)
+   - `{workspace_root}/agents/workflows/` (workspace-shared, workspace mode only)
+   - `cortex/agents/workflows/` (generic, default)
+   - **Workflows use `replacement` semantic** — the most specific match wins entirely
    - If found → announce the activated workflow and orchestrate its steps
    - If not found → continue with classic dispatch (step 3)
    - If recurring case without workflow → propose creating one via `cortex/templates/workflow.md.template`
 3. **Dispatch:** Identify and name the expert who will handle the request
-4. **Load capabilities:** Read the `🔌 Capabilities` section of the dispatched expert's role card, cross-reference with the stack declared in `project-context.md`, load the matching files from `cortex/agents/capabilities/`
-5. **Transmission:** Include the order to start working immediately
-6. **Archiving:** Propose archiving at the end of the task (see protocol below)
+4. **Resolve role (cascade, additive):** Load the dispatched expert's role card by reading the cascade in order:
+   - `cortex/agents/roles/{cat}/{role}.md` (base)
+   - `{workspace_root}/agents/roles/{cat}/{role}.md` (workspace overlay, if present)
+   - `{service}/agents/roles/{cat}/{role}.md` (service overlay, if present)
+   - **Roles use `additive` semantic** — sections tagged `(additive)` are appended; `## 🚫 Disabled rules from base` strips listed items
+5. **Resolve personality (cascade, additive):** Same cascade for `personalities/{theme}/theme.md` and `personalities/{theme}/{character}.md`. Note: `characters.md` (role↔character mapping) is **not overridable** — fork the theme to diverge.
+6. **Load capabilities (cascade, additive):** Read the `🔌 Capabilities` section of the merged role card, cross-reference with the stack declared in `project-context.md`, load matching files using the cascade for each capability:
+   - `cortex/agents/capabilities/{cat}/{techno}.md` (base)
+   - `{workspace_root}/agents/capabilities/{cat}/{techno}.md` (workspace overlay)
+   - `{service}/agents/capabilities/{cat}/{techno}.md` (service overlay)
+7. **Conflict resolution:** When base, workspace, and service overlays disagree on a specific rule, the **most specific** (service > workspace > base) wins. Otherwise, treat the union of rules as cumulative.
+8. **Transmission:** Include the order to start working immediately
+9. **Archiving:** Propose archiving at the end of the task (see protocol below)
+
+> **Detecting overlays:** an overlay is identified by the presence of `<!-- OVERLAY ... -->` at the top of the file. If the header is missing or the `Base:` field points to a non-existent file, log the inconsistency and skip the overlay. See [docs/extending-layers.md](../../docs/extending-layers.md).
 
 ## 📦 Archiving Protocol
 

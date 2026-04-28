@@ -47,7 +47,7 @@ project/
 
 - **Linter / Formatter:** <!-- e.g. ESLint + Prettier, PHP CS Fixer PSR-12 -->
 - **Naming conventions:** <!-- e.g. camelCase variables, PascalCase classes -->
-- **Standards:** <!-- e.g. PSR-12, Conventional Commits, Semantic Versioning -->
+- **Standards:** <!-- e.g. PSR-12, Conventional Commits (optionally + gitmoji), Semantic Versioning -->
 - **Code review:** <!-- e.g. 1 approval required, feature branches only -->
 
 ## 🛠️ Development tools
