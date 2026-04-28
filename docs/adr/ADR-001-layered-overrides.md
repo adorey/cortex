@@ -1,7 +1,7 @@
 # ADR-001 — Layered overrides: cascade resolution for all agent layers
 
-- **Status:** Proposed
-- **Date:** 2026-04-27
+- **Status:** Accepted
+- **Date:** 2026-04-27 (proposed) · 2026-04-28 (accepted)
 - **Authors:** Cortex maintainers (initiated by @Slartibartfast)
 - **Affects:** `cortex/agents/{roles,capabilities,personalities,workflows}/`, [Prompt Manager protocol](../../agents/roles/prompt-manager.md), bootstrap templates, `setup.sh`
 

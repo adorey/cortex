@@ -38,7 +38,7 @@ Every ADR must contain:
 
 | ADR | Title | Status | Date |
 |---|---|---|---|
-| [ADR-001](ADR-001-layered-overrides.md) | Layered overrides — cascade resolution for all agent layers | Proposed | 2026-04-27 |
+| [ADR-001](ADR-001-layered-overrides.md) | Layered overrides — cascade resolution for all agent layers | Accepted | 2026-04-28 |
 
 ## Authoring an ADR
 
