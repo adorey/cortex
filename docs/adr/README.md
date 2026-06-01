@@ -39,6 +39,7 @@ Every ADR must contain:
 | ADR | Title | Status | Date |
 |---|---|---|---|
 | [ADR-001](ADR-001-layered-overrides.md) | Layered overrides — cascade resolution for all agent layers | Accepted | 2026-04-28 |
+| [ADR-002](ADR-002-cortex-runtime.md) | Cortex Runtime — deployable engine + runtime project binding | Accepted | 2026-06-02 |
 
 ## Authoring an ADR
 
