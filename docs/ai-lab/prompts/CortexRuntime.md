@@ -148,6 +148,26 @@
 - 115 tests (108 verts, 7 API skipped).
 **Tags :** `phase-5b`, `claude-cli`, `subscription`, `subprocess`, `allowed-tools`, `setup-guide`
 
+### 2026-06-02 — Itération : robustesse runs + audit du backend Max
+**Contexte :** premier vrai run sur le projet hôte de l'humanoïde. La BDD a révélé deux trous : un run « fantôme » (path foireux → 500, run démarré jamais terminé) et un audit vide (le backend `claude-cli` fait tout en un tour, aucun outil *à nous* appelé).
+**Participants :** @Oolon → @Vogon (schéma/persistance) → @Marvin (robustesse/erreurs)
+**Décisions / outputs :**
+- **Sécurisation (max info en base)** : `run_session` enveloppe `loop.run` dans un try/except → `fail_run(run_id, error)` + `logger.exception` ; plus de run orphelin. `SessionResult.error` ; `Runtime.run` renvoie une erreur **structurée** (`{failed, error, run_id}`) au lieu d'un 500 brut ; API logue l'inattendu. `StateStore` enrichi : colonnes `error`, `cost_usd`, `tokens_in/out`, `num_turns` + `fail_run` + `finish_run(usage)`. **Migration douce** (`ALTER TABLE`) → l'ancienne base de dev est mise à niveau sans perte.
+- **Audit backend `claude-cli`** : passage à `--output-format stream-json` (`+ --verbose`) ; `parse_cli_stream` extrait les `tool_use` de la boucle interne de la CLI → `last_actions` (outil CLI → `ActionKind` via map inverse) + `last_usage` (coût/tokens/num_turns). `run_session` enregistre `model.last_actions` dans l'audit et `model.last_usage` dans le run. → le mandat §3.6 est désormais satisfaisable pour le backend Max.
+- Timestamps réels (UTC ISO) sur l'audit. Helpers purs testés (`parse_cli_stream`). 124 tests (117 verts, 7 API skipped).
+**Tags :** `iteration`, `robustness`, `fail-run`, `audit`, `stream-json`, `cost-tracking`, `observability`
+
+### 2026-06-02 — Itération : métriques de monitoring riches (vraie sortie CLI confirmée)
+**Contexte :** l'humanoïde a fourni la vraie sortie `stream-json` (events `tool_use` + `result`). Le parser tapait juste sur `result`/`total_cost_usd`/`num_turns`/`usage`. Diagnostic du seq-4 vide : serveur uvicorn pas redémarré (l'édition `.py` ne recharge pas un process en cours). Demande : loguer **tout** ce qui est monitorables (tokens, durée…) pour ressortir vers WBTB par API (next step).
+**Participants :** @Oolon → @Deep-Thought (métriques) → @Vogon (schéma)
+**Décisions / outputs :**
+- **`parse_cli_stream` enrichi** : capte `total_cost_usd`, `num_turns`, `duration_ms`, `duration_api_ms`, `ttft_ms`, `subtype`, `is_error`, tokens (in/out/cache) et `modelUsage`. Les **`permission_denials`** (outils refusés car hors `--allowedTools`, ex. `Bash`) deviennent des actions d'audit `gated=True` → l'audit montre ce qui a tourné **ET** ce qui a été bloqué.
+- **`StateStore` enrichi** : colonnes promues `duration_ms`, `ttft_ms` (+ `cost_usd`/tokens/`num_turns` existantes) **plus `metrics_json`** (blob complet → rien de perdu : cache tokens, coût par modèle…). Migration douce.
+- **Unification backends** : `AnthropicAgentClient` expose désormais `last_usage` (tokens natifs) → monitoring identique CLI/API (coût calculé côté API depuis un barème, durée chronométrée par nous).
+- Actions `gated` propagées (3-tuples tolérés). Simulation bout-en-bout validée sur les vraies valeurs (coût 0.25 $, 8 turns, 36s, Bash gated). 124 tests.
+- **Cause du seq-4 vide = serveur non redémarré** → relancer uvicorn charge le nouveau code.
+**Tags :** `iteration`, `monitoring`, `metrics`, `stream-json`, `permission-denials`, `gated`, `metrics-json`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)

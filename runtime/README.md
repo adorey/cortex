@@ -150,6 +150,16 @@ result = run_session(loop, model, store, workspace="acme", role="support-enginee
 
 - **Backends** (swappable): `InMemoryStateStore` (tests), `SqliteStateStore` (local), Postgres later.
 - `run_session` is the reference wiring: load state → guard → run → record actions → persist.
+- **Resilience**: a run that errors is recorded as `failed` (with the error) and logged — never
+  left dangling.
+- **Monitoring metrics** per run: `cost_usd`, tokens (in/out), `num_turns`, `duration_ms`,
+  `ttft_ms` as queryable columns, plus a full `metrics_json` blob (cache tokens, per-model
+  breakdown…) so nothing is lost. The `claude-cli` backend parses them from the CLI result;
+  the `anthropic-api` backend reports tokens natively (cost computed from pricing).
+- **Audit for the `claude-cli` backend**: the CLI's own tool use is parsed from `stream-json`
+  and written to the audit log — including tools the CLI **refused** (not in `--allowedTools`),
+  marked `gated` (so the audit shows what ran AND what was blocked). §3.6 holds even though the
+  CLI owns the loop.
 
 ## Run the tests (zero install)
 

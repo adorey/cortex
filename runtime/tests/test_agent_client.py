@@ -15,6 +15,7 @@ from cortex_runtime.agent_client import (  # noqa: E402
     cli_allowed_tools,
     interpret_response,
     parse_cli_result,
+    parse_cli_stream,
     tool_schemas,
 )
 from cortex_runtime.safety import ActionKind  # noqa: E402
@@ -91,6 +92,44 @@ class ClaudeCliHelpersTests(unittest.TestCase):
         self.assertEqual(text, "diagnosis here")
         self.assertEqual(usage["total_cost_usd"], 0.012)
         self.assertEqual(usage["input_tokens"], 100)
+
+    def test_build_argv_stream_json_adds_verbose(self):
+        argv = build_cli_argv("x", system_prompt="s", model="m", allowed_tools="Read",
+                              output_format="stream-json")
+        self.assertIn("--verbose", argv)
+
+    def test_parse_stream_collects_tools_text_and_metrics(self):
+        # shaped exactly like the real CLI output (tool_use ids + a rich result event)
+        stream = "\n".join([
+            '{"type":"system","subtype":"init"}',
+            '{"type":"assistant","message":{"content":['
+            '{"type":"text","text":"looking"},'
+            '{"type":"tool_use","id":"t1","name":"Read","input":{"path":"a.py"}},'
+            '{"type":"tool_use","id":"t2","name":"Grep","input":{}}]}}',
+            'not-json-skip-me',
+            '{"type":"result","subtype":"success","is_error":false,"result":"final diagnosis",'
+            '"total_cost_usd":0.25,"num_turns":8,"duration_ms":36483,"ttft_ms":4026,'
+            '"usage":{"input_tokens":3085,"output_tokens":2394,"cache_read_input_tokens":94658}}',
+        ])
+        text, usage, actions = parse_cli_stream(stream)
+        self.assertEqual(text, "final diagnosis")
+        self.assertEqual(usage["total_cost_usd"], 0.25)
+        self.assertEqual((usage["num_turns"], usage["duration_ms"], usage["ttft_ms"]), (8, 36483, 4026))
+        self.assertEqual(usage["cache_read_input_tokens"], 94658)
+        self.assertEqual(actions, [("Read", "code-read", False), ("Grep", "code-read", False)])
+
+    def test_parse_stream_marks_denied_tool_as_gated(self):
+        stream = "\n".join([
+            '{"type":"assistant","message":{"content":'
+            '[{"type":"tool_use","id":"bash1","name":"Bash","input":{"command":"ls"}}]}}',
+            '{"type":"assistant","message":{"content":'
+            '[{"type":"tool_use","id":"read1","name":"Read","input":{}}]}}',
+            '{"type":"result","result":"ok","permission_denials":[{"tool_name":"Bash",'
+            '"tool_use_id":"bash1","tool_input":{}}]}',
+        ])
+        _, _, actions = parse_cli_stream(stream)
+        # Bash was refused (not in allowedTools) → gated=True; Read ran → gated=False
+        self.assertEqual(actions, [("Bash", "code-write", True), ("Read", "code-read", False)])
 
 
 if __name__ == "__main__":

@@ -81,6 +81,7 @@ class AnthropicAgentClient:
         self._registry = registry
         self._model = model
         self._max_tokens = max_tokens
+        self.last_usage: Optional[Dict[str, Any]] = None   # tokens, for unified monitoring
 
     def propose(self, system_prompt: str, history: List[Dict[str, Any]]) -> ModelTurn:  # pragma: no cover
         response = self._client.messages.create(
@@ -90,6 +91,15 @@ class AnthropicAgentClient:
             tools=tool_schemas(self._registry),
             messages=_to_messages(history),
         )
+        u = getattr(response, "usage", None)
+        if u is not None:
+            # API gives tokens natively; cost is computed downstream from a pricing table.
+            self.last_usage = {
+                "input_tokens": getattr(u, "input_tokens", None),
+                "output_tokens": getattr(u, "output_tokens", None),
+                "cache_creation_input_tokens": getattr(u, "cache_creation_input_tokens", None),
+                "cache_read_input_tokens": getattr(u, "cache_read_input_tokens", None),
+            }
         return interpret_response(response.content)
 
 
@@ -122,6 +132,8 @@ def build_cli_argv(prompt: str, *, system_prompt: str, model: str, allowed_tools
             "--append-system-prompt", system_prompt,
             "--model", model,
             "--output-format", output_format]
+    if output_format == "stream-json":
+        argv.append("--verbose")          # required by the CLI for stream-json in -p mode
     if allowed_tools:
         argv += ["--allowedTools", allowed_tools]
     if permission_mode:
@@ -135,6 +147,67 @@ def parse_cli_result(stdout: str):
     data = json.loads(stdout)
     usage = {"total_cost_usd": data.get("total_cost_usd"), **(data.get("usage") or {})}
     return data.get("result", ""), usage
+
+
+# Reverse of _CLI_TOOLS_BY_ACTION: map a CLI tool back to our ActionKind for the audit log.
+_ACTION_BY_CLI_TOOL = {
+    "Read": "code-read", "Grep": "code-read", "Glob": "code-read",
+    "Edit": "code-write", "Write": "code-write", "Bash": "code-write",
+}
+
+
+def parse_cli_stream(stdout: str):
+    """Parse `claude -p --output-format stream-json` (newline-delimited JSON events) →
+    (final_text, usage_dict, actions).
+
+    - ``actions`` = list of (cli_tool, ActionKind, gated) the CLI used; a tool the CLI
+      refused (in ``permission_denials`` because it wasn't in --allowedTools) is marked
+      ``gated=True`` — so the audit shows both what ran AND what was blocked (ADR-002 §3.6).
+    - ``usage`` = the monitorable metrics from the final ``result`` event (cost, tokens,
+      duration, ttft, num_turns, cache tokens, per-model breakdown).
+
+    Tolerant: lines that aren't JSON or don't match the expected shape are skipped.
+    """
+    import json
+    final_text, usage = "", {}
+    seen = []                 # (tool_use_id, name, ActionKind) in order
+    denied_ids = set()
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        etype = event.get("type")
+        if etype == "assistant":
+            for block in event.get("message", {}).get("content", []) or []:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    name = block.get("name", "?")
+                    seen.append((block.get("id"), name, _ACTION_BY_CLI_TOOL.get(name, "cli")))
+        elif etype == "result":
+            final_text = event.get("result", final_text)
+            u = event.get("usage") or {}
+            usage = {
+                "total_cost_usd": event.get("total_cost_usd"),
+                "num_turns": event.get("num_turns"),
+                "duration_ms": event.get("duration_ms"),
+                "duration_api_ms": event.get("duration_api_ms"),
+                "ttft_ms": event.get("ttft_ms"),
+                "subtype": event.get("subtype"),
+                "is_error": event.get("is_error"),
+                "input_tokens": u.get("input_tokens"),
+                "output_tokens": u.get("output_tokens"),
+                "cache_creation_input_tokens": u.get("cache_creation_input_tokens"),
+                "cache_read_input_tokens": u.get("cache_read_input_tokens"),
+                "model_usage": event.get("modelUsage"),
+            }
+            for denial in event.get("permission_denials") or []:
+                denied_ids.add(denial.get("tool_use_id"))
+
+    actions = [(name, kind, tuid in denied_ids) for (tuid, name, kind) in seen]
+    return final_text, usage, actions
 
 
 class ClaudeCodeCliClient:
@@ -174,15 +247,17 @@ class ClaudeCodeCliClient:
         self._cli = cli
         self._permission_mode = permission_mode
         self.last_usage: Optional[Dict[str, Any]] = None
+        self.last_actions: Optional[List] = None   # (cli_tool, ActionKind) for the audit log
 
     def propose(self, system_prompt: str, history: List[Dict[str, Any]]) -> ModelTurn:  # pragma: no cover
         import os
         import subprocess
 
         task = _task_from_history(history)
+        # stream-json so we can see (and audit) the tools the CLI's own loop used.
         argv = build_cli_argv(task, system_prompt=system_prompt, model=self._model,
                               allowed_tools=self._allowed_tools, cli=self._cli,
-                              permission_mode=self._permission_mode)
+                              output_format="stream-json", permission_mode=self._permission_mode)
 
         env = dict(os.environ)
         env.pop("ANTHROPIC_API_KEY", None)        # must not override the subscription token
@@ -191,7 +266,7 @@ class ClaudeCodeCliClient:
         proc = subprocess.run(argv, cwd=self._root, env=env, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"claude CLI failed (exit {proc.returncode}): {proc.stderr.strip()}")
-        text, self.last_usage = parse_cli_result(proc.stdout)
+        text, self.last_usage, self.last_actions = parse_cli_stream(proc.stdout)
         return ModelTurn(final_text=text)
 
 

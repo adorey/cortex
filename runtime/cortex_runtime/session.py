@@ -8,12 +8,15 @@ but the load → guard → run → record → persist sequence is the contract.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from .loop import AgentLoop, ModelClient, RunOutcome
 from .safety import ConversationState, StateMachine
 from .state_store import StateStore
+
+logger = logging.getLogger("cortex_runtime.session")
 
 
 @dataclass
@@ -22,6 +25,7 @@ class SessionResult:
     outcome: Optional[RunOutcome]
     skipped: bool = False
     reason: str = ""
+    error: Optional[str] = None
 
 
 def run_session(
@@ -50,15 +54,28 @@ def run_session(
                              reason=f"state '{machine.state.value}' is not awaiting-agent (anti-recursion)")
 
     run_id = store.start_run(workspace, role, subject, model_id)
-    outcome = loop.run(system_prompt, initial_input, model, machine=machine)
 
+    try:
+        outcome = loop.run(system_prompt, initial_input, model, machine=machine)
+    except Exception as exc:  # never leave a dangling run — record the failure + log it
+        logger.exception("run %s failed (workspace=%s subject=%s)", run_id, workspace, subject)
+        store.fail_run(run_id, f"{type(exc).__name__}: {exc}")
+        return SessionResult(run_id, None, error=f"{type(exc).__name__}: {exc}")
+
+    # actions performed inside OUR loop (our tools), and actions performed inside the model
+    # backend itself (e.g. the Claude Code CLI's own tools, surfaced via model.last_actions).
     for tool, kind in outcome.actions_taken:
         store.record_action(run_id, tool, kind, gated=False, at=at)
+    for action in getattr(model, "last_actions", None) or []:
+        # tolerate (tool, kind) or (tool, kind, gated) — CLI denials come through as gated
+        tool, kind = action[0], action[1]
+        store.record_action(run_id, tool, kind, gated=action[2] if len(action) > 2 else False, at=at)
     if outcome.gated_action:
         store.record_action(run_id, outcome.gated_action[0], outcome.gated_action[1], gated=True, at=at)
 
     store.set_conversation_state(workspace, subject, outcome.state)
-    store.finish_run(run_id, outcome.state, outcome.iterations)
+    store.finish_run(run_id, outcome.state, outcome.iterations,
+                     usage=getattr(model, "last_usage", None))
     return SessionResult(run_id, outcome)
 
 

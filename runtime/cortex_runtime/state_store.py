@@ -14,11 +14,11 @@ Backends are swappable behind ``StateStore`` (the SecretProvider discipline):
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Optional, Protocol
+from typing import Any, Dict, List, Mapping, Optional, Protocol
 
 from .safety import ConversationState
 
@@ -30,8 +30,16 @@ class RunRecord:
     role: str
     subject: str
     model: Optional[str]
-    state: Optional[str]        # final ConversationState value; None while running
+    state: Optional[str]        # final ConversationState value, or "failed"; None while running
     iterations: Optional[int]
+    error: Optional[str] = None
+    cost_usd: Optional[float] = None
+    tokens_in: Optional[int] = None
+    tokens_out: Optional[int] = None
+    num_turns: Optional[int] = None
+    duration_ms: Optional[int] = None
+    ttft_ms: Optional[int] = None
+    metrics_json: Optional[str] = None   # full usage blob (cache tokens, per-model breakdown…)
 
 
 @dataclass
@@ -43,6 +51,21 @@ class AuditEntry:
     at: str
 
 
+def _usage_fields(usage: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Normalise a model client's ``last_usage`` dict to the run columns. The promoted columns
+    are the commonly-queried ones; ``metrics_json`` keeps the FULL blob so nothing is lost."""
+    usage = usage or {}
+    return {
+        "cost_usd": usage.get("total_cost_usd"),
+        "tokens_in": usage.get("input_tokens"),
+        "tokens_out": usage.get("output_tokens"),
+        "num_turns": usage.get("num_turns"),
+        "duration_ms": usage.get("duration_ms"),
+        "ttft_ms": usage.get("ttft_ms"),
+        "metrics_json": json.dumps(usage) if usage else None,
+    }
+
+
 class StateStore(Protocol):
     # — conversation state (anti-recursion across invocations) —
     def get_conversation_state(self, workspace: str, subject: str) -> Optional[ConversationState]: ...
@@ -50,7 +73,9 @@ class StateStore(Protocol):
 
     # — run lifecycle + history —
     def start_run(self, workspace: str, role: str, subject: str, model: Optional[str] = None) -> str: ...
-    def finish_run(self, run_id: str, state: ConversationState, iterations: int) -> None: ...
+    def finish_run(self, run_id: str, state: ConversationState, iterations: int,
+                   usage: Optional[Mapping[str, Any]] = None) -> None: ...
+    def fail_run(self, run_id: str, error: str) -> None: ...
     def list_runs(self, workspace: str, *, limit: int = 50) -> List[RunRecord]: ...
 
     # — audit log (append-only) —
@@ -66,10 +91,10 @@ class InMemoryStateStore:
     """Non-persistent backend for tests and ephemeral runs."""
 
     def __init__(self):
-        self._state: dict = {}                 # (workspace, subject) -> ConversationState
-        self._runs: dict = {}                  # run_id -> RunRecord
+        self._state: dict = {}
+        self._runs: dict = {}
         self._audit: List[AuditEntry] = []
-        self._run_subject: dict = {}           # run_id -> (workspace, subject) for audit filtering
+        self._run_subject: dict = {}
 
     def get_conversation_state(self, workspace, subject):
         return self._state.get((workspace, subject))
@@ -83,10 +108,17 @@ class InMemoryStateStore:
         self._run_subject[run_id] = (workspace, subject)
         return run_id
 
-    def finish_run(self, run_id, state, iterations):
+    def finish_run(self, run_id, state, iterations, usage=None):
         rec = self._runs[run_id]
         rec.state = state.value
         rec.iterations = iterations
+        for field, value in _usage_fields(usage).items():
+            setattr(rec, field, value)
+
+    def fail_run(self, run_id, error):
+        rec = self._runs[run_id]
+        rec.state = "failed"
+        rec.error = error
 
     def list_runs(self, workspace, *, limit=50):
         runs = [r for r in self._runs.values() if r.workspace == workspace]
@@ -100,6 +132,10 @@ class InMemoryStateStore:
             ws, subj = self._run_subject.get(entry.run_id, (None, None))
             return (workspace is None or ws == workspace) and (subject is None or subj == subject)
         return [e for e in self._audit if match(e)]
+
+
+_RUN_COLUMNS = "run_id, workspace, role, subject, model, state, iterations, error, " \
+               "cost_usd, tokens_in, tokens_out, num_turns, duration_ms, ttft_ms, metrics_json"
 
 
 class SqliteStateStore:
@@ -118,6 +154,8 @@ class SqliteStateStore:
             CREATE TABLE IF NOT EXISTS runs (
                 run_id TEXT PRIMARY KEY, workspace TEXT NOT NULL, role TEXT NOT NULL,
                 subject TEXT NOT NULL, model TEXT, state TEXT, iterations INTEGER,
+                error TEXT, cost_usd REAL, tokens_in INTEGER, tokens_out INTEGER,
+                num_turns INTEGER, duration_ms INTEGER, ttft_ms INTEGER, metrics_json TEXT,
                 seq INTEGER
             );
             CREATE TABLE IF NOT EXISTS audit (
@@ -126,7 +164,17 @@ class SqliteStateStore:
             );
             """
         )
+        self._migrate()
         self._conn.commit()
+
+    def _migrate(self):
+        """Add columns introduced after the first schema (forward-compatible with older dev DBs)."""
+        existing = {r["name"] for r in self._conn.execute("PRAGMA table_info(runs)")}
+        for col, decl in (("error", "TEXT"), ("cost_usd", "REAL"), ("tokens_in", "INTEGER"),
+                          ("tokens_out", "INTEGER"), ("num_turns", "INTEGER"),
+                          ("duration_ms", "INTEGER"), ("ttft_ms", "INTEGER"), ("metrics_json", "TEXT")):
+            if col not in existing:
+                self._conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {decl}")
 
     def close(self):
         self._conn.close()
@@ -150,28 +198,32 @@ class SqliteStateStore:
         run_id = _new_run_id()
         seq = self._conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM runs").fetchone()[0]
         self._conn.execute(
-            "INSERT INTO runs (run_id, workspace, role, subject, model, state, iterations, seq) "
-            "VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)",
+            "INSERT INTO runs (run_id, workspace, role, subject, model, seq) VALUES (?, ?, ?, ?, ?, ?)",
             (run_id, workspace, role, subject, model, seq),
         )
         self._conn.commit()
         return run_id
 
-    def finish_run(self, run_id, state, iterations):
+    def finish_run(self, run_id, state, iterations, usage=None):
+        u = _usage_fields(usage)
         self._conn.execute(
-            "UPDATE runs SET state=?, iterations=? WHERE run_id=?",
-            (state.value, iterations, run_id),
+            "UPDATE runs SET state=?, iterations=?, cost_usd=?, tokens_in=?, tokens_out=?, "
+            "num_turns=?, duration_ms=?, ttft_ms=?, metrics_json=? WHERE run_id=?",
+            (state.value, iterations, u["cost_usd"], u["tokens_in"], u["tokens_out"],
+             u["num_turns"], u["duration_ms"], u["ttft_ms"], u["metrics_json"], run_id),
         )
+        self._conn.commit()
+
+    def fail_run(self, run_id, error):
+        self._conn.execute("UPDATE runs SET state='failed', error=? WHERE run_id=?", (error, run_id))
         self._conn.commit()
 
     def list_runs(self, workspace, *, limit=50):
         rows = self._conn.execute(
-            "SELECT run_id, workspace, role, subject, model, state, iterations "
-            "FROM runs WHERE workspace=? ORDER BY seq DESC LIMIT ?",
+            f"SELECT {_RUN_COLUMNS} FROM runs WHERE workspace=? ORDER BY seq DESC LIMIT ?",
             (workspace, limit),
         ).fetchall()
-        return [RunRecord(r["run_id"], r["workspace"], r["role"], r["subject"],
-                          r["model"], r["state"], r["iterations"]) for r in rows]
+        return [RunRecord(**dict(r)) for r in rows]
 
     def record_action(self, run_id, tool, kind, gated, at):
         self._conn.execute(

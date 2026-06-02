@@ -68,6 +68,40 @@ class SessionTests(unittest.TestCase):
         self.assertIsNone(second.run_id)
         self.assertEqual(len(self.store.list_runs("acme")), 1)  # no second run started
 
+    def test_failed_run_is_recorded_not_dangling(self):
+        class FailingModel:
+            def propose(self, sp, h):
+                raise RuntimeError("bad path")
+        result = run_session(
+            self.loop, FailingModel(), self.store,
+            workspace="acme", role="lead-backend", subject="ACME-X",
+            system_prompt="sys", initial_input={}, at="t0",
+        )
+        self.assertIsNotNone(result.error)
+        self.assertIn("bad path", result.error)
+        rec = self.store.list_runs("acme")[0]
+        self.assertEqual(rec.state, "failed")          # not None/dangling
+        self.assertIn("bad path", rec.error)
+        # a failed run must not corrupt the conversation state
+        self.assertIsNone(self.store.get_conversation_state("acme", "ACME-X"))
+
+    def test_model_internal_actions_and_usage_recorded(self):
+        class FinalModelWithActions:
+            last_actions = [("Read", "code-read"), ("Grep", "code-read")]
+            last_usage = {"total_cost_usd": 0.02, "input_tokens": 100, "output_tokens": 40, "num_turns": 4}
+            def propose(self, sp, h):
+                return ModelTurn(final_text="diagnosis")
+        run_session(
+            self.loop, FinalModelWithActions(), self.store,
+            workspace="acme", role="lead-backend", subject="ACME-Y",
+            system_prompt="sys", initial_input={}, at="t0",
+        )
+        trail = self.store.audit_trail(subject="ACME-Y")
+        self.assertEqual([(e.tool, e.kind) for e in trail], [("Read", "code-read"), ("Grep", "code-read")])
+        rec = self.store.list_runs("acme")[0]
+        self.assertEqual(rec.cost_usd, 0.02)
+        self.assertEqual(rec.num_turns, 4)
+
     def test_human_reply_re_arms_then_resolves(self):
         self._run(ScriptedModel([ModelTurn(tool_calls=[ToolCall("open_ticket")])]))  # → awaiting-human
         mark_human_reply(self.store, "acme", "ACME-7")

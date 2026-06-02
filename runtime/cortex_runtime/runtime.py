@@ -30,6 +30,11 @@ from .tools import ToolRegistry
 DEFAULT_MODEL = "claude-opus-4-8"
 
 
+def _now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
 def make_model_client(backend: str, registry: ToolRegistry,
                       secrets: Optional[SecretProvider] = None,
                       model_id: Optional[str] = None,
@@ -93,13 +98,17 @@ class Runtime:
             loop, model, self.cfg.store,
             workspace=req.workspace, role=req.role, subject=subject,
             system_prompt=resolved.system_prompt, initial_input=req.input, model_id=req.model,
+            at=_now(),
         )
 
         if result.skipped:
             return {"skipped": True, "reason": result.reason, "subject": subject}
+        if result.error:  # the run was recorded as failed; surface it without a raw 500
+            return {"failed": True, "error": result.error, "run_id": result.run_id, "subject": subject}
         o = result.outcome
         return {
             "skipped": False,
+            "failed": False,
             "run_id": result.run_id,
             "subject": subject,
             "state": o.state.value,

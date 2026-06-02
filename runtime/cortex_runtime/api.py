@@ -11,6 +11,7 @@ and its test suite need no web framework.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from typing import Any, Dict, List, Mapping, Optional
 
@@ -18,6 +19,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .runtime import Runtime
+
+logger = logging.getLogger("cortex_runtime.api")
 
 
 class RunPayload(BaseModel):
@@ -47,6 +50,9 @@ def create_app(runtime: Runtime) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"unknown workspace: {exc}")
         except (TypeError, ValueError) as exc:  # missing role / unknown autonomy action
             raise HTTPException(status_code=422, detail=str(exc))
+        except Exception as exc:  # unexpected: log it, return a clean error (no raw stack)
+            logger.exception("request failed")
+            raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
     @app.get("/health")
     def health():

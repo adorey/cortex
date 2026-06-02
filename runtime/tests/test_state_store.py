@@ -46,6 +46,26 @@ class _StateStoreContract:
         runs = self.store.list_runs("acme")
         self.assertEqual([x.run_id for x in runs], [r2, r1])  # recent first, other workspace excluded
 
+    def test_fail_run_records_error(self):
+        rid = self.store.start_run("acme", "r", "ACME-1")
+        self.store.fail_run(rid, "RuntimeError: bad path")
+        rec = self.store.list_runs("acme")[0]
+        self.assertEqual(rec.state, "failed")
+        self.assertEqual(rec.error, "RuntimeError: bad path")
+
+    def test_finish_run_stores_usage(self):
+        import json
+        rid = self.store.start_run("acme", "r", "ACME-1")
+        self.store.finish_run(rid, ConversationState.RESOLVED, 2, usage={
+            "total_cost_usd": 0.012, "input_tokens": 100, "output_tokens": 40, "num_turns": 3,
+            "duration_ms": 36483, "ttft_ms": 4026, "cache_read_input_tokens": 999})
+        rec = self.store.list_runs("acme")[0]
+        self.assertEqual(rec.cost_usd, 0.012)
+        self.assertEqual((rec.tokens_in, rec.tokens_out, rec.num_turns), (100, 40, 3))
+        self.assertEqual((rec.duration_ms, rec.ttft_ms), (36483, 4026))
+        # the full blob is preserved in metrics_json (nothing lost — e.g. cache tokens)
+        self.assertEqual(json.loads(rec.metrics_json)["cache_read_input_tokens"], 999)
+
     def test_audit_append_and_filter(self):
         rid = self.store.start_run("acme", "r", "ACME-9")
         self.store.record_action(rid, "read_db", "db-read", gated=False, at="t1")
