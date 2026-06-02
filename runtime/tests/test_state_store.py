@@ -39,6 +39,11 @@ class _StateStoreContract:
         self.assertEqual(runs[0].iterations, 4)
         self.assertEqual(runs[0].role, "lead-backend")
 
+    def test_get_run_returns_record_or_none(self):
+        rid = self.store.start_run("acme", "lead-backend", "ACME-1", model="m")
+        self.assertEqual(self.store.get_run(rid).subject, "ACME-1")
+        self.assertIsNone(self.store.get_run("does-not-exist"))
+
     def test_list_runs_is_scoped_and_recent_first(self):
         r1 = self.store.start_run("acme", "r", "S1")
         r2 = self.store.start_run("acme", "r", "S2")

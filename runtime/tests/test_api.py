@@ -75,6 +75,31 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(r.json()["skipped"])
 
+    def test_monitoring_runs_list(self):
+        self.client.post("/run", json={"workspace": "host", "role": "support-engineer",
+                                       "subject": "ACME-7", "input": {}})
+        r = self.client.get("/runs", params={"workspace": "host"})
+        self.assertEqual(r.status_code, 200)
+        runs = r.json()["runs"]
+        self.assertGreaterEqual(len(runs), 1)
+        self.assertEqual(runs[0]["state"], "resolved")
+
+    def test_monitoring_run_detail_and_404(self):
+        body = self.client.post("/run", json={"workspace": "host", "role": "support-engineer",
+                                              "subject": "ACME-8", "input": {}}).json()
+        r = self.client.get(f"/runs/{body['run_id']}")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["subject"], "ACME-8")
+        self.assertEqual(self.client.get("/runs/nope").status_code, 404)
+
+    def test_monitoring_audit(self):
+        self.client.post("/run", json={"workspace": "host", "role": "support-engineer",
+                                       "subject": "ACME-9", "input": {}})
+        r = self.client.get("/audit", params={"subject": "ACME-9"})
+        self.assertEqual(r.status_code, 200)
+        tools = [e["tool"] for e in r.json()["audit"]]
+        self.assertIn("post_internal_comment", tools)
+
 
 if __name__ == "__main__":
     unittest.main()

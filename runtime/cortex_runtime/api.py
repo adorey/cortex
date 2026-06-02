@@ -54,10 +54,28 @@ def create_app(runtime: Runtime) -> FastAPI:
             logger.exception("request failed")
             raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
+    store = runtime.cfg.store
+
     @app.get("/health")
     def health():
         return {"status": "ok", "backend": runtime.cfg.model_backend,
                 "workspaces": sorted(runtime.cfg.workspaces), "endpoints": sorted(manifest)}
+
+    # — monitoring (read-only): run history, run detail, audit trail —
+    @app.get("/runs")
+    def runs(workspace: str, limit: int = 50):
+        return {"runs": [asdict(r) for r in store.list_runs(workspace, limit=limit)]}
+
+    @app.get("/runs/{run_id}")
+    def run_detail(run_id: str):
+        record = store.get_run(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail=f"unknown run: {run_id}")
+        return asdict(record)
+
+    @app.get("/audit")
+    def audit(workspace: Optional[str] = None, subject: Optional[str] = None):
+        return {"audit": [asdict(e) for e in store.audit_trail(workspace=workspace, subject=subject)]}
 
     @app.post("/resolve")
     def resolve(payload: RunPayload):

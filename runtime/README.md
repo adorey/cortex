@@ -161,6 +161,16 @@ result = run_session(loop, model, store, workspace="acme", role="support-enginee
   marked `gated` (so the audit shows what ran AND what was blocked). §3.6 holds even though the
   CLI owns the loop.
 
+### Monitoring API (read-only)
+
+The stored metrics are exposed for a host (e.g. a dashboard) to poll:
+
+```
+GET /runs?workspace=acme[&limit=50]   → run history (state, cost, tokens, duration, num_turns)
+GET /runs/{run_id}                     → one run + its full metrics_json
+GET /audit?workspace=&subject=         → the action trail (with the gated flag)
+```
+
 ## Run the tests (zero install)
 
 ```bash

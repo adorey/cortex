@@ -76,6 +76,7 @@ class StateStore(Protocol):
     def finish_run(self, run_id: str, state: ConversationState, iterations: int,
                    usage: Optional[Mapping[str, Any]] = None) -> None: ...
     def fail_run(self, run_id: str, error: str) -> None: ...
+    def get_run(self, run_id: str) -> Optional[RunRecord]: ...
     def list_runs(self, workspace: str, *, limit: int = 50) -> List[RunRecord]: ...
 
     # — audit log (append-only) —
@@ -119,6 +120,9 @@ class InMemoryStateStore:
         rec = self._runs[run_id]
         rec.state = "failed"
         rec.error = error
+
+    def get_run(self, run_id):
+        return self._runs.get(run_id)
 
     def list_runs(self, workspace, *, limit=50):
         runs = [r for r in self._runs.values() if r.workspace == workspace]
@@ -217,6 +221,11 @@ class SqliteStateStore:
     def fail_run(self, run_id, error):
         self._conn.execute("UPDATE runs SET state='failed', error=? WHERE run_id=?", (error, run_id))
         self._conn.commit()
+
+    def get_run(self, run_id):
+        row = self._conn.execute(
+            f"SELECT {_RUN_COLUMNS} FROM runs WHERE run_id=?", (run_id,)).fetchone()
+        return RunRecord(**dict(row)) if row else None
 
     def list_runs(self, workspace, *, limit=50):
         rows = self._conn.execute(

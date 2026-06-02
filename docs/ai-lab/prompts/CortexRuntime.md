@@ -168,6 +168,15 @@
 - **Cause du seq-4 vide = serveur non redémarré** → relancer uvicorn charge le nouveau code.
 **Tags :** `iteration`, `monitoring`, `metrics`, `stream-json`, `permission-denials`, `gated`, `metrics-json`
 
+### 2026-06-02 — Routes de monitoring (exposition vers WBTB)
+**Contexte :** maintenant que les métriques sont stockées, les exposer en lecture pour qu'un hôte (WBTB) les consomme.
+**Participants :** @Oolon → @Hactar
+**Décisions / outputs :**
+- `StateStore.get_run(run_id)` ajouté (manquait pour le détail).
+- 3 routes read-only : `GET /runs?workspace=` (historique), `GET /runs/{run_id}` (détail + `metrics_json`), `GET /audit?workspace=&subject=` (trace d'actions avec flag `gated`). 404 sur run inconnu.
+- 129 tests (119 verts, 10 API skipped).
+**Tags :** `monitoring`, `api`, `get-runs`, `audit`, `observability`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
