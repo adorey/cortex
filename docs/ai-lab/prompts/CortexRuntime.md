@@ -177,6 +177,20 @@
 - 129 tests (119 verts, 10 API skipped).
 **Tags :** `monitoring`, `api`, `get-runs`, `audit`, `observability`
 
+### 2026-06-02 — Spec métier : rôle `support-engineer` (N2) + workflow (ADR-002 follow-up #1)
+**Contexte :** première vraie spec que le runtime consommera — un Support Engineer N2 qui pré-analyse et décide d'escalader, sans jamais orchestrer.
+**Initial prompt :**
+> « l'objectif de ce rôle c'est de jouer un N2 : proposer une analyse technique complète suite à la demande d'un client, cibler lui-même les symptômes, faire appel aux N3 pour affiner, puis demander au tech-writer de rédiger la réponse. Il ne pilote pas les devs (c'est le prompt-manager), il ne parle pas en direct aux autres (il passe par Oolon). Il fait une pré-analyse et décide d'escalader ou non. »
+
+**Participants :** @Oolon → @Wonko (nouveau)
+**Décisions / outputs :**
+- **Principe central** = le dispatch protocol de Cortex : *le support-engineer analyse, le prompt-manager orchestre*. Le rôle n'émet que des **demandes structurées** adressées au prompt-manager (escalade / rédaction / délégation correctif / clarification). Aucun @-mention direct.
+- **Agnosticisme strict** (retour humanoïde) : le rôle et le workflow référencent les **rôles par chemin** (`roles/engineering/lead-backend.md`…), jamais les personnages. Vérifié (grep vide).
+- 4 fichiers : [`roles/engineering/support-engineer.md`](../../../agents/roles/engineering/support-engineer.md) (matrice de triage, livrable structuré, 2 phases, anti-patterns), [`workflows/engineering/support-triage.md`](../../../agents/workflows/engineering/support-triage.md), [`personalities/h2g2/Wonko-the-Sane.md`](../../../agents/personalities/h2g2/Wonko-the-Sane.md) (diagnosticien calme), + ligne dans `characters.md`.
+- **v1 human-gated** ; futurs notés en commentaire : overlay catalogue de symptômes (+ auto-feedback sur tickets clos), N3 proposant un fix sur branche + ticket dev.
+- **Lien dette runtime** : l'état final naturel du rôle = `AWAITING_HUMAN` (handoff) → motive l'implémentation du signal `handoff`/`escalate` côté boucle (noté).
+**Tags :** `adr-002-followup`, `support-engineer`, `role`, `workflow`, `wonko`, `agnostic`, `n2-n3`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
