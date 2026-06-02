@@ -46,7 +46,7 @@
 - **Nuance B (parité)** : bash et Python ne partagent pas de lib → deux implémentations + test de parité ⇒ dérive **détectable**, pas **impossible**. Chemin retenu : validation en Python à terme.
 - **Tranché → Option A (déterministe)** confirmée par l'humanoïde : on résout et on intègre au contexte initial.
 - **Submodules** : pas de collision de spec (le moteur ne transporte aucun markdown). Vraie nuance = mécanique git (`git submodule update` après fetch, worktree + submodules) → à traiter en Phase 4.
-- Confirmé : pour wbtb **et** Bluspark, cortex intégré au workspace via `root` (submodule), indépendamment du choix A/B.
+- Confirmé : pour les projets hôtes, cortex intégré au workspace via `root` (submodule), indépendamment du choix A/B.
 **Tags :** `architecture`, `decision`, `pre-resolution`, `submodule`, `firewall`
 
 ### 2026-06-02 — Phase 2 : API agnostique + dérivation des capabilities
@@ -91,14 +91,28 @@
 
 **Participants :** @Oolon → @Marvin (secrets/sécurité) → @Hactar (adaptateur)
 **Décisions / outputs :**
-- **`SecretProvider`** ([secret_provider.py](../../../runtime/cortex_runtime/secret_provider.py)) : interface stable `get(name)` (§3.6). Backends : `DotenvSecretProvider` (`.env.local`, dev), `EnvSecretProvider` (env / K8s Secret, prod), `ChainSecretProvider` (file→env), factory `local_secret_provider`. **Per-tenant** via préfixe de namespace (`WBTB_LLM_KEY`). Jamais commité : `.env.local` gitignoré + template `.env.local.example`.
+- **`SecretProvider`** ([secret_provider.py](../../../runtime/cortex_runtime/secret_provider.py)) : interface stable `get(name)` (§3.6). Backends : `DotenvSecretProvider` (`.env.local`, dev), `EnvSecretProvider` (env / K8s Secret, prod), `ChainSecretProvider` (file→env), factory `local_secret_provider`. **Per-tenant** via préfixe de namespace (`ACME_LLM_KEY`). Jamais commité : `.env.local` gitignoré + template `.env.local.example`.
 - **`AnthropicAgentClient`** ([agent_client.py](../../../runtime/cortex_runtime/agent_client.py)) : implémente `ModelClient`, clé tirée du `SecretProvider`, **import `anthropic` paresseux** → package + tests restent install-free. Mapping `_to_messages` volontairement simple (référence ; le bookkeeping tool_use/tool_result revient à l'Agent SDK en prod).
 - **Surface pure testée** : `interpret_response` (blocs réponse → `ModelTurn`) et `tool_schemas` (registry → défs d'outils Anthropic).
 - 87 tests (80 verts, 7 API skipped). `import cortex_runtime` ne tire ni `anthropic` ni `fastapi`.
 **Tags :** `phase-3b`, `secrets`, `secret-provider`, `dotenv`, `agent-sdk`, `model-client`, `least-privilege`
 
+### 2026-06-02 — Décision : couche de persistance (ADR-003) + multi-provider différé
+**Contexte :** revue du code Phase 3b. L'humanoïde soulève le nommage des clés multi-provider et propose d'introduire une base de données interne dès maintenant.
+**Initial prompt :**
+> « demain je veux pouvoir switcher entre modèle anthropic et openai, le modèle de nommage des clés va être un frein » · « est-ce qu'on ne ferait pas mieux dès maintenant de partir sur une base de données interne à cortex (config à chaud, GUI future, log pour le monitoring) ? »
+
+**Participants :** @Oolon → @Slartibartfast (frontière archi) → @Marvin (secrets)
+**Décisions / outputs :**
+- **Multi-provider : laissé tel quel** pour l'instant (`llm_key` conservé, Anthropic-only). La vraie réponse = **model gateway LiteLLM** (§3.5) : une clé virtuelle par tenant, routing provider dans le gateway → le nommage cesse d'être un frein. Différé.
+- **Persistance : OUI, mais opérationnel uniquement**, derrière une interface `StateStore` swappable (SQLite dev / Postgres prod), même discipline que `SecretProvider`. **Frontière git↔DB validée** par l'humanoïde : git = ce qui *définit* l'agent (spec) ; DB = ce que l'agent *produit/vit* (état de conversation pour l'anti-récursion, audit §3.6, run history). La spec n'est **jamais** déplacée en base (firewall ADR-002 §5).
+- **Trou identifié** : la `StateMachine` anti-récursion est aujourd'hui en mémoire → non-fonctionnelle entre deux webhooks. La persistance la rend durable.
+- **[ADR-003](../../adr/ADR-003-persistence-state-layer.md) rédigé et accepté** — après revue humanoïde : `ticket` → `subject` (agnostique), et scrub des noms de projets privés (WBTB/Bluspark → `acme`) dans les fichiers de session + le guide `extending-layers.md` (ADR-001 laissé tel quel comme trace ratifiée).
+**Tags :** `adr-003`, `persistence`, `state-store`, `audit`, `git-vs-db`, `litellm`, `multi-provider`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
+- [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
 - [ADR-001 — Layered overrides](../../adr/ADR-001-layered-overrides.md)
 - [`runtime/README.md`](../../../runtime/README.md) — statut des phases
 

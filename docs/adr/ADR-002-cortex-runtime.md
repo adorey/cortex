@@ -269,6 +269,7 @@ Dependent on this ADR, tracked separately:
 ## 7. References
 
 - [ADR-001 — Layered overrides](ADR-001-layered-overrides.md) — the cascade contract this ADR makes executable
+- [ADR-003 — Persistence & operational state layer](ADR-003-persistence-state-layer.md) — adds the runtime's operational state (conversation state §3.3, audit §3.6) without breaching this ADR's firewall
 - [cortex/agents/roles/prompt-manager.md](../../agents/roles/prompt-manager.md) — dispatch protocol
 - [cortex/agents/workflows/README.md](../../agents/workflows/README.md) — workflow cascade
 - [cortex/bin/validate-overlays.sh](../../bin/validate-overlays.sh) — existing partial resolver (validation)
