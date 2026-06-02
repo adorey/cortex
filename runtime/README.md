@@ -24,7 +24,7 @@ cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
 |---|---|---|
 | 0 | Scaffolding + firewall guard | ✅ |
 | 1 | **Resolver** (§3.1 cascade + §3.2 merge) — *the singularity* | ✅ |
-| 2 | Agnostic API `POST /run` (§3.2) | ⏳ |
+| 2 | Agnostic API `POST /run` + `derive_capabilities` + manifest aliases (§3.2) | ✅ |
 | 3 | Agentic loop, safety rails in code (§3.3) | ⏳ |
 | 4 | Project binding: warm mirrors + git worktree (§3.4) | ⏳ |
 | 5 | Model gateway (§3.5) | deferred |
@@ -41,6 +41,28 @@ cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
 `tests/test_parity.py` asserts the Python resolver agrees with the shipped
 [`bin/validate-overlays.sh`](../bin/validate-overlays.sh) on a fixture cascade, so the two
 implementations cannot drift apart silently (ADR-002 §3.1).
+
+## The agnostic API (Phase 2)
+
+`POST /run` resolves a request into the bundle the agentic loop will consume (the loop
+itself is Phase 3). Projects **declare** domain endpoints via a manifest — they do not
+write engine code (ADR-002 §3.2):
+
+```python
+from pathlib import Path
+from cortex_runtime.api import create_app          # needs `pip install -e .[dev]` + fastapi
+from cortex_runtime.app import WorkspaceConfig
+
+app = create_app(
+    registry={"wbtb": WorkspaceConfig(root=Path("/data/mirrors/wbtb"), theme="h2g2")},
+    manifest={"/pr-review": {"role": "lead-backend", "workflow": "code-review"}},
+)
+# POST /run {"workspace":"wbtb","role":"lead-backend","service":"billing","workflow":"code-review"}
+# POST /pr-review {"workspace":"wbtb","service":"billing"}   ← role/workflow from the manifest
+```
+
+The resolution core (`resolve_run`, `derive_capabilities`, alias merging) is
+framework-agnostic and lives in `run.py` / `context.py` / `app.py` — tested without FastAPI.
 
 ## Run the tests (zero install)
 

@@ -115,6 +115,18 @@ def find_role_relpath(role: str, root: Path) -> Optional[str]:
     return None
 
 
+def find_workflow_relpath(workflow: str, root: Path) -> Optional[str]:
+    """Locate a workflow's category by globbing the base workflows tree.
+
+    Like roles, workflows live at ``workflows/{category}/{workflow}.md`` but the API
+    payload carries only the bare name. Returns ``{category}/{workflow}.md`` or ``None``.
+    """
+    base_wf = Path(root) / "cortex" / "agents" / "workflows"
+    for match in sorted(base_wf.glob(f"*/{workflow}.md")):
+        return f"{match.parent.name}/{workflow}.md"
+    return None
+
+
 def character_for_role(role: str, theme: str, root: Path) -> Optional[str]:
     """Find the character card assigned to ``role`` in a theme's ``characters.md``.
 

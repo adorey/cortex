@@ -15,7 +15,7 @@
 3. **Le moteur ne transporte aucune spec.** `root` pointe sur le mirror du projet ; `root/cortex` = le cortex du projet (submodule). Une seule cascade en jeu (celle du projet) → **zéro collision** de spec.
 4. **Validation des overlays → Python.** À terme, `validate-overlays.sh` se réduit à une coquille appelant le résolveur Python (source unique de vérité), remplaçant le test de parité bash↔Python.
 
-**Avancement :** Phase 0 (scaffolding + firewall) ✅ · Phase 1 (résolveur §3.1/§3.2 + tests) ✅ — **33 tests verts**. Phase 2 (API `POST /run`) en cours.
+**Avancement :** Phase 0 (scaffolding + firewall) ✅ · Phase 1 (résolveur §3.1/§3.2) ✅ · Phase 2 (API `POST /run` + `derive_capabilities` + alias manifeste) ✅ — **55 tests (50 verts, 5 API skipped sans FastAPI)**. Phase 3 (boucle agentique) à venir.
 
 ## 🗓️ Timeline
 
@@ -48,6 +48,17 @@
 - **Submodules** : pas de collision de spec (le moteur ne transporte aucun markdown). Vraie nuance = mécanique git (`git submodule update` après fetch, worktree + submodules) → à traiter en Phase 4.
 - Confirmé : pour wbtb **et** Bluspark, cortex intégré au workspace via `root` (submodule), indépendamment du choix A/B.
 **Tags :** `architecture`, `decision`, `pre-resolution`, `submodule`, `firewall`
+
+### 2026-06-02 — Phase 2 : API agnostique + dérivation des capabilities
+**Contexte :** implémentation de la couche API (ADR-002 §3.2) après validation de la fondation.
+**Participants :** @Oolon → @Hactar
+**Décisions / outputs :**
+- **`derive_capabilities()`** ([context.py](../../../runtime/cortex_runtime/context.py)) solde la Nuance A : intersection du catalogue de capabilities de la cascade avec les technos citées dans `project-context.md`. Dette assumée : match par *stem* (« postgresql » oui, « Postgres » non) → table d'alias = raffinement ultérieur.
+- **`resolve_run()`** ([run.py](../../../runtime/cortex_runtime/run.py)) : cœur déterministe framework-agnostique → bundle {system_prompt, capabilities, workflow advisory, layers, model}.
+- **Shell FastAPI mince** ([api.py](../../../runtime/cortex_runtime/api.py)) : `POST /run`, `/health`, endpoints alias déclarés par **manifeste** (le projet déclare, il n'écrit pas de code moteur).
+- **Firewall préservé** : `import cortex_runtime` ne tire pas FastAPI (import paresseux dans api.py) → suite de tests sans dépendance.
+- Pré-résolution respectée : `/run` retourne le bundle résolu ; le branchement de la boucle agentique est **Phase 3**.
+**Tags :** `phase-2`, `api`, `derive-capabilities`, `manifest`, `fastapi`
 
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
