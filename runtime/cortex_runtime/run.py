@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .context import derive_capabilities
 from .resolver import build_system_prompt, find_workflow_relpath, layers_for, read_resolved
+from .safety import ActionPolicy
 
 
 @dataclass
@@ -28,6 +29,10 @@ class RunRequest:
     workflow: Optional[str] = None
     input: Dict[str, Any] = field(default_factory=dict)
     model: Optional[str] = None
+    # Actions the agent may take WITHOUT human validation, for THIS run (action-kind
+    # strings, e.g. ["code-read", "internal-comment"]). None → least-privilege default. The
+    # autonomy level is a per-request decision, never hard-coded (ADR-002 §3.3).
+    autonomy: Optional[List[str]] = None
 
 
 @dataclass
@@ -39,6 +44,7 @@ class ResolvedRun:
     workflow: Optional[str]              # advisory recipe text, or None
     layers: List[Tuple[str, str]]        # (layer, file) pairs that built the identity
     model: Optional[str]
+    allowed_actions: List[str]           # autonomy granted for this run (gating allowlist)
 
 
 def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> ResolvedRun:
@@ -61,10 +67,14 @@ def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> Res
         if wf_rel:
             workflow_text = read_resolved("workflows", wf_rel, req.service, root) or None
 
+    # Validate & normalise the per-request autonomy (raises ValueError on an unknown action).
+    policy = ActionPolicy.from_names(req.autonomy)
+
     return ResolvedRun(
         system_prompt=system_prompt,
         capabilities=capabilities,
         workflow=workflow_text,
         layers=layers_for(req.role, theme, root),
         model=req.model,
+        allowed_actions=sorted(k.value for k in policy.allowed),
     )

@@ -19,7 +19,16 @@ from .resolver import (
     resolve_layer,
     semantic_for,
 )
+from .loop import AgentLoop, ModelClient, ModelTurn, RunOutcome, ToolCall
 from .run import ResolvedRun, RunRequest, resolve_run
+from .safety import (
+    SAFE_DEFAULT_ACTIONS,
+    ActionKind,
+    ActionPolicy,
+    ConversationState,
+    StateMachine,
+)
+from .tools import Tool, ToolRegistry
 
 __all__ = [
     # resolver
@@ -40,6 +49,20 @@ __all__ = [
     "RunRequest",
     "ResolvedRun",
     "resolve_run",
+    # safety rails
+    "ActionKind",
+    "ActionPolicy",
+    "SAFE_DEFAULT_ACTIONS",
+    "ConversationState",
+    "StateMachine",
+    # tools + loop
+    "Tool",
+    "ToolRegistry",
+    "AgentLoop",
+    "ModelClient",
+    "ModelTurn",
+    "ToolCall",
+    "RunOutcome",
 ]
 
 __version__ = "0.0.1"

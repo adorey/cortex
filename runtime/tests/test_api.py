@@ -54,6 +54,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIsNotNone(r.json()["workflow"])
 
+    def test_autonomy_passes_through_payload(self):
+        r = self.client.post("/run", json={
+            "workspace": "host", "role": "lead-backend",
+            "autonomy": ["code-read", "code-write", "git-push"],
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["allowed_actions"], ["code-read", "code-write", "git-push"])
+
+    def test_unknown_autonomy_action_422(self):
+        r = self.client.post("/run", json={
+            "workspace": "host", "role": "lead-backend", "autonomy": ["nuke-everything"],
+        })
+        self.assertEqual(r.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()

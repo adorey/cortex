@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -27,6 +27,7 @@ class RunPayload(BaseModel):
     workflow: Optional[str] = None
     input: Dict[str, Any] = {}
     model: Optional[str] = None
+    autonomy: Optional[List[str]] = None  # action kinds allowed without human validation
 
 
 def create_app(
@@ -44,7 +45,7 @@ def create_app(
             resolved = resolve_endpoint(registry, merged, alias)
         except KeyError:
             raise HTTPException(status_code=404, detail=f"unknown workspace: {payload.workspace}")
-        except (KeyError, TypeError) as exc:  # missing role with no alias to supply it
+        except (TypeError, ValueError) as exc:  # missing role, or an unknown autonomy action
             raise HTTPException(status_code=422, detail=str(exc))
         return asdict(resolved)
 

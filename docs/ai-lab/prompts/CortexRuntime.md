@@ -15,7 +15,7 @@
 3. **Le moteur ne transporte aucune spec.** `root` pointe sur le mirror du projet ; `root/cortex` = le cortex du projet (submodule). Une seule cascade en jeu (celle du projet) → **zéro collision** de spec.
 4. **Validation des overlays → Python.** À terme, `validate-overlays.sh` se réduit à une coquille appelant le résolveur Python (source unique de vérité), remplaçant le test de parité bash↔Python.
 
-**Avancement :** Phase 0 (scaffolding + firewall) ✅ · Phase 1 (résolveur §3.1/§3.2) ✅ · Phase 2 (API `POST /run` + `derive_capabilities` + alias manifeste) ✅ — **55 tests (50 verts, 5 API skipped sans FastAPI)**. Phase 3 (boucle agentique) à venir.
+**Avancement :** Phase 0 ✅ · Phase 1 (résolveur) ✅ · Phase 2 (API + `derive_capabilities` + alias) ✅ · Phase 3 (boucle agentique + garde-fous en code, **autonomie par requête**) ✅ — **75 tests (68 verts, 7 API skipped)**. Reste : adaptateur Agent SDK réel (Phase 3b), binding mirrors/worktree (Phase 4), secrets (Phase 6).
 
 ## 🗓️ Timeline
 
@@ -59,6 +59,30 @@
 - **Firewall préservé** : `import cortex_runtime` ne tire pas FastAPI (import paresseux dans api.py) → suite de tests sans dépendance.
 - Pré-résolution respectée : `/run` retourne le bundle résolu ; le branchement de la boucle agentique est **Phase 3**.
 **Tags :** `phase-2`, `api`, `derive-capabilities`, `manifest`, `fastapi`
+
+### 2026-06-02 — Phase 3 : boucle agentique + garde-fous en code
+**Contexte :** implémentation du §3.3 — la boucle décide via le LLM, les garde-fous sont déterministes.
+**Participants :** @Oolon → @Ford (infra boucle) → @Hactar (rails)
+**Décisions / outputs :**
+- **Honnêteté d'archi** : le mécanisme `tool_use→result→loop` appartient à l'Agent SDK (EMBED). Non installable/appelable ici → on livre la **part uniquement nôtre** : les garde-fous + un driver minimal avec frontière modèle injectable (`ModelClient`).
+- **`safety.py`** : `ActionPolicy` (phase-1 : read + internal-comment seulement, le reste gated), `StateMachine` (awaiting-agent → awaiting-human → resolved, **anti-récursion** : l'agent ne réagit jamais à sa propre sortie), cap d'itérations → `ESCALATED`.
+- **`tools.py`** : `Tool` (callable + `ActionKind`) + `ToolRegistry` → le gating est déterministe sans connaître ce que fait l'outil.
+- **`loop.py`** : `AgentLoop` enrobe le `ModelClient` des rails ; action gated → halt + `AWAITING_HUMAN` ; testé avec un faux modèle scripté.
+- **Point d'intégration documenté** : l'adaptateur Agent SDK réel implémente `ModelClient.propose` (Phase 3b, requiert SDK + clé, non exécutable ici).
+**Tags :** `phase-3`, `agentic-loop`, `safety-rails`, `gating`, `anti-recursion`, `state-machine`
+
+### 2026-06-02 — Revue humanoïde Phase 3 : autonomie par requête + taxonomie d'actions enrichie
+**Contexte :** revue pré-commit de la Phase 3. L'humanoïde demande deux changements.
+**Initial prompt :**
+> « il ne faut pas synchroniser l'autonomie laissée aux agents en parlant de "phase" ou même en dur dans le code. Il faudrait que ça puisse être en paramètre d'entrée, directement dans la request. »
+> « quitte à mettre des garde-fous, j'irais beaucoup plus loin dans les rôles disponibles : Access DB, git, push/pull, Jira edit, add comment, create code, read code, deletion action… »
+
+**Décisions / outputs :**
+- **Autonomie = allowlist par requête** : suppression de l'enum `Phase` hardcodé. `ActionPolicy(allowed=…)` ; nouveau champ `RunRequest.autonomy` / payload API (liste d'action-kinds). Omis → `SAFE_DEFAULT_ACTIONS` (least-privilege : reads + internal-comment). `ResolvedRun.allowed_actions` reflète l'autonomie effective ; nom d'action inconnu → `ValueError` → 422.
+- **Taxonomie `ActionKind` granularisée** : `code-read/code-write`, `db-read/db-write`, `git-read/git-push`, `issue-read/issue-edit/issue-create`, `internal-comment`, `customer-reply`, `delete`. Permet de trancher finement (ex. autoriser `git-read` mais pas `git-push`).
+- La notion ADR « phase 1 / phase X » devient une **convention de déploiement** exprimée par l'autonomie accordée, plus un enum en dur.
+- 75 tests (68 verts, 7 API skipped).
+**Tags :** `phase-3`, `review`, `autonomy`, `per-request`, `action-kind`, `least-privilege`
 
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)

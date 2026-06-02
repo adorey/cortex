@@ -25,7 +25,7 @@ cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
 | 0 | Scaffolding + firewall guard | ✅ |
 | 1 | **Resolver** (§3.1 cascade + §3.2 merge) — *the singularity* | ✅ |
 | 2 | Agnostic API `POST /run` + `derive_capabilities` + manifest aliases (§3.2) | ✅ |
-| 3 | Agentic loop, safety rails in code (§3.3) | ⏳ |
+| 3 | Agentic loop + safety rails in code (§3.3) — *real SDK adapter pending* | ✅ |
 | 4 | Project binding: warm mirrors + git worktree (§3.4) | ⏳ |
 | 5 | Model gateway (§3.5) | deferred |
 | 6 | Secrets: `SecretProvider` interface (§3.6) | ⏳ |
@@ -63,6 +63,27 @@ app = create_app(
 
 The resolution core (`resolve_run`, `derive_capabilities`, alias merging) is
 framework-agnostic and lives in `run.py` / `context.py` / `app.py` — tested without FastAPI.
+
+## The agentic loop (Phase 3)
+
+The loop *mechanism* is embedded from an Agent SDK (we don't reinvent `tool_use → result
+→ loop`). What is uniquely ours lives in `safety.py` and is enforced in code, never in the
+prompt (ADR-002 §3.3):
+
+- **`ActionPolicy`** — autonomy is **per request**, not a hard-coded phase: the caller
+  passes `autonomy: ["code-read", "code-write", …]` in the payload (the action kinds the
+  agent may take without human validation). Omitted → least-privilege default (reads +
+  internal comment). Any action outside the allowlist is **gated** → the loop halts at
+  `AWAITING_HUMAN`.
+- **`ActionKind`** — a granular taxonomy so autonomy can be sliced finely: `code-read /
+  code-write`, `db-read / db-write`, `git-read / git-push`, `issue-read / issue-edit /
+  issue-create`, `internal-comment`, `customer-reply`, `delete`.
+- **`StateMachine`** — `awaiting-agent → awaiting-human → resolved`, with anti-recursion:
+  the agent never runs off its own output.
+- **iteration cap** → forced `ESCALATED`.
+
+`loop.AgentLoop` drives a `ModelClient` (the SDK boundary — the real adapter implements
+`propose`; tests use a scripted fake) and applies the rails around it.
 
 ## Run the tests (zero install)
 

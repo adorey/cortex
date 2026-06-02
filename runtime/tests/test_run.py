@@ -56,6 +56,24 @@ class ResolveRunTests(unittest.TestCase):
         self.assertIn("BASE-ROLE", run.system_prompt)
         self.assertNotIn("BASE-THEME", run.system_prompt)
 
+    def test_autonomy_defaults_to_least_privilege(self):
+        run = resolve_run(RunRequest(workspace="host", role="lead-backend"), ROOT)
+        self.assertEqual(
+            run.allowed_actions,
+            ["code-read", "db-read", "git-read", "internal-comment", "issue-read"],
+        )
+
+    def test_autonomy_is_per_request(self):
+        req = RunRequest(workspace="host", role="lead-backend",
+                         autonomy=["code-read", "code-write", "git-push"])
+        run = resolve_run(req, ROOT)
+        self.assertEqual(run.allowed_actions, ["code-read", "code-write", "git-push"])
+
+    def test_unknown_autonomy_action_raises(self):
+        req = RunRequest(workspace="host", role="lead-backend", autonomy=["do-anything"])
+        with self.assertRaises(ValueError):
+            resolve_run(req, ROOT)
+
 
 if __name__ == "__main__":
     unittest.main()
