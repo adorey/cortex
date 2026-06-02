@@ -1,23 +1,23 @@
-"""Thin FastAPI shell over app.resolve_endpoint — the engine's entry contract (ADR-002 §3.2).
+"""Thin FastAPI shell over the Runtime — the engine's entry contract (ADR-002 §3.2).
 
-Intentionally minimal: it does HTTP, validation, and routing; all resolution logic lives in
-app.py / run.py (testable without FastAPI). FastAPI is imported here only, so the rest of the
-package — and its test suite — needs no web framework installed.
+Intentionally minimal: HTTP, validation, routing. All logic lives in runtime.py / run.py /
+app.py (testable without FastAPI). FastAPI is imported here only, so the rest of the package
+and its test suite need no web framework.
 
-Phase 2 scope: ``/run`` (and manifest aliases) return the *resolved bundle*. Wiring the
-agentic loop (§3.3) onto this resolution is Phase 3.
+- POST /resolve      → the resolved identity bundle (resolution only)
+- POST /run          → resolve AND execute the agentic loop (durable state + audit)
+- POST /{alias}      → manifest-declared domain endpoints, alias to /run
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict
-from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from .app import WorkspaceConfig, resolve_endpoint
+from .runtime import Runtime
 
 
 class RunPayload(BaseModel):
@@ -25,45 +25,49 @@ class RunPayload(BaseModel):
     role: Optional[str] = None          # may come from an endpoint alias instead
     service: Optional[str] = None
     workflow: Optional[str] = None
+    subject: Optional[str] = None       # correlation key (ADR-003); defaults per host
     input: Dict[str, Any] = {}
     model: Optional[str] = None
     autonomy: Optional[List[str]] = None  # action kinds allowed without human validation
 
 
-def create_app(
-    registry: Mapping[str, WorkspaceConfig],
-    manifest: Optional[Mapping[str, Mapping[str, Any]]] = None,
-) -> FastAPI:
-    """Build the API. ``registry`` binds workspaces to mirrors; ``manifest`` maps domain
-    paths (e.g. ``/support/analyze``) to alias payloads that merge into ``/run``."""
+def create_app(runtime: Runtime) -> FastAPI:
+    """Build the API over a configured ``Runtime`` (workspaces, store, model backend, manifest)."""
     app = FastAPI(title="cortex-runtime", version="0.0.1")
-    manifest = dict(manifest or {})
+    manifest = dict(runtime.cfg.manifest)
 
-    def _resolve(payload: RunPayload, alias: Optional[Mapping[str, Any]] = None):
-        merged = payload.model_dump()
+    def _require_role(payload: RunPayload, alias: Optional[Mapping[str, Any]]):
+        if payload.role is None and not (alias and alias.get("role")):
+            raise HTTPException(status_code=422, detail="`role` is required (in the payload or the endpoint alias)")
+
+    def _guard(fn):
         try:
-            resolved = resolve_endpoint(registry, merged, alias)
-        except KeyError:
-            raise HTTPException(status_code=404, detail=f"unknown workspace: {payload.workspace}")
-        except (TypeError, ValueError) as exc:  # missing role, or an unknown autonomy action
+            return fn()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=f"unknown workspace: {exc}")
+        except (TypeError, ValueError) as exc:  # missing role / unknown autonomy action
             raise HTTPException(status_code=422, detail=str(exc))
-        return asdict(resolved)
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "workspaces": sorted(registry), "endpoints": sorted(manifest)}
+        return {"status": "ok", "backend": runtime.cfg.model_backend,
+                "workspaces": sorted(runtime.cfg.workspaces), "endpoints": sorted(manifest)}
+
+    @app.post("/resolve")
+    def resolve(payload: RunPayload):
+        _require_role(payload, None)
+        return _guard(lambda: asdict(runtime.resolve(payload.model_dump())))
 
     @app.post("/run")
     def run(payload: RunPayload):
-        if payload.role is None:
-            raise HTTPException(status_code=422, detail="`role` is required on POST /run")
-        return _resolve(payload)
+        _require_role(payload, None)
+        return _guard(lambda: runtime.run(payload.model_dump()))
 
-    # Project-declared domain endpoints — each aliases to /run with fixed defaults.
     for path, alias in manifest.items():
         def _make(alias_defaults: Mapping[str, Any]):
             def handler(payload: RunPayload):
-                return _resolve(payload, alias_defaults)
+                _require_role(payload, alias_defaults)
+                return _guard(lambda: runtime.run(payload.model_dump(), alias_defaults))
             return handler
         app.add_api_route(path, _make(alias), methods=["POST"], name=path.strip("/").replace("/", "_"))
 

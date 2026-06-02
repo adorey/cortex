@@ -28,6 +28,7 @@ cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
 | 3 | Agentic loop + safety rails in code (§3.3) | ✅ |
 | 3b | Agent SDK adapter (`ModelClient`) + secrets `SecretProvider` (§3.6) | ✅ |
 | — | Persistence: `StateStore` (durable anti-recursion + audit), [ADR-003](../docs/adr/ADR-003-persistence-state-layer.md) | ✅ |
+| 5 | Executable slice: `Runtime` wires resolve→tools→loop→state; `/run` executes; swappable model backend | ✅ |
 | 4 | Project binding: warm mirrors + git worktree (§3.4) | ⏳ |
 | 5 | Model gateway (§3.5) | deferred |
 | 6 | Secrets: `SecretProvider` interface (§3.6) | ⏳ |
@@ -43,6 +44,28 @@ cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
 `tests/test_parity.py` asserts the Python resolver agrees with the shipped
 [`bin/validate-overlays.sh`](../bin/validate-overlays.sh) on a fixture cascade, so the two
 implementations cannot drift apart silently (ADR-002 §3.1).
+
+## Run the slice (Phase 5) — no key, no SDK
+
+The `demo` backend runs the whole wire (resolve → tools → loop → durable state) for free, so
+you can smoke-test before connecting a real model:
+
+```bash
+cd runtime && pip install -e .            # fastapi for the API; demo backend needs nothing else
+CORTEX_ROOT=/path/to/a/project CORTEX_BACKEND=demo python -m cortex_runtime   # serves on :8000
+# then:
+curl -X POST localhost:8000/run -H 'content-type: application/json' \
+  -d '{"workspace":"local","role":"support-engineer","subject":"ACME-7","input":{"issue":"ACME-7"}}'
+```
+
+Swap the backend when ready: `CORTEX_BACKEND=claude-cli` (Pro/Max via the Claude Code CLI —
+`npm i -g @anthropic-ai/claude-code && claude setup-token`, free at the margin, for local
+testing) or `CORTEX_BACKEND=anthropic-api` (a Console key in `.env.local` — for the deployed
+service). The Agent SDK *library* cannot use a subscription; only the CLI can. Same
+`ModelClient` boundary, no code change. **Setup guide:** [docs/claude-cli-setup.md](docs/claude-cli-setup.md).
+
+In code: `build_runtime({"acme": WorkspaceConfig(root=..., theme="h2g2")}, model_backend="demo")`
+→ `runtime.run({...})` returns the outcome (state, actions, comments, audit persisted).
 
 ## The agnostic API (Phase 2)
 

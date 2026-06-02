@@ -15,7 +15,7 @@
 3. **Le moteur ne transporte aucune spec.** `root` pointe sur le mirror du projet ; `root/cortex` = le cortex du projet (submodule). Une seule cascade en jeu (celle du projet) → **zéro collision** de spec.
 4. **Validation des overlays → Python.** À terme, `validate-overlays.sh` se réduit à une coquille appelant le résolveur Python (source unique de vérité), remplaçant le test de parité bash↔Python.
 
-**Avancement :** Phase 0 ✅ · Phase 1 (résolveur) ✅ · Phase 2 (API + `derive_capabilities` + alias) ✅ · Phase 3 (boucle + garde-fous, **autonomie par requête**) ✅ · Phase 3b (adaptateur Agent SDK + **secrets `SecretProvider`** §3.6) ✅ — **87 tests (80 verts, 7 API skipped)**. Reste : binding mirrors/worktree (Phase 4).
+**Avancement :** Phase 0 ✅ · 1 (résolveur) ✅ · 2 (API + `derive_capabilities` + alias) ✅ · 3 (boucle + garde-fous, autonomie par requête) ✅ · 3b (adaptateur SDK + secrets §3.6) ✅ · ADR-003 + StateStore (persistance, anti-récursion durable) ✅ · **5 (vertical slice exécutable — le MVP tourne, backend demo sans clé)** ✅ — **109 tests (102 verts, 7 API skipped)**. Reste : binding mirrors/worktree (Phase 4, prod), vrais outils MCP, sémantique handoff, et le test réel avec un vrai modèle (côté humanoïde).
 
 ## 🗓️ Timeline
 
@@ -121,6 +121,32 @@
 - 101 tests (94 verts, 7 API skipped).
 - **Sémantique à raffiner (noté)** : « agent poste un commentaire interne puis attend l'humain » ≠ `RESOLVED`. Aujourd'hui seul un *gated action* mène à `AWAITING_HUMAN`. Un futur signal `handoff`/`await_human` (ou un mapping phase-1) reste à définir côté boucle.
 **Tags :** `adr-003`, `state-store`, `sqlite`, `session`, `anti-recursion`, `audit`
+
+### 2026-06-02 — Phase 5 : vertical slice exécutable (MVP qui tourne)
+**Contexte :** relier les briques en un fil exécutable + prévoir l'auth abonnement Max pour les tests locaux (coût marginal nul), clé API pour le déploiement.
+**Participants :** @Oolon → @Ford (assemblage) → @Hactar
+**Décisions / outputs :**
+- **`runtime.py`** : `Runtime` + `build_runtime` assemblent resolve → outils → ModelClient → `AgentLoop` → `run_session`. `make_model_client(backend)` swappable : `demo` (no-dep), `claude-cli` (Max via CLI), `anthropic-api` (clé).
+- **`local_tools.py`** : `read_file` / `list_files` / `post_internal_comment` (sandboxés sous `root`) → run observable sans MCP.
+- **`demo_model.py`** : `DemoModelClient` (canned, zéro dépendance) → **smoke-test du fil complet sans clé ni SDK** ; `ScriptedModelClient` (double de test).
+- **`agent_client.py`** : adaptateur Pro/Max ajouté à côté de `AnthropicAgentClient`. **Correction (vérifiée via claude-code-guide)** : le Claude *Agent SDK* (lib) **n'autorise pas** l'auth abonnement — clé API obligatoire. Seule la **CLI Claude Code** peut utiliser l'abonnement (`claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`). → l'adaptateur Max est donc `ClaudeCodeCliClient` (sous-process CLI), pas un client SDK. Backend renommé `claude-agent-sdk` → `claude-cli`.
+- **API** : `POST /resolve` (résout) + `POST /run` (exécute) + alias manifeste (exécutent) ; `create_app(runtime)`. Entrypoint `python -m cortex_runtime` (config par env).
+- **`subject`** ajouté à `RunRequest`/payload (fallback `input.issue` → `default`).
+- **Smoke test live (backend demo)** : resolve → `list_files` → `post_internal_comment` → `resolved`, état persisté, re-trigger même `subject` → **skipped** (anti-récursion). 109 tests (102 verts, 7 API skipped).
+- **Auth** : Max/Agent-SDK pour tests locaux (décidé), clé API Console pour le service déployé. Frontière = `ModelClient`, zéro revert.
+**Tags :** `phase-5`, `vertical-slice`, `runtime`, `demo-backend`, `local-tools`, `claude-cli`, `mvp`
+
+### 2026-06-02 — Phase 5b : ClaudeCodeCliClient finalisé (chemin Max) + guide setup
+**Contexte :** finir le client abonnement Max ; l'humanoïde testera via clé API en fin de semaine, mais veut le chemin Max + un pas-à-pas.
+**Participants :** @Oolon → @Ford (CLI/infra) → @Hactar
+**Décisions / outputs :**
+- **Détails CLI vérifiés** (claude-code-guide) : `claude -p` lance sa **propre boucle agentique** et rend le texte final (one-shot). Flags exacts : `--append-system-prompt`, `--model`, `--output-format json` (`.result` + `usage`/`total_cost_usd`), `--allowedTools` (CSV), cwd via subprocess, auth `CLAUDE_CODE_OAUTH_TOKEN` (⚠️ `ANTHROPIC_API_KEY` prend le dessus → retiré de l'env du subprocess).
+- **`ClaudeCodeCliClient`** implémenté : one-shot via subprocess → `ModelTurn(final_text)`. Notre **autonomie (`ActionKind`) → `--allowedTools`** (read-only par défaut : `Read,Grep,Glob`). `last_usage` capturé (tokens/coût) pour monitoring futur.
+- Helpers purs **testés** : `cli_allowed_tools`, `build_cli_argv`, `parse_cli_result`. La méthode `propose` (subprocess) non testée ici (besoin CLI + login).
+- **`root` + autonomie** câblés du `Runtime` jusqu'au client.
+- **Guide pas-à-pas** : [runtime/docs/claude-cli-setup.md](../../../runtime/docs/claude-cli-setup.md) (install CLI → `setup-token` → env → run → curl).
+- 115 tests (108 verts, 7 API skipped).
+**Tags :** `phase-5b`, `claude-cli`, `subscription`, `subprocess`, `allowed-tools`, `setup-guide`
 
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)

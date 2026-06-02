@@ -19,8 +19,16 @@ from .resolver import (
     resolve_layer,
     semantic_for,
 )
-from .agent_client import AnthropicAgentClient, interpret_response, tool_schemas
+from .agent_client import (
+    AnthropicAgentClient,
+    ClaudeCodeCliClient,
+    interpret_response,
+    tool_schemas,
+)
+from .demo_model import DemoModelClient, ScriptedModelClient
+from .local_tools import local_tool_registry
 from .loop import AgentLoop, ModelClient, ModelTurn, RunOutcome, ToolCall
+from .runtime import Runtime, RuntimeConfig, build_runtime, make_model_client
 from .secret_provider import (
     ChainSecretProvider,
     DotenvSecretProvider,
@@ -92,8 +100,18 @@ __all__ = [
     "parse_dotenv",
     # agent SDK adapter (§3.3 boundary)
     "AnthropicAgentClient",
+    "ClaudeCodeCliClient",
     "interpret_response",
     "tool_schemas",
+    # no-dep model clients (Phase 5)
+    "DemoModelClient",
+    "ScriptedModelClient",
+    # executable slice (Phase 5)
+    "Runtime",
+    "RuntimeConfig",
+    "build_runtime",
+    "make_model_client",
+    "local_tool_registry",
     # persistence / operational state (ADR-003)
     "StateStore",
     "InMemoryStateStore",

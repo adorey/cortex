@@ -43,6 +43,7 @@ def build_run_request(payload: Mapping[str, Any], alias: Optional[Mapping[str, A
         input=merged.get("input") or {},
         model=merged.get("model"),
         autonomy=merged.get("autonomy"),
+        subject=merged.get("subject"),
     )
 
 

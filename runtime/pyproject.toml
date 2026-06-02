@@ -17,6 +17,14 @@ dependencies = [
 dev = [
     "pytest>=8",
 ]
+serve = [
+    "uvicorn>=0.27",        # ASGI server for `python -m cortex_runtime`
+]
+anthropic = [
+    "anthropic>=0.40",      # API-key model backend (the deployed service)
+]
+# The Pro/Max path uses the Claude Code CLI (a subprocess), not a Python package:
+#   npm i -g @anthropic-ai/claude-code  &&  claude setup-token
 
 [tool.setuptools.packages.find]
 where = ["."]

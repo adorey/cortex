@@ -10,7 +10,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cortex_runtime.agent_client import interpret_response, tool_schemas  # noqa: E402
+from cortex_runtime.agent_client import (  # noqa: E402
+    build_cli_argv,
+    cli_allowed_tools,
+    interpret_response,
+    parse_cli_result,
+    tool_schemas,
+)
 from cortex_runtime.safety import ActionKind  # noqa: E402
 from cortex_runtime.tools import Tool, ToolRegistry  # noqa: E402
 
@@ -51,6 +57,40 @@ class ToolSchemasTests(unittest.TestCase):
         self.assertEqual(schemas[1]["description"], "read the DB")
         self.assertEqual(schemas[0]["description"], "internal-comment")          # falls back to kind
         self.assertEqual(schemas[0]["input_schema"]["type"], "object")
+
+
+class ClaudeCliHelpersTests(unittest.TestCase):
+    def test_allowed_tools_maps_read_only_by_default(self):
+        self.assertEqual(cli_allowed_tools(["code-read"]), "Read,Grep,Glob")
+
+    def test_allowed_tools_adds_write_when_granted(self):
+        self.assertEqual(cli_allowed_tools(["code-read", "code-write"]),
+                         "Read,Grep,Glob,Edit,Write")
+
+    def test_allowed_tools_ignores_non_cli_actions(self):
+        # db-read / issue-create have no built-in CLI tool → not mapped
+        self.assertEqual(cli_allowed_tools(["db-read", "issue-create", "internal-comment"]), "")
+
+    def test_build_argv_shape(self):
+        argv = build_cli_argv("do it", system_prompt="you are X", model="claude-opus-4-8",
+                              allowed_tools="Read,Grep")
+        self.assertEqual(argv[:3], ["claude", "-p", "do it"])
+        self.assertIn("--append-system-prompt", argv)
+        self.assertIn("--allowedTools", argv)
+        self.assertEqual(argv[argv.index("--allowedTools") + 1], "Read,Grep")
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-4-8")
+
+    def test_build_argv_omits_empty_allowed_tools(self):
+        argv = build_cli_argv("x", system_prompt="s", model="m", allowed_tools="")
+        self.assertNotIn("--allowedTools", argv)
+
+    def test_parse_result_extracts_text_and_usage(self):
+        stdout = '{"result": "diagnosis here", "total_cost_usd": 0.012, ' \
+                 '"usage": {"input_tokens": 100, "output_tokens": 50}}'
+        text, usage = parse_cli_result(stdout)
+        self.assertEqual(text, "diagnosis here")
+        self.assertEqual(usage["total_cost_usd"], 0.012)
+        self.assertEqual(usage["input_tokens"], 100)
 
 
 if __name__ == "__main__":

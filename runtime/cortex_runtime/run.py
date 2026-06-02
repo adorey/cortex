@@ -29,6 +29,9 @@ class RunRequest:
     workflow: Optional[str] = None
     input: Dict[str, Any] = field(default_factory=dict)
     model: Optional[str] = None
+    # Agnostic correlation key for this flow's conversation/anti-recursion state (ADR-003):
+    # an issue key, a dashboard correlation id, a scheduled-run key. Falls back per host.
+    subject: Optional[str] = None
     # Actions the agent may take WITHOUT human validation, for THIS run (action-kind
     # strings, e.g. ["code-read", "internal-comment"]). None → least-privilege default. The
     # autonomy level is a per-request decision, never hard-coded (ADR-002 §3.3).
