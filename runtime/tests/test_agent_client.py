@@ -98,6 +98,19 @@ class ClaudeCliHelpersTests(unittest.TestCase):
                               output_format="stream-json")
         self.assertIn("--verbose", argv)
 
+    def test_allowed_tools_includes_mcp_bindings(self):
+        # internal-comment (granted by default) maps to the workspace's Jira MCP tool
+        bindings = {"internal-comment": ["mcp__jira__add_comment"], "issue-read": ["mcp__jira__get_issue"]}
+        tools = cli_allowed_tools(["code-read", "internal-comment"], bindings)
+        self.assertIn("Read", tools)                       # built-in for code-read
+        self.assertIn("mcp__jira__add_comment", tools)     # MCP for internal-comment
+        self.assertNotIn("mcp__jira__get_issue", tools)    # issue-read not granted here
+
+    def test_build_argv_passes_mcp_config(self):
+        argv = build_cli_argv("x", system_prompt="s", model="m", allowed_tools="Read",
+                              mcp_config_path="/tmp/mcp.json")
+        self.assertEqual(argv[argv.index("--mcp-config") + 1], "/tmp/mcp.json")
+
     def test_parse_stream_collects_tools_text_and_metrics(self):
         # shaped exactly like the real CLI output (tool_use ids + a rich result event)
         stream = "\n".join([

@@ -19,10 +19,19 @@ from .run import ResolvedRun, RunRequest, resolve_run
 
 @dataclass
 class WorkspaceConfig:
-    """Deployment-level binding for one workspace (the warm mirror path + active theme)."""
+    """Deployment-level binding for one workspace (the warm mirror path + active theme).
+
+    ``mcp_servers``: Claude Code ``--mcp-config`` content for this workspace's tools
+    (e.g. a Jira server), shape ``{"server-name": {...server config...}}``.
+    ``mcp_bindings``: maps an ActionKind value to the concrete MCP tool name(s) it unlocks
+    (e.g. ``{"issue-comment": ["mcp__jira__add_comment"]}``) — so agnostic autonomy maps onto
+    the deployment's real MCP tools.
+    """
 
     root: Path
     theme: Optional[str] = None
+    mcp_servers: Optional[dict] = None
+    mcp_bindings: Optional[dict] = None
 
 
 def build_run_request(payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]] = None) -> RunRequest:

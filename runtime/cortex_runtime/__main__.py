@@ -8,6 +8,8 @@ Serves a single-workspace runtime configured from environment variables — enou
     CORTEX_THEME       active theme             (default: none)
     CORTEX_BACKEND     demo | claude-cli | anthropic-api          (default: "demo")
     CORTEX_DB          sqlite path              (default: in-memory)
+    CORTEX_MCP_CONFIG  path to a JSON file: {"mcp_servers": {...}, "mcp_bindings": {...}}
+                       — MCP servers for the CLI (e.g. Jira) + ActionKind→MCP-tool bindings
     CORTEX_HOST/PORT   bind address             (default: 127.0.0.1:8000)
 
 `demo` runs the whole wire with no key or CLI. Switch to `claude-cli` (Pro/Max via the Claude
@@ -36,8 +38,16 @@ def main():
     db = os.environ.get("CORTEX_DB")
     store = SqliteStateStore(db) if db else InMemoryStateStore()
 
+    mcp_servers = mcp_bindings = None
+    mcp_cfg = os.environ.get("CORTEX_MCP_CONFIG")
+    if mcp_cfg:
+        import json
+        cfg = json.loads(Path(mcp_cfg).read_text(encoding="utf-8"))
+        mcp_servers, mcp_bindings = cfg.get("mcp_servers"), cfg.get("mcp_bindings")
+
     runtime = build_runtime(
-        {workspace: WorkspaceConfig(root=root, theme=theme)},
+        {workspace: WorkspaceConfig(root=root, theme=theme,
+                                    mcp_servers=mcp_servers, mcp_bindings=mcp_bindings)},
         store=store,
         model_backend=backend,
     )

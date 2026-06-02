@@ -81,6 +81,33 @@ is enforced in this backend (the CLI owns the loop + its own tools):
 Default = read-only (`code-read`). Grant more per request:
 `"autonomy": ["code-read", "code-write"]`.
 
+## MCP tools (e.g. posting to the issue tracker)
+
+To let the agent act on real tools (post an internal Jira comment, read a ticket…), declare an
+MCP server for the CLI and bind your agnostic actions to its concrete tool names. Put this in a
+JSON file and point `CORTEX_MCP_CONFIG` at it:
+
+```jsonc
+{
+  "mcp_servers": {
+    "jira": { "command": "<your-jira-mcp-server>", "args": ["..."], "env": { "JIRA_TOKEN": "..." } }
+  },
+  "mcp_bindings": {
+    "internal-comment": ["mcp__jira__add_internal_comment"],
+    "issue-read":       ["mcp__jira__get_issue"]
+  }
+}
+```
+
+```bash
+CORTEX_MCP_CONFIG=./mcp.json  CORTEX_BACKEND=claude-cli  ...  python -m cortex_runtime
+```
+
+- `mcp_servers` is forwarded to the CLI via `--mcp-config` (Claude Code's native MCP support).
+- `mcp_bindings` maps an **ActionKind** to the **real MCP tool name(s)** it unlocks, so granting
+  `internal-comment` (on by default) lets the agent call your Jira comment tool — and it shows up,
+  gated-aware, in the audit. Replace the server config and tool names with your actual Jira MCP server.
+
 ## Troubleshooting
 
 - **`'claude' CLI not found`** → Step 1 didn't put it on PATH (check `which claude`).

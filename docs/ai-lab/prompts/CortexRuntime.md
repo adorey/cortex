@@ -201,6 +201,16 @@
 - 132 tests (121 verts, 11 API skipped).
 **Tags :** `handoff`, `awaiting-human`, `reply`, `anti-recursion`, `round-trip`, `support`
 
+### 2026-06-02 — MCP (plomberie) : outils réels pour le backend CLI
+**Contexte :** finalité du test = l'agent écrit son analyse dans un **commentaire privé** du ticket via un vrai MCP. (L'async 200-puis-traitement = trigger/worker §3.7, noté, pas encore fait.)
+**Participants :** @Oolon → @Ford (MCP/infra)
+**Décisions / outputs :**
+- **Pas de client MCP maison** : sur le backend `claude-cli`, la CLI a le MCP nativement. Le runtime déclare les serveurs MCP du workspace via `--mcp-config` et autorise les outils MCP dans `--allowedTools`.
+- `WorkspaceConfig.mcp_servers` (config `--mcp-config`) + `mcp_bindings` (ActionKind → noms d'outils MCP concrets, ex. `{"internal-comment": ["mcp__jira__add_comment"]}`). `cli_allowed_tools` combine built-in + MCP par action accordée ; `ClaudeCodeCliClient` écrit un fichier temp `--mcp-config`. `__main__` lit `CORTEX_MCP_CONFIG`.
+- **Rôle ajusté (agnostique)** : le support-engineer livre son analyse **as an internal comment on the ticket** (≠ réponse client du tech-writer).
+- 134 tests. Reste côté humanoïde : fournir le **serveur Jira MCP** + le **nom exact de l'outil** « add internal comment ».
+**Tags :** `mcp`, `jira`, `internal-comment`, `claude-cli`, `mcp-config`, `tool-bindings`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)

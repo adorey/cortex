@@ -38,17 +38,21 @@ def _now() -> str:
 def make_model_client(backend: str, registry: ToolRegistry,
                       secrets: Optional[SecretProvider] = None,
                       model_id: Optional[str] = None,
-                      root=None, allowed_actions: Optional[list] = None) -> ModelClient:
+                      root=None, allowed_actions: Optional[list] = None,
+                      mcp_servers: Optional[dict] = None,
+                      mcp_bindings: Optional[dict] = None) -> ModelClient:
     """Build the model client for a backend. ``demo`` needs nothing; the real backends are
     imported lazily so the engine stays install-free until one is actually used."""
     if backend == "demo":
         return DemoModelClient(registry)
     if backend == "claude-cli":
         # Pro/Max subscription via the Claude Code CLI (CLAUDE_CODE_OAUTH_TOKEN). The CLI owns
-        # the loop + its own tools; our per-request autonomy maps to --allowedTools.
+        # the loop + its own tools; our per-request autonomy maps to --allowedTools, and the
+        # workspace's MCP servers (e.g. Jira) are passed via --mcp-config.
         from .agent_client import ClaudeCodeCliClient, cli_allowed_tools
         return ClaudeCodeCliClient(model=model_id or DEFAULT_MODEL, root=root,
-                                   allowed_tools=cli_allowed_tools(allowed_actions or []))
+                                   allowed_tools=cli_allowed_tools(allowed_actions or [], mcp_bindings),
+                                   mcp_servers=mcp_servers)
     if backend == "anthropic-api":
         from .agent_client import AnthropicAgentClient
         if secrets is None:
@@ -90,7 +94,8 @@ class Runtime:
 
         registry, comments = local_tool_registry(wcfg.root)
         model = make_model_client(self.cfg.model_backend, registry, self.cfg.secrets, req.model,
-                                  root=wcfg.root, allowed_actions=resolved.allowed_actions)
+                                  root=wcfg.root, allowed_actions=resolved.allowed_actions,
+                                  mcp_servers=wcfg.mcp_servers, mcp_bindings=wcfg.mcp_bindings)
         loop = AgentLoop(registry, ActionPolicy.from_names(req.autonomy), self.cfg.max_iterations)
         subject = req.subject or req.input.get("issue") or "default"
 

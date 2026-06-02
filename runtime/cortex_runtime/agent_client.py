@@ -112,13 +112,17 @@ _CLI_TOOLS_BY_ACTION = {
 }
 
 
-def cli_allowed_tools(action_kinds: List[str]) -> str:
+def cli_allowed_tools(action_kinds: List[str], mcp_bindings: Optional[dict] = None) -> str:
     """Render allowed ActionKinds as a comma-separated Claude Code --allowedTools value.
-    Only actions with a built-in CLI equivalent map (reads/writes); db/git/issue actions have
-    no built-in tool and would be MCP servers later."""
+
+    Built-in CLI tools come from the static read/write map; ``mcp_bindings`` (a per-workspace
+    map of ActionKind value → concrete MCP tool names, e.g.
+    ``{"internal-comment": ["mcp__jira__add_comment"]}``) adds the deployment's MCP tools for
+    each granted action — this is how agnostic autonomy unlocks real MCP tools (Jira, DB, …)."""
+    mcp_bindings = mcp_bindings or {}
     tools: List[str] = []
     for kind in action_kinds:
-        for tool in _CLI_TOOLS_BY_ACTION.get(kind, []):
+        for tool in _CLI_TOOLS_BY_ACTION.get(kind, []) + list(mcp_bindings.get(kind, [])):
             if tool not in tools:
                 tools.append(tool)
     return ",".join(tools)
@@ -126,7 +130,8 @@ def cli_allowed_tools(action_kinds: List[str]) -> str:
 
 def build_cli_argv(prompt: str, *, system_prompt: str, model: str, allowed_tools: str,
                    cli: str = "claude", output_format: str = "json",
-                   permission_mode: Optional[str] = None) -> List[str]:
+                   permission_mode: Optional[str] = None,
+                   mcp_config_path: Optional[str] = None) -> List[str]:
     """Build the `claude -p` argv. Pure (no subprocess) so it can be unit-tested."""
     argv = [cli, "-p", prompt,
             "--append-system-prompt", system_prompt,
@@ -134,6 +139,8 @@ def build_cli_argv(prompt: str, *, system_prompt: str, model: str, allowed_tools
             "--output-format", output_format]
     if output_format == "stream-json":
         argv.append("--verbose")          # required by the CLI for stream-json in -p mode
+    if mcp_config_path:
+        argv += ["--mcp-config", mcp_config_path]
     if allowed_tools:
         argv += ["--allowedTools", allowed_tools]
     if permission_mode:
@@ -234,7 +241,8 @@ class ClaudeCodeCliClient:
     """
 
     def __init__(self, model: str = "claude-opus-4-8", root=None, allowed_tools: str = "Read,Grep,Glob",
-                 cli: str = "claude", permission_mode: Optional[str] = None):
+                 cli: str = "claude", permission_mode: Optional[str] = None,
+                 mcp_servers: Optional[dict] = None):
         import shutil
         if shutil.which(cli) is None:  # pragma: no cover - integration-only
             raise FileNotFoundError(
@@ -246,24 +254,39 @@ class ClaudeCodeCliClient:
         self._allowed_tools = allowed_tools
         self._cli = cli
         self._permission_mode = permission_mode
+        self._mcp_servers = mcp_servers     # passed to the CLI via --mcp-config (e.g. a Jira server)
         self.last_usage: Optional[Dict[str, Any]] = None
-        self.last_actions: Optional[List] = None   # (cli_tool, ActionKind) for the audit log
+        self.last_actions: Optional[List] = None   # (cli_tool, ActionKind, gated) for the audit log
 
     def propose(self, system_prompt: str, history: List[Dict[str, Any]]) -> ModelTurn:  # pragma: no cover
+        import json
         import os
         import subprocess
+        import tempfile
 
         task = _task_from_history(history)
+        mcp_path = None
+        if self._mcp_servers:
+            tmp = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+            json.dump({"mcpServers": self._mcp_servers}, tmp)
+            tmp.close()
+            mcp_path = tmp.name
+
         # stream-json so we can see (and audit) the tools the CLI's own loop used.
         argv = build_cli_argv(task, system_prompt=system_prompt, model=self._model,
                               allowed_tools=self._allowed_tools, cli=self._cli,
-                              output_format="stream-json", permission_mode=self._permission_mode)
+                              output_format="stream-json", permission_mode=self._permission_mode,
+                              mcp_config_path=mcp_path)
 
         env = dict(os.environ)
         env.pop("ANTHROPIC_API_KEY", None)        # must not override the subscription token
         env.setdefault("DISABLE_TELEMETRY", "1")
 
-        proc = subprocess.run(argv, cwd=self._root, env=env, capture_output=True, text=True)
+        try:
+            proc = subprocess.run(argv, cwd=self._root, env=env, capture_output=True, text=True)
+        finally:
+            if mcp_path:
+                os.unlink(mcp_path)
         if proc.returncode != 0:
             raise RuntimeError(f"claude CLI failed (exit {proc.returncode}): {proc.stderr.strip()}")
         text, self.last_usage, self.last_actions = parse_cli_stream(proc.stdout)

@@ -83,6 +83,10 @@ team is requested **through the `prompt-manager`**, never directly.
 
 ## 📦 Deliverable — the structured analysis
 
+Deliver your analysis **as an internal (private) comment on the ticket**, using the
+issue-tracker tool the runtime grants you — addressed to the team, **never** to the customer.
+(The customer-facing reply is a separate deliverable, drafted by the `tech-writer` on request.)
+
 Always produce a single, scannable analysis (not loose prose):
 
 ```
