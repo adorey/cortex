@@ -15,7 +15,7 @@
 3. **Le moteur ne transporte aucune spec.** `root` pointe sur le mirror du projet ; `root/cortex` = le cortex du projet (submodule). Une seule cascade en jeu (celle du projet) → **zéro collision** de spec.
 4. **Validation des overlays → Python.** À terme, `validate-overlays.sh` se réduit à une coquille appelant le résolveur Python (source unique de vérité), remplaçant le test de parité bash↔Python.
 
-**Avancement :** Phase 0 ✅ · Phase 1 (résolveur) ✅ · Phase 2 (API + `derive_capabilities` + alias) ✅ · Phase 3 (boucle agentique + garde-fous en code, **autonomie par requête**) ✅ — **75 tests (68 verts, 7 API skipped)**. Reste : adaptateur Agent SDK réel (Phase 3b), binding mirrors/worktree (Phase 4), secrets (Phase 6).
+**Avancement :** Phase 0 ✅ · Phase 1 (résolveur) ✅ · Phase 2 (API + `derive_capabilities` + alias) ✅ · Phase 3 (boucle + garde-fous, **autonomie par requête**) ✅ · Phase 3b (adaptateur Agent SDK + **secrets `SecretProvider`** §3.6) ✅ — **87 tests (80 verts, 7 API skipped)**. Reste : binding mirrors/worktree (Phase 4).
 
 ## 🗓️ Timeline
 
@@ -83,6 +83,19 @@
 - La notion ADR « phase 1 / phase X » devient une **convention de déploiement** exprimée par l'autonomie accordée, plus un enum en dur.
 - 75 tests (68 verts, 7 API skipped).
 **Tags :** `phase-3`, `review`, `autonomy`, `per-request`, `action-kind`, `least-privilege`
+
+### 2026-06-02 — Phase 3b : adaptateur Agent SDK + secrets locaux
+**Contexte :** l'humanoïde valide la review Phase 3 et suggère de prévoir les secrets en local via un fichier `.env.local`.
+**Initial prompt :**
+> « ok pour la review et le passage à la phase 3b, pour un fonctionnement en local on peut peut-être prévoir le coup pour les secrets dans un fichier type .env.local ou un truc dans le genre »
+
+**Participants :** @Oolon → @Marvin (secrets/sécurité) → @Hactar (adaptateur)
+**Décisions / outputs :**
+- **`SecretProvider`** ([secret_provider.py](../../../runtime/cortex_runtime/secret_provider.py)) : interface stable `get(name)` (§3.6). Backends : `DotenvSecretProvider` (`.env.local`, dev), `EnvSecretProvider` (env / K8s Secret, prod), `ChainSecretProvider` (file→env), factory `local_secret_provider`. **Per-tenant** via préfixe de namespace (`WBTB_LLM_KEY`). Jamais commité : `.env.local` gitignoré + template `.env.local.example`.
+- **`AnthropicAgentClient`** ([agent_client.py](../../../runtime/cortex_runtime/agent_client.py)) : implémente `ModelClient`, clé tirée du `SecretProvider`, **import `anthropic` paresseux** → package + tests restent install-free. Mapping `_to_messages` volontairement simple (référence ; le bookkeeping tool_use/tool_result revient à l'Agent SDK en prod).
+- **Surface pure testée** : `interpret_response` (blocs réponse → `ModelTurn`) et `tool_schemas` (registry → défs d'outils Anthropic).
+- 87 tests (80 verts, 7 API skipped). `import cortex_runtime` ne tire ni `anthropic` ni `fastapi`.
+**Tags :** `phase-3b`, `secrets`, `secret-provider`, `dotenv`, `agent-sdk`, `model-client`, `least-privilege`
 
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)

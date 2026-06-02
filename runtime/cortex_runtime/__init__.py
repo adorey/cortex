@@ -19,7 +19,17 @@ from .resolver import (
     resolve_layer,
     semantic_for,
 )
+from .agent_client import AnthropicAgentClient, interpret_response, tool_schemas
 from .loop import AgentLoop, ModelClient, ModelTurn, RunOutcome, ToolCall
+from .secret_provider import (
+    ChainSecretProvider,
+    DotenvSecretProvider,
+    EnvSecretProvider,
+    SecretNotFound,
+    SecretProvider,
+    local_secret_provider,
+    parse_dotenv,
+)
 from .run import ResolvedRun, RunRequest, resolve_run
 from .safety import (
     SAFE_DEFAULT_ACTIONS,
@@ -63,6 +73,18 @@ __all__ = [
     "ModelTurn",
     "ToolCall",
     "RunOutcome",
+    # secrets (§3.6)
+    "SecretProvider",
+    "SecretNotFound",
+    "EnvSecretProvider",
+    "DotenvSecretProvider",
+    "ChainSecretProvider",
+    "local_secret_provider",
+    "parse_dotenv",
+    # agent SDK adapter (§3.3 boundary)
+    "AnthropicAgentClient",
+    "interpret_response",
+    "tool_schemas",
 ]
 
 __version__ = "0.0.1"

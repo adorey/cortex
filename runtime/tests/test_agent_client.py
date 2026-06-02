@@ -1,0 +1,57 @@
+"""Tests for the Agent SDK adapter's pure translation surface — ADR-002 §3.3.
+
+The live ``AnthropicAgentClient.propose`` needs the SDK + a key and is not exercised here;
+``interpret_response`` and ``tool_schemas`` carry the SDK-agnostic logic and are tested in full.
+"""
+
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from cortex_runtime.agent_client import interpret_response, tool_schemas  # noqa: E402
+from cortex_runtime.safety import ActionKind  # noqa: E402
+from cortex_runtime.tools import Tool, ToolRegistry  # noqa: E402
+
+
+class InterpretResponseTests(unittest.TestCase):
+    def test_tool_use_blocks_become_tool_calls(self):
+        blocks = [
+            {"type": "text", "text": "let me check"},
+            {"type": "tool_use", "name": "read_db", "input": {"q": "SELECT 1"}},
+        ]
+        turn = interpret_response(blocks)
+        self.assertFalse(turn.is_final)
+        self.assertEqual(len(turn.tool_calls), 1)
+        self.assertEqual(turn.tool_calls[0].name, "read_db")
+        self.assertEqual(turn.tool_calls[0].args, {"q": "SELECT 1"})
+
+    def test_text_only_is_final(self):
+        turn = interpret_response([{"type": "text", "text": "diagnosis: "},
+                                   {"type": "text", "text": "OOM"}])
+        self.assertTrue(turn.is_final)
+        self.assertEqual(turn.final_text, "diagnosis: OOM")
+
+    def test_works_with_object_blocks(self):
+        class Block:
+            def __init__(self, **kw):
+                self.__dict__.update(kw)
+        turn = interpret_response([Block(type="tool_use", name="comment", input={})])
+        self.assertEqual(turn.tool_calls[0].name, "comment")
+
+
+class ToolSchemasTests(unittest.TestCase):
+    def test_renders_anthropic_tool_defs(self):
+        reg = ToolRegistry()
+        reg.register(Tool("read_db", ActionKind.DB_READ, lambda **k: None, description="read the DB"))
+        reg.register(Tool("comment", ActionKind.INTERNAL_COMMENT, lambda **k: None))
+        schemas = tool_schemas(reg)
+        self.assertEqual([s["name"] for s in schemas], ["comment", "read_db"])  # sorted
+        self.assertEqual(schemas[1]["description"], "read the DB")
+        self.assertEqual(schemas[0]["description"], "internal-comment")          # falls back to kind
+        self.assertEqual(schemas[0]["input_schema"]["type"], "object")
+
+
+if __name__ == "__main__":
+    unittest.main()

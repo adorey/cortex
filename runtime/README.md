@@ -25,7 +25,8 @@ cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
 | 0 | Scaffolding + firewall guard | ✅ |
 | 1 | **Resolver** (§3.1 cascade + §3.2 merge) — *the singularity* | ✅ |
 | 2 | Agnostic API `POST /run` + `derive_capabilities` + manifest aliases (§3.2) | ✅ |
-| 3 | Agentic loop + safety rails in code (§3.3) — *real SDK adapter pending* | ✅ |
+| 3 | Agentic loop + safety rails in code (§3.3) | ✅ |
+| 3b | Agent SDK adapter (`ModelClient`) + secrets `SecretProvider` (§3.6) | ✅ |
 | 4 | Project binding: warm mirrors + git worktree (§3.4) | ⏳ |
 | 5 | Model gateway (§3.5) | deferred |
 | 6 | Secrets: `SecretProvider` interface (§3.6) | ⏳ |
@@ -84,6 +85,27 @@ prompt (ADR-002 §3.3):
 
 `loop.AgentLoop` drives a `ModelClient` (the SDK boundary — the real adapter implements
 `propose`; tests use a scripted fake) and applies the rails around it.
+
+## Secrets & the model adapter (Phase 3b)
+
+Secrets sit behind one stable interface — `SecretProvider.get(name)` (ADR-002 §3.6) — so
+only the *source* swaps:
+
+```python
+from cortex_runtime import local_secret_provider, AnthropicAgentClient
+
+secrets = local_secret_provider(namespace="wbtb")   # .env.local first, then env (K8s in prod)
+model = AnthropicAgentClient(registry, secrets)      # pulls llm_key; needs `anthropic` + a key
+```
+
+- **Local dev** → a gitignored `.env.local` (copy `.env.local.example`). Per-tenant keys
+  are namespaced: `WBTB_LLM_KEY`, `BLUSPARK_LLM_KEY`.
+- **Production** → environment variables fed by a K8s Secret / a vault — the app code is
+  unchanged.
+
+`AnthropicAgentClient` is the `ModelClient` boundary (the loop's plug for a real model). Its
+import of `anthropic` is lazy, so the package and its test suite stay install-free; the pure
+translation helpers (`interpret_response`, `tool_schemas`) are fully tested.
 
 ## Run the tests (zero install)
 

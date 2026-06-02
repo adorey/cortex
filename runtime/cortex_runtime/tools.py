@@ -35,3 +35,7 @@ class ToolRegistry:
 
     def names(self) -> list:
         return sorted(self._tools)
+
+    def tools(self) -> list:
+        """All registered tools, ordered by name (used to expose schemas to the model)."""
+        return [self._tools[n] for n in self.names()]
