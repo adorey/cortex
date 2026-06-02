@@ -48,7 +48,7 @@ class ResolveEndpointTests(unittest.TestCase):
     def test_domain_alias(self):
         resolved = resolve_endpoint(
             REGISTRY,
-            {"workspace": "host", "service": "svc-a", "input": {"issue": "WBTB-1"}},
+            {"workspace": "host", "service": "svc-a", "input": {"issue": "ACME-1"}},
             alias={"role": "lead-backend", "workflow": "code-review"},
         )
         self.assertIn("SERVICE-RULE", resolved.system_prompt)

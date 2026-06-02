@@ -8,7 +8,7 @@ The application always consumes ``SecretProvider.get(name)``; only the *source* 
 
 Secrets are **never** baked into the image or git. Per-tenant scoping is a ``namespace``
 prefix, so one backend can hold several tenants' secrets without them colliding
-(``WBTB_LLM_KEY`` vs ``BLUSPARK_LLM_KEY``).
+(``ACME_LLM_KEY`` vs ``OTHER_LLM_KEY``).
 
 Canonical secret names mirror the ADR §3.6 inventory (see ``KNOWN_SECRETS``).
 """
@@ -41,7 +41,7 @@ class SecretProvider(Protocol):
 
 
 def _key(name: str, namespace: str) -> str:
-    """``("llm_key", "wbtb")`` → ``WBTB_LLM_KEY``; ``("llm_key", "")`` → ``LLM_KEY``."""
+    """``("llm_key", "acme")`` → ``ACME_LLM_KEY``; ``("llm_key", "")`` → ``LLM_KEY``."""
     raw = f"{namespace}_{name}" if namespace else name
     return re.sub(r"[^A-Za-z0-9]+", "_", raw).strip("_").upper()
 

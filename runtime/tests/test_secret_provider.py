@@ -38,15 +38,15 @@ class ParseDotenvTests(unittest.TestCase):
 class DotenvProviderTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp()) / ".env.local"
-        self.tmp.write_text("LLM_KEY=sk-local\nWBTB_LLM_KEY=sk-wbtb\n", encoding="utf-8")
+        self.tmp.write_text("LLM_KEY=sk-local\nACME_LLM_KEY=sk-acme\n", encoding="utf-8")
 
     def test_get_normalizes_name(self):
         p = DotenvSecretProvider(self.tmp)
         self.assertEqual(p.get("llm_key"), "sk-local")          # llm_key → LLM_KEY
 
     def test_per_tenant_namespace(self):
-        p = DotenvSecretProvider(self.tmp, namespace="wbtb")
-        self.assertEqual(p.get("llm_key"), "sk-wbtb")           # → WBTB_LLM_KEY
+        p = DotenvSecretProvider(self.tmp, namespace="acme")
+        self.assertEqual(p.get("llm_key"), "sk-acme")           # → ACME_LLM_KEY
 
     def test_missing_raises(self):
         with self.assertRaises(SecretNotFound):

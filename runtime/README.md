@@ -55,11 +55,11 @@ from cortex_runtime.api import create_app          # needs `pip install -e .[dev
 from cortex_runtime.app import WorkspaceConfig
 
 app = create_app(
-    registry={"wbtb": WorkspaceConfig(root=Path("/data/mirrors/wbtb"), theme="h2g2")},
+    registry={"acme": WorkspaceConfig(root=Path("/data/mirrors/acme"), theme="h2g2")},
     manifest={"/pr-review": {"role": "lead-backend", "workflow": "code-review"}},
 )
-# POST /run {"workspace":"wbtb","role":"lead-backend","service":"billing","workflow":"code-review"}
-# POST /pr-review {"workspace":"wbtb","service":"billing"}   ← role/workflow from the manifest
+# POST /run {"workspace":"acme","role":"lead-backend","service":"billing","workflow":"code-review"}
+# POST /pr-review {"workspace":"acme","service":"billing"}   ← role/workflow from the manifest
 ```
 
 The resolution core (`resolve_run`, `derive_capabilities`, alias merging) is
@@ -94,12 +94,12 @@ only the *source* swaps:
 ```python
 from cortex_runtime import local_secret_provider, AnthropicAgentClient
 
-secrets = local_secret_provider(namespace="wbtb")   # .env.local first, then env (K8s in prod)
+secrets = local_secret_provider(namespace="acme")   # .env.local first, then env (K8s in prod)
 model = AnthropicAgentClient(registry, secrets)      # pulls llm_key; needs `anthropic` + a key
 ```
 
 - **Local dev** → a gitignored `.env.local` (copy `.env.local.example`). Per-tenant keys
-  are namespaced: `WBTB_LLM_KEY`, `BLUSPARK_LLM_KEY`.
+  are namespaced: `ACME_LLM_KEY`, `OTHER_LLM_KEY`.
 - **Production** → environment variables fed by a K8s Secret / a vault — the app code is
   unchanged.
 

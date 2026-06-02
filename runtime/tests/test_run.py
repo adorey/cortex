@@ -15,7 +15,7 @@ class ResolveRunTests(unittest.TestCase):
     def test_full_bundle(self):
         req = RunRequest(
             workspace="host", role="lead-backend", service="svc-a",
-            workflow="code-review", input={"issue": "WBTB-42"}, model="claude-opus-4-8",
+            workflow="code-review", input={"issue": "ACME-42"}, model="claude-opus-4-8",
         )
         run = resolve_run(req, ROOT, theme="h2g2")
 
