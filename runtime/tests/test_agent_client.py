@@ -17,6 +17,7 @@ from cortex_runtime.agent_client import (  # noqa: E402
     parse_cli_result,
     parse_cli_stream,
     tool_schemas,
+    with_identity_lock,
 )
 from cortex_runtime.safety import ActionKind  # noqa: E402
 from cortex_runtime.tools import Tool, ToolRegistry  # noqa: E402
@@ -105,6 +106,12 @@ class ClaudeCliHelpersTests(unittest.TestCase):
         self.assertIn("Read", tools)                       # built-in for code-read
         self.assertIn("mcp__jira__add_comment", tools)     # MCP for internal-comment
         self.assertNotIn("mcp__jira__get_issue", tools)    # issue-read not granted here
+
+    def test_identity_lock_prepends_override(self):
+        out = with_identity_lock("# Support Engineer\nYou are the N2...")
+        self.assertTrue(out.startswith("⚠️ RUNTIME IDENTITY LOCK"))
+        self.assertIn("do NOT orchestrate", out)
+        self.assertIn("# Support Engineer", out)          # the resolved role still follows
 
     def test_build_argv_passes_mcp_config(self):
         argv = build_cli_argv("x", system_prompt="s", model="m", allowed_tools="Read",
