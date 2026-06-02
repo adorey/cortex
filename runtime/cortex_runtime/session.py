@@ -39,6 +39,7 @@ def run_session(
     system_prompt: str,
     initial_input: Dict[str, Any],
     model_id: Optional[str] = None,
+    handoff: bool = False,
     at: str = "",
 ) -> SessionResult:
     """Run one invocation with durable conversation state + audit.
@@ -56,7 +57,8 @@ def run_session(
     run_id = store.start_run(workspace, role, subject, model_id)
 
     try:
-        outcome = loop.run(system_prompt, initial_input, model, machine=machine)
+        outcome = loop.run(system_prompt, initial_input, model, machine=machine,
+                           handoff_on_complete=handoff)
     except Exception as exc:  # never leave a dangling run — record the failure + log it
         logger.exception("run %s failed (workspace=%s subject=%s)", run_id, workspace, subject)
         store.fail_run(run_id, f"{type(exc).__name__}: {exc}")

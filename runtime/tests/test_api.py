@@ -92,6 +92,16 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(r.json()["subject"], "ACME-8")
         self.assertEqual(self.client.get("/runs/nope").status_code, 404)
 
+    def test_handoff_and_reply_round_trip(self):
+        run = lambda: self.client.post("/run", json={
+            "workspace": "host", "role": "support-engineer", "subject": "RT-1",
+            "input": {}, "handoff": True})
+        self.assertEqual(run().json()["state"], "awaiting-human")   # hand-off
+        self.assertTrue(run().json()["skipped"])                    # anti-recursion
+        rr = self.client.post("/reply", json={"workspace": "host", "subject": "RT-1"})
+        self.assertEqual(rr.json()["state"], "awaiting-agent")      # re-armed
+        self.assertEqual(run().json()["state"], "awaiting-human")   # runs again
+
     def test_monitoring_audit(self):
         self.client.post("/run", json={"workspace": "host", "role": "support-engineer",
                                        "subject": "ACME-9", "input": {}})

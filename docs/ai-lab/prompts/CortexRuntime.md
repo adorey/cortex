@@ -191,6 +191,16 @@
 - **Lien dette runtime** : l'état final naturel du rôle = `AWAITING_HUMAN` (handoff) → motive l'implémentation du signal `handoff`/`escalate` côté boucle (noté).
 **Tags :** `adr-002-followup`, `support-engineer`, `role`, `workflow`, `wonko`, `agnostic`, `n2-n3`
 
+### 2026-06-02 — Signal handoff + endpoint /reply (le cycle support de bout en bout)
+**Contexte :** la dette notée depuis la Phase 3 — « commenter puis attendre l'humain » ≠ `RESOLVED`. Nécessaire pour tester les allers-retours support sur un vrai ticket.
+**Participants :** @Oolon → @Hactar
+**Décisions / outputs :**
+- **`handoff`** : `AgentLoop.run(handoff_on_complete=True)` → une fin normale se termine en `AWAITING_HUMAN` (pas `RESOLVED`). Propagé : `RunRequest.handoff` → payload → `build_run_request` → `Runtime.run` → `run_session` → boucle. L'analyse (`final_text`) est conservée.
+- **`POST /reply {workspace, subject}`** : `mark_human_reply` exposé → ré-arme l'agent (`awaiting-human → awaiting-agent`) pour le tour suivant.
+- **Round-trip validé live** (backend demo) : run handoff → `awaiting-human` → re-trigger **skipped** (anti-récursion) → `/reply` → `awaiting-agent` → nouveau run. C'est le cycle support exact.
+- 132 tests (121 verts, 11 API skipped).
+**Tags :** `handoff`, `awaiting-human`, `reply`, `anti-recursion`, `round-trip`, `support`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)

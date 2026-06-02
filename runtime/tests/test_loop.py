@@ -97,6 +97,12 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(out.state, ConversationState.RESOLVED)
         self.assertEqual(out.actions_taken, [])
 
+    def test_handoff_ends_in_awaiting_human(self):
+        model = ScriptedModel([ModelTurn(final_text="analysis delivered")])
+        out = AgentLoop(_registry(), ActionPolicy()).run("sys", {}, model, handoff_on_complete=True)
+        self.assertEqual(out.state, ConversationState.AWAITING_HUMAN)
+        self.assertEqual(out.final_text, "analysis delivered")  # the analysis is still returned
+
     def test_refuses_to_run_when_not_awaiting_agent(self):
         model = ScriptedModel([ModelTurn(final_text="x")])
         loop = AgentLoop(_registry(), ActionPolicy())

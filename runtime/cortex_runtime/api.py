@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .runtime import Runtime
+from .session import mark_human_reply
 
 logger = logging.getLogger("cortex_runtime.api")
 
@@ -32,6 +33,12 @@ class RunPayload(BaseModel):
     input: Dict[str, Any] = {}
     model: Optional[str] = None
     autonomy: Optional[List[str]] = None  # action kinds allowed without human validation
+    handoff: bool = False                 # end in AWAITING_HUMAN (analysis/triage flows)
+
+
+class ReplyPayload(BaseModel):
+    workspace: str
+    subject: str
 
 
 def create_app(runtime: Runtime) -> FastAPI:
@@ -86,6 +93,15 @@ def create_app(runtime: Runtime) -> FastAPI:
     def run(payload: RunPayload):
         _require_role(payload, None)
         return _guard(lambda: runtime.run(payload.model_dump()))
+
+    @app.post("/reply")
+    def reply(payload: ReplyPayload):
+        """Signal that a human acted on an awaiting-human subject → re-arm the agent for the
+        next round-trip (anti-recursion exit)."""
+        mark_human_reply(store, payload.workspace, payload.subject)
+        state = store.get_conversation_state(payload.workspace, payload.subject)
+        return {"workspace": payload.workspace, "subject": payload.subject,
+                "state": state.value if state else None}
 
     for path, alias in manifest.items():
         def _make(alias_defaults: Mapping[str, Any]):

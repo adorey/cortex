@@ -64,7 +64,11 @@ class AgentLoop:
         self.max_iterations = max_iterations
 
     def run(self, system_prompt: str, initial_input: Dict[str, Any], model: ModelClient,
-            machine: Optional[StateMachine] = None) -> RunOutcome:
+            machine: Optional[StateMachine] = None, handoff_on_complete: bool = False) -> RunOutcome:
+        """``handoff_on_complete``: when the agent finishes its turn, end in AWAITING_HUMAN
+        (a hand-off — a human/the prompt-manager acts next) instead of RESOLVED. This is the
+        natural end-state of analysis/triage flows (e.g. the support-engineer): the agent
+        delivers its analysis, it does not close the ticket itself."""
         machine = machine or StateMachine()
         if not machine.can_trigger_agent():
             raise RuntimeError(f"agent may not run in state {machine.state.value} (anti-recursion)")
@@ -76,7 +80,8 @@ class AgentLoop:
             turn = model.propose(system_prompt, history)
 
             if turn.is_final:
-                machine.transition(ConversationState.RESOLVED)
+                end_state = ConversationState.AWAITING_HUMAN if handoff_on_complete else ConversationState.RESOLVED
+                machine.transition(end_state)
                 history.append({"role": "agent", "content": turn.final_text})
                 return RunOutcome(machine.state, i, actions, None, turn.final_text, history)
 

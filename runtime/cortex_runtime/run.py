@@ -32,6 +32,9 @@ class RunRequest:
     # Agnostic correlation key for this flow's conversation/anti-recursion state (ADR-003):
     # an issue key, a dashboard correlation id, a scheduled-run key. Falls back per host.
     subject: Optional[str] = None
+    # When true, a normal completion ends in AWAITING_HUMAN (a hand-off) instead of RESOLVED —
+    # the natural end of analysis/triage flows (e.g. support-engineer). Default: resolve.
+    handoff: bool = False
     # Actions the agent may take WITHOUT human validation, for THIS run (action-kind
     # strings, e.g. ["code-read", "internal-comment"]). None → least-privilege default. The
     # autonomy level is a per-request decision, never hard-coded (ADR-002 §3.3).

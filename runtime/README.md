@@ -161,6 +161,18 @@ result = run_session(loop, model, store, workspace="acme", role="support-enginee
   marked `gated` (so the audit shows what ran AND what was blocked). §3.6 holds even though the
   CLI owns the loop.
 
+### Hand-off (analysis/triage flows)
+
+Send `"handoff": true` in the `/run` payload to end a normal completion in `AWAITING_HUMAN`
+instead of `RESOLVED` — the natural end of an analysis flow (e.g. the support-engineer delivers
+its diagnosis; a human/the prompt-manager acts next). A re-trigger on the same `subject` is then
+skipped (anti-recursion) until a human re-arms it:
+
+```
+POST /run    {... "handoff": true}     → state "awaiting-human" (analysis in final_text)
+POST /reply  {"workspace","subject"}   → re-arms the agent → state "awaiting-agent"
+```
+
 ### Monitoring API (read-only)
 
 The stored metrics are exposed for a host (e.g. a dashboard) to poll:

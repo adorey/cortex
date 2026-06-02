@@ -76,6 +76,20 @@ class RuntimeTests(unittest.TestCase):
                               "input": {}})
         self.assertTrue(second["skipped"])
 
+    def test_handoff_round_trip(self):
+        # the support flow: run → AWAITING_HUMAN → re-trigger skipped → human reply → run again
+        from cortex_runtime.session import mark_human_reply
+        first = self.rt.run({"workspace": "host", "role": "support-engineer", "subject": "RT-1",
+                             "input": {}, "handoff": True})
+        self.assertEqual(first["state"], "awaiting-human")        # hand-off, not resolved
+        again = self.rt.run({"workspace": "host", "role": "support-engineer", "subject": "RT-1",
+                             "input": {}, "handoff": True})
+        self.assertTrue(again["skipped"])                         # anti-recursion holds
+        mark_human_reply(self.store, "host", "RT-1")              # a human acted
+        third = self.rt.run({"workspace": "host", "role": "support-engineer", "subject": "RT-1",
+                             "input": {}, "handoff": True})
+        self.assertEqual(third["state"], "awaiting-human")        # agent runs again
+
     def test_unknown_workspace_raises_keyerror(self):
         with self.assertRaises(KeyError):
             self.rt.run({"workspace": "ghost", "role": "lead-backend"})
