@@ -27,6 +27,7 @@ cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
 | 2 | Agnostic API `POST /run` + `derive_capabilities` + manifest aliases (§3.2) | ✅ |
 | 3 | Agentic loop + safety rails in code (§3.3) | ✅ |
 | 3b | Agent SDK adapter (`ModelClient`) + secrets `SecretProvider` (§3.6) | ✅ |
+| — | Persistence: `StateStore` (durable anti-recursion + audit), [ADR-003](../docs/adr/ADR-003-persistence-state-layer.md) | ✅ |
 | 4 | Project binding: warm mirrors + git worktree (§3.4) | ⏳ |
 | 5 | Model gateway (§3.5) | deferred |
 | 6 | Secrets: `SecretProvider` interface (§3.6) | ⏳ |
@@ -106,6 +107,26 @@ model = AnthropicAgentClient(registry, secrets)      # pulls llm_key; needs `ant
 `AnthropicAgentClient` is the `ModelClient` boundary (the loop's plug for a real model). Its
 import of `anthropic` is lazy, so the package and its test suite stay install-free; the pure
 translation helpers (`interpret_response`, `tool_schemas`) are fully tested.
+
+## Persistence — operational state (ADR-003)
+
+Operational state lives behind one swappable interface, `StateStore` — the same discipline
+as secrets. The spec stays in git; only what the agent *produces at runtime* is persisted:
+conversation state (durable anti-recursion across invocations), the audit log (§3.6), and
+run history. Keyed by an agnostic `subject` (the host's correlation id), never a "ticket".
+
+```python
+from cortex_runtime import local_state_store, run_session, mark_human_reply
+
+store = local_state_store("cortex-runtime.db")   # SQLite (dev); InMemoryStateStore in tests
+result = run_session(loop, model, store, workspace="acme", role="support-engineer",
+                     subject="ACME-7", system_prompt=prompt, initial_input={"issue": "ACME-7"})
+# A second trigger on ACME-7 while AWAITING_HUMAN is skipped (anti-recursion);
+# mark_human_reply(store, "acme", "ACME-7") re-arms the agent.
+```
+
+- **Backends** (swappable): `InMemoryStateStore` (tests), `SqliteStateStore` (local), Postgres later.
+- `run_session` is the reference wiring: load state → guard → run → record actions → persist.
 
 ## Run the tests (zero install)
 

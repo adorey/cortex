@@ -1,0 +1,81 @@
+"""Tests for the StateStore backends — ADR-003. Run against both InMemory and SQLite."""
+
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from cortex_runtime.safety import ConversationState  # noqa: E402
+from cortex_runtime.state_store import InMemoryStateStore, SqliteStateStore  # noqa: E402
+
+
+class _StateStoreContract:
+    """Shared contract exercised against every backend."""
+
+    def make_store(self):
+        raise NotImplementedError
+
+    def setUp(self):
+        self.store = self.make_store()
+
+    def test_conversation_state_roundtrip(self):
+        self.assertIsNone(self.store.get_conversation_state("acme", "ACME-1"))
+        self.store.set_conversation_state("acme", "ACME-1", ConversationState.AWAITING_HUMAN)
+        self.assertEqual(self.store.get_conversation_state("acme", "ACME-1"),
+                         ConversationState.AWAITING_HUMAN)
+
+    def test_conversation_state_is_per_subject(self):
+        self.store.set_conversation_state("acme", "ACME-1", ConversationState.RESOLVED)
+        self.assertIsNone(self.store.get_conversation_state("acme", "ACME-2"))
+
+    def test_run_lifecycle_and_history(self):
+        rid = self.store.start_run("acme", "lead-backend", "ACME-1", model="claude-opus-4-8")
+        self.assertTrue(rid)
+        self.store.finish_run(rid, ConversationState.RESOLVED, iterations=4)
+        runs = self.store.list_runs("acme")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0].state, "resolved")
+        self.assertEqual(runs[0].iterations, 4)
+        self.assertEqual(runs[0].role, "lead-backend")
+
+    def test_list_runs_is_scoped_and_recent_first(self):
+        r1 = self.store.start_run("acme", "r", "S1")
+        r2 = self.store.start_run("acme", "r", "S2")
+        self.store.start_run("other", "r", "S3")
+        runs = self.store.list_runs("acme")
+        self.assertEqual([x.run_id for x in runs], [r2, r1])  # recent first, other workspace excluded
+
+    def test_audit_append_and_filter(self):
+        rid = self.store.start_run("acme", "r", "ACME-9")
+        self.store.record_action(rid, "read_db", "db-read", gated=False, at="t1")
+        self.store.record_action(rid, "open_ticket", "issue-create", gated=True, at="t2")
+        trail = self.store.audit_trail(workspace="acme", subject="ACME-9")
+        self.assertEqual([(e.tool, e.gated) for e in trail],
+                         [("read_db", False), ("open_ticket", True)])
+        self.assertEqual(self.store.audit_trail(subject="NOPE"), [])
+
+
+class InMemoryStateStoreTests(_StateStoreContract, unittest.TestCase):
+    def make_store(self):
+        return InMemoryStateStore()
+
+
+class SqliteStateStoreTests(_StateStoreContract, unittest.TestCase):
+    def make_store(self):
+        return SqliteStateStore(":memory:")
+
+    def test_persists_across_connections_on_disk(self):
+        import tempfile
+        db = Path(tempfile.mkdtemp()) / "state.db"
+        s1 = SqliteStateStore(str(db))
+        s1.set_conversation_state("acme", "ACME-1", ConversationState.AWAITING_HUMAN)
+        s1.close()
+        s2 = SqliteStateStore(str(db))  # fresh connection, same file
+        self.assertEqual(s2.get_conversation_state("acme", "ACME-1"),
+                         ConversationState.AWAITING_HUMAN)
+        s2.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

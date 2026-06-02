@@ -110,6 +110,18 @@
 - **[ADR-003](../../adr/ADR-003-persistence-state-layer.md) rédigé et accepté** — après revue humanoïde : `ticket` → `subject` (agnostique), et scrub des noms de projets privés (WBTB/Bluspark → `acme`) dans les fichiers de session + le guide `extending-layers.md` (ADR-001 laissé tel quel comme trace ratifiée).
 **Tags :** `adr-003`, `persistence`, `state-store`, `audit`, `git-vs-db`, `litellm`, `multi-provider`
 
+### 2026-06-02 — ADR-003 follow-up #1 : StateStore + session orchestration
+**Contexte :** implémentation de la couche de persistance actée par l'ADR-003.
+**Participants :** @Oolon → @Vogon (schéma/persistance) → @Hactar (wiring)
+**Décisions / outputs :**
+- **`state_store.py`** ([lien](../../../runtime/cortex_runtime/state_store.py)) : interface `StateStore` (keyed by `subject`, agnostique) + dataclasses `RunRecord`/`AuditEntry`. Backends swappables : `InMemoryStateStore` (tests), `SqliteStateStore` (fichier ou `:memory:`). Postgres = backend ultérieur, même interface.
+- **`session.py`** : `run_session()` = orchestration de référence §3.3 (load state → guard anti-récursion → run loop → record actions → persist). `mark_human_reply()` ré-arme l'agent.
+- **Anti-récursion durable démontrée** : invocation 1 → action gated → `AWAITING_HUMAN` persisté ; invocation 2 sur le même `subject` → **skipped** (l'agent ne réagit pas à sa propre sortie) ; après `mark_human_reply` → l'agent re-tourne et résout.
+- Audit log append-only branché ; `.db`/`.sqlite3` gitignorés.
+- 101 tests (94 verts, 7 API skipped).
+- **Sémantique à raffiner (noté)** : « agent poste un commentaire interne puis attend l'humain » ≠ `RESOLVED`. Aujourd'hui seul un *gated action* mène à `AWAITING_HUMAN`. Un futur signal `handoff`/`await_human` (ou un mapping phase-1) reste à définir côté boucle.
+**Tags :** `adr-003`, `state-store`, `sqlite`, `session`, `anti-recursion`, `audit`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)

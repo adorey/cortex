@@ -8,3 +8,7 @@ __pycache__/
 .env.local
 *.env.local
 .env
+
+# Local SQLite state store (ADR-003) — operational state, never committed.
+*.db
+*.sqlite3

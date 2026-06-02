@@ -31,6 +31,15 @@ from .secret_provider import (
     parse_dotenv,
 )
 from .run import ResolvedRun, RunRequest, resolve_run
+from .session import SessionResult, mark_human_reply, run_session
+from .state_store import (
+    AuditEntry,
+    InMemoryStateStore,
+    RunRecord,
+    SqliteStateStore,
+    StateStore,
+    local_state_store,
+)
 from .safety import (
     SAFE_DEFAULT_ACTIONS,
     ActionKind,
@@ -85,6 +94,17 @@ __all__ = [
     "AnthropicAgentClient",
     "interpret_response",
     "tool_schemas",
+    # persistence / operational state (ADR-003)
+    "StateStore",
+    "InMemoryStateStore",
+    "SqliteStateStore",
+    "local_state_store",
+    "RunRecord",
+    "AuditEntry",
+    # session orchestration (§3.3 wiring)
+    "run_session",
+    "mark_human_reply",
+    "SessionResult",
 ]
 
 __version__ = "0.0.1"
