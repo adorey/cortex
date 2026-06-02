@@ -35,6 +35,9 @@ class RunRequest:
     # When true, a normal completion ends in AWAITING_HUMAN (a hand-off) instead of RESOLVED —
     # the natural end of analysis/triage flows (e.g. support-engineer). Default: resolve.
     handoff: bool = False
+    # Testing/override: bypass the anti-recursion guard and run even if the subject is not
+    # awaiting-agent (re-run the same ticket without re-arming). Never use in production.
+    force: bool = False
     # Actions the agent may take WITHOUT human validation, for THIS run (action-kind
     # strings, e.g. ["code-read", "internal-comment"]). None → least-privilege default. The
     # autonomy level is a per-request decision, never hard-coded (ADR-002 §3.3).

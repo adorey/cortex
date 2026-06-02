@@ -40,6 +40,7 @@ def run_session(
     initial_input: Dict[str, Any],
     model_id: Optional[str] = None,
     handoff: bool = False,
+    force: bool = False,
     at: str = "",
 ) -> SessionResult:
     """Run one invocation with durable conversation state + audit.
@@ -48,9 +49,11 @@ def run_session(
     own previous output), the run is **skipped** — the durable anti-recursion guarantee.
     """
     persisted = store.get_conversation_state(workspace, subject)
-    machine = StateMachine(persisted) if persisted is not None else StateMachine()
+    # force: treat as a fresh awaiting-agent run, ignoring persisted state (testing override).
+    machine = StateMachine() if force else (
+        StateMachine(persisted) if persisted is not None else StateMachine())
 
-    if not machine.can_trigger_agent():
+    if not force and not machine.can_trigger_agent():
         return SessionResult(None, None, skipped=True,
                              reason=f"state '{machine.state.value}' is not awaiting-agent (anti-recursion)")
 

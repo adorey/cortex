@@ -34,6 +34,7 @@ class RunPayload(BaseModel):
     model: Optional[str] = None
     autonomy: Optional[List[str]] = None  # action kinds allowed without human validation
     handoff: bool = False                 # end in AWAITING_HUMAN (analysis/triage flows)
+    force: bool = False                   # testing: bypass anti-recursion (re-run same subject)
 
 
 class ReplyPayload(BaseModel):

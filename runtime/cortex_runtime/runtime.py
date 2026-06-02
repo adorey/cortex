@@ -103,7 +103,7 @@ class Runtime:
             loop, model, self.cfg.store,
             workspace=req.workspace, role=req.role, subject=subject,
             system_prompt=resolved.system_prompt, initial_input=req.input, model_id=req.model,
-            handoff=req.handoff, at=_now(),
+            handoff=req.handoff, force=req.force, at=_now(),
         )
 
         if result.skipped:

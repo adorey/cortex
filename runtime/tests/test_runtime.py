@@ -90,6 +90,17 @@ class RuntimeTests(unittest.TestCase):
                              "input": {}, "handoff": True})
         self.assertEqual(third["state"], "awaiting-human")        # agent runs again
 
+    def test_force_bypasses_anti_recursion(self):
+        self.rt.run({"workspace": "host", "role": "support-engineer", "subject": "F-1", "input": {}})
+        # a plain re-run on the resolved subject is skipped...
+        self.assertTrue(self.rt.run({"workspace": "host", "role": "support-engineer",
+                                     "subject": "F-1", "input": {}})["skipped"])
+        # ...but force re-runs it anyway (testing the same ticket repeatedly)
+        forced = self.rt.run({"workspace": "host", "role": "support-engineer",
+                              "subject": "F-1", "input": {}, "force": True})
+        self.assertFalse(forced["skipped"])
+        self.assertEqual(forced["state"], "resolved")
+
     def test_unknown_workspace_raises_keyerror(self):
         with self.assertRaises(KeyError):
             self.rt.run({"workspace": "ghost", "role": "lead-backend"})

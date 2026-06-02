@@ -173,6 +173,9 @@ POST /run    {... "handoff": true}     → state "awaiting-human" (analysis in f
 POST /reply  {"workspace","subject"}   → re-arms the agent → state "awaiting-agent"
 ```
 
+For testing, add `"force": true` to `/run` to bypass the anti-recursion guard and re-run the
+same `subject` without re-arming (never use in production).
+
 ### Monitoring API (read-only)
 
 The stored metrics are exposed for a host (e.g. a dashboard) to poll:
