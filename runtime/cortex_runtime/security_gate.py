@@ -28,7 +28,7 @@ from .state_store import StateStore
 IDEMPOTENCY_TTL_S = 24 * 60 * 60   # remember a delivery's outcome for a day (ADR-004 §3.3)
 
 # Verdict → HTTP status. Auth failures are 401; authorization failures 403; the wallet
-# guards get their own codes so a caller (and wbtb) can tell *why* it was shed.
+# guards get their own codes so a caller (and a monitoring host) can tell *why* it was shed.
 _STATUS = {
     AuthReason.OK: 200,
     AuthReason.INVALID_SIGNATURE: 401,
@@ -131,7 +131,7 @@ def build_gate(store: StateStore, secrets: SecretProvider, *,
     """Assemble a production gate from a store + SecretProvider.
 
     Per-tenant HMAC secrets are read from the provider as ``<tenant>_webhook_hmac`` (e.g.
-    ``BLUSPARK_WEBHOOK_HMAC``) — raw, never the DB (ADR-004 §3.7). The ephemeral state
+    ``ACME_WEBHOOK_HMAC``) — raw, never the DB (ADR-004 §3.7). The ephemeral state
     (rate-limit / nonce / idempotency) defaults to an in-process store for a single node;
     pass a Redis-backed :class:`EphemeralStore` for multi-replica (ADR-005 §2.2)."""
     eph = ephemeral or InMemoryEphemeralStore()   # shared: nonce (policy) + rate/idem (gate)

@@ -231,10 +231,10 @@
 **Tags :** `adr-005`, `resilience`, `async`, `queue-worker`, `timeout`, `readiness`, `robustness`
 
 ### 2026-06-03 — ADR-005 accepté + ADR-004 implémenté (branche `feat/api-security`)
-**Contexte :** les deux ADR validés. L'humanoïde veut **monitorer dans wbtb** (routes ouvertes mais à token) et demande une **branche sécu séparée** (partant de `feat/cortex-runtime`) pour reviewer la feature à part — « elle est déjà bien costaude ». Async (ADR-005) → branche ultérieure.
+**Contexte :** les deux ADR validés. L'humanoïde veut **monitorer dans monitoring** (routes ouvertes mais à token) et demande une **branche sécu séparée** (partant de `feat/cortex-runtime`) pour reviewer la feature à part — « elle est déjà bien costaude ». Async (ADR-005) → branche ultérieure.
 **Participants :** @Oolon → @Marvin (sécu)
 **Décisions / outputs :**
-- **ADR-005 accepté** : in-process = `asyncio.Queue` + pool de workers (dev/mono-nœud) ; prod = **RabbitMQ** (job queue durable, ack/nack+requeue, dead-letter) + **Redis** (état éphémère : rate-limit / idempotence / nonce — TTL natif). Routes monitoring **Bearer-accessibles** pour wbtb.
+- **ADR-005 accepté** : in-process = `asyncio.Queue` + pool de workers (dev/mono-nœud) ; prod = **RabbitMQ** (job queue durable, ack/nack+requeue, dead-letter) + **Redis** (état éphémère : rate-limit / idempotence / nonce — TTL natif). Routes monitoring **Bearer-accessibles** pour monitoring.
 - **ADR-004 implémenté de bout en bout**, 7 commits, pur→shell mince, +104 tests (241 passent) :
   1. **`auth.py`** — cœur pur : HMAC sign/verify (constant-time), hash Bearer, fenêtre anti-rejeu, enum `AuthReason` ; clock-injecté, zéro I/O.
   2. **`state_store.py`** — tables `tenants` / `api_tokens` (haché, jamais le brut) / `auth_log` (journal périmètre : chaque tentative + verdict + raison) sur les 3 backends ; + colonne `started_at` sur `runs` (fenêtrage budget).
@@ -242,10 +242,10 @@
   4. **`ephemeral.py`** — primitives TTL derrière `EphemeralStore` (in-process now / Redis later) : compteur fenêtre (rate-limit), nonce (rejeu exact), idempotence.
   5. **`budget.py`** — cap roulant 24h/30j calculé depuis `runs.cost_usd` (pas de table de spend séparée).
   6. **`security_gate.py`** — chaîne ordonnée ADR §2 (auth → idempotence → rate → budget), **une seule ligne `auth_log`** par tentative, mapping verdict→statut HTTP.
-  7. **`api.py`** — sécurité **opt-in** (`gate=None` ⇒ ouvert, démo locale) ; Bearer sur direct + monitoring, chaîne complète sur `/run` (+ `Idempotency-Key`), **`GET /auth-log` + `GET /budget`** pour wbtb. `/health` reste ouvert.
+  7. **`api.py`** — sécurité **opt-in** (`gate=None` ⇒ ouvert, démo locale) ; Bearer sur direct + monitoring, chaîne complète sur `/run` (+ `Idempotency-Key`), **`GET /auth-log` + `GET /budget`** pour monitoring. `/health` reste ouvert.
   - **Ops** : `build_gate()`, toggle `CORTEX_AUTH=on`, CLI `python -m cortex_runtime.admin` (register tenant / mint token — brut affiché **une fois**, hash stocké). Secrets HMAC en `<TENANT>_WEBHOOK_HMAC` via `SecretProvider`, **jamais en DB**.
 - **Reste** (host-specific / plus tard) : route `/webhook/{tenant}` (le chemin HMAC est codé+testé mais non monté), backend Redis `EphemeralStore`, puis **branche async** (ADR-005).
-**Tags :** `adr-004`, `adr-005`, `security`, `bearer`, `hmac`, `rate-limit`, `budget-cap`, `idempotency`, `auth-log`, `wbtb`, `admin-cli`
+**Tags :** `adr-004`, `adr-005`, `security`, `bearer`, `hmac`, `rate-limit`, `budget-cap`, `idempotency`, `auth-log`, `monitoring`, `admin-cli`
 
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)

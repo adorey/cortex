@@ -7,8 +7,8 @@ and its test suite need no web framework.
 - POST /resolve      → the resolved identity bundle (resolution only)
 - POST /run          → resolve AND execute the agentic loop (durable state + audit)
 - POST /{alias}      → manifest-declared domain endpoints, alias to /run
-- GET  /auth-log     → the perimeter connection log (monitoring, e.g. wbtb)
-- GET  /budget       → a tenant's remaining rolling budget (monitoring)
+- GET  /auth-log     → the perimeter connection log (read-only, for monitoring hosts)
+- GET  /budget       → a tenant's remaining rolling budget (read-only, for monitoring hosts)
 
 Security (ADR-004) is **opt-in**: pass a :class:`SecurityGate` to enable Bearer auth on the
 direct + monitoring routes (and the full rate/budget/idempotency chain on ``/run``). With no
@@ -117,7 +117,7 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> Fast
         return {"status": "ok", "backend": runtime.cfg.model_backend,
                 "workspaces": sorted(runtime.cfg.workspaces), "endpoints": sorted(manifest)}
 
-    # — monitoring (read-only, Bearer-protected when a gate is set): for wbtb dashboards —
+    # — monitoring (read-only, Bearer-protected when a gate is set): for monitoring hosts —
     @app.get("/runs")
     def runs(request: Request, workspace: str, limit: int = 50):
         _require_read(request, workspace)

@@ -5,10 +5,10 @@ that seeds them. It writes to the same StateStore the server reads (selected fro
 environment, like the server: ``CORTEX_DATABASE_URL`` → Postgres, ``CORTEX_DB`` → SQLite).
 
     # register / reconfigure a tenant (idempotent)
-    python -m cortex_runtime.admin tenant bluspark --daily 20 --monthly 300 --rate 60
+    python -m cortex_runtime.admin tenant acme --daily 20 --monthly 300 --rate 60
 
     # mint a token scoped to one or more workspaces — the RAW token is printed ONCE
-    python -m cortex_runtime.admin token bluspark --scope bluspark --label wbtb-dashboard
+    python -m cortex_runtime.admin token acme --scope acme --label monitoring-dashboard
 
 Only a **hash** of the token is stored (§3.7); if the printed value is lost, revoke and
 re-issue. HMAC webhook secrets are NOT managed here — they live in the SecretProvider
@@ -76,7 +76,7 @@ def main(argv=None) -> int:
     pk = sub.add_parser("token", help="mint a Bearer token for a tenant")
     pk.add_argument("tenant")
     pk.add_argument("--scope", action="append", help="workspace the token may invoke (repeatable)")
-    pk.add_argument("--label", default=None, help="human label (e.g. wbtb-dashboard)")
+    pk.add_argument("--label", default=None, help="human label (e.g. monitoring-dashboard)")
     pk.add_argument("--expires", default=None, help="expiry as unix seconds (default: never)")
     pk.set_defaults(func=cmd_token)
 

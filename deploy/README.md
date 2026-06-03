@@ -63,16 +63,16 @@ cd deploy
 
 # 1. register the tenant (idempotent — re-run to reconfigure budgets / rate limit)
 docker compose exec cortex-runtime \
-  python -m cortex_runtime.admin tenant bluspark --daily 20 --monthly 300 --rate 60
+  python -m cortex_runtime.admin tenant acme --daily 20 --monthly 300 --rate 60
 
 # 2. mint a token, scoped to the workspaces it may invoke. The RAW token is printed ONCE.
 docker compose exec cortex-runtime \
-  python -m cortex_runtime.admin token bluspark --scope bluspark --label wbtb-dashboard
+  python -m cortex_runtime.admin token acme --scope acme --label monitoring-dashboard
 #   → store the printed `rt_live_…` value now; only its SHA-256 hash is kept in the DB.
 
 # 3. call the API with it
 curl -H "Authorization: Bearer rt_live_…" \
-  "https://cortex.local.dev/runs?workspace=bluspark"
+  "https://cortex.local.dev/runs?workspace=acme"
 ```
 
 **What is stored, and how:**
@@ -90,7 +90,7 @@ curl -H "Authorization: Bearer rt_live_…" \
 > low-entropy inputs, which this isn't. Full at-rest encryption (TDE / encrypted volume) is a
 > Postgres / disk concern, orthogonal to this.
 
-**wbtb dashboards:** mint a token scoped to the workspaces it monitors and poll `GET /runs`,
+**Monitoring hosts:** mint a token scoped to the workspaces it monitors and poll `GET /runs`,
 `GET /auth-log`, `GET /budget` with it — all Bearer-protected, all read-only.
 
 ## Notes

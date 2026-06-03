@@ -21,21 +21,21 @@ def test_minted_token_is_prefixed_and_unique():
 
 def test_minted_token_authenticates_and_is_stored_hashed(monkeypatch, capsys):
     store = InMemoryStateStore()
-    store.upsert_tenant("bluspark", enabled=True)
+    store.upsert_tenant("acme", enabled=True)
     monkeypatch.setattr(admin, "store_from_env", lambda: store)
 
-    assert admin.main(["token", "bluspark", "--scope", "bluspark"]) == 0
+    assert admin.main(["token", "acme", "--scope", "acme"]) == 0
     raw = re.search(r"(rt_live_[\w-]+)", capsys.readouterr().out).group(1)
 
     # the raw token never lands in the DB — only its hash
     rec = store.get_token_by_hash(hash_token(raw))
-    assert rec is not None and rec.tenant == "bluspark" and rec.scopes == ["bluspark"]
-    assert all(t.token_hash != raw for t in store.list_tokens("bluspark"))
+    assert rec is not None and rec.tenant == "acme" and rec.scopes == ["acme"]
+    assert all(t.token_hash != raw for t in store.list_tokens("acme"))
 
     # and it authenticates through the policy
     policy = AuthPolicy(store, hmac_secret_for=lambda t: None)
     out = policy.check(AuthRequest(AuthMethod.BEARER, "/run", NOW,
-                                   authorization=f"Bearer {raw}", workspace="bluspark"))
+                                   authorization=f"Bearer {raw}", workspace="acme"))
     assert out.reason is AuthReason.OK
 
 
@@ -48,6 +48,6 @@ def test_token_for_unknown_tenant_errors(monkeypatch):
 def test_tenant_command_upserts(monkeypatch, capsys):
     store = InMemoryStateStore()
     monkeypatch.setattr(admin, "store_from_env", lambda: store)
-    assert admin.main(["tenant", "bluspark", "--daily", "20", "--rate", "60"]) == 0
-    t = store.get_tenant("bluspark")
+    assert admin.main(["tenant", "acme", "--daily", "20", "--rate", "60"]) == 0
+    t = store.get_tenant("acme")
     assert (t.budget_daily_usd, t.rate_limit_per_min, t.enabled) == (20.0, 60, True)

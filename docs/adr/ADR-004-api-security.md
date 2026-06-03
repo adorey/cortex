@@ -134,7 +134,7 @@ Implemented on `feat/api-security` (engine side):
 3. **Budget cap** — ✅ rolling-window ceiling from `cost_usd` (`budget.py`) + `GET /budget` (remaining); needed a `started_at` column on `runs`.
 4. **Idempotency store** — ✅ TTL store via `EphemeralStore`; `/run` honours `Idempotency-Key` (cached outcome, no re-run).
 5. **Secret inventory** — ✅ per-tenant HMAC secret (`<TENANT>_WEBHOOK_HMAC`) via the `SecretProvider`; Bearer tokens minted by `python -m cortex_runtime.admin` (raw shown once, hash stored).
-6. **Bearer-protected routes** — ✅ direct (`/run`, `/resolve`, `/reply`) + monitoring (`/runs`, `/runs/{id}`, `/audit`, `/auth-log`, `/budget`) for wbtb; `CORTEX_AUTH=on` enables it. `/health` stays open (liveness).
+6. **Bearer-protected routes** — ✅ direct (`/run`, `/resolve`, `/reply`) + monitoring (`/runs`, `/runs/{id}`, `/audit`, `/auth-log`, `/budget`) for monitoring; `CORTEX_AUTH=on` enables it. `/health` stays open (liveness).
 
 Still out of scope (host-specific / later):
 

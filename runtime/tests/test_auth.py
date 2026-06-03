@@ -115,7 +115,7 @@ def test_parse_bearer(header, expected):
 # ── outcome value object ──────────────────────────────────────────────────────────────
 
 def test_outcome_ok_mirrors_reason():
-    ok = AuthOutcome(AuthReason.OK, AuthMethod.BEARER, tenant="bluspark", token_id="t1")
-    assert ok.ok is True and ok.tenant == "bluspark"
+    ok = AuthOutcome(AuthReason.OK, AuthMethod.BEARER, tenant="acme", token_id="t1")
+    assert ok.ok is True and ok.tenant == "acme"
     bad = AuthOutcome(AuthReason.UNKNOWN_TOKEN, AuthMethod.BEARER)
     assert bad.ok is False and bad.tenant is None

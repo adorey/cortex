@@ -19,7 +19,7 @@ RAW = "rt_live_token"
 @pytest.fixture
 def store():
     s = InMemoryStateStore()
-    s.upsert_tenant("bluspark", enabled=True)
+    s.upsert_tenant("acme", enabled=True)
     return s
 
 
@@ -31,11 +31,11 @@ def gate(store):
 
 def _token(store, *, scopes=(), rate=None, daily=None):
     if rate is not None or daily is not None:
-        store.upsert_tenant("bluspark", enabled=True, rate_limit_per_min=rate, budget_daily_usd=daily)
-    return store.add_token("bluspark", hash_token(RAW), scopes=list(scopes))
+        store.upsert_tenant("acme", enabled=True, rate_limit_per_min=rate, budget_daily_usd=daily)
+    return store.add_token("acme", hash_token(RAW), scopes=list(scopes))
 
 
-def _req(route="/run", workspace="bluspark"):
+def _req(route="/run", workspace="acme"):
     return AuthRequest(AuthMethod.BEARER, route, NOW,
                        authorization=f"Bearer {RAW}", workspace=workspace, source_ip="10.0.0.1")
 
@@ -70,7 +70,7 @@ def test_rate_limited_after_auth(store, gate):
 
 def test_budget_exceeded_blocks(store, gate):
     _token(store, daily=1.0)
-    rid = store.start_run("bluspark", "r", "S", started_at=NOW - 10)
+    rid = store.start_run("acme", "r", "S", started_at=NOW - 10)
     store.finish_run(rid, ConversationState.RESOLVED, 1, usage={"total_cost_usd": 1.5})
     d = gate.authorize(_req())
     assert d.outcome.reason is AuthReason.BUDGET_EXCEEDED and d.status == 402
@@ -79,7 +79,7 @@ def test_budget_exceeded_blocks(store, gate):
 
 def test_budget_passes_when_under_ceiling(store, gate):
     _token(store, daily=10.0)
-    rid = store.start_run("bluspark", "r", "S", started_at=NOW - 10)
+    rid = store.start_run("acme", "r", "S", started_at=NOW - 10)
     store.finish_run(rid, ConversationState.RESOLVED, 1, usage={"total_cost_usd": 2.0})
     d = gate.authorize(_req())
     assert d.allowed and d.budget.daily.remaining_usd == pytest.approx(8.0)
@@ -101,10 +101,10 @@ def test_idempotent_replay_skips_run_and_charges_nothing(store, gate):
 def test_idempotency_key_is_scoped_per_tenant(store, gate):
     _token(store)
     d = gate.authorize(_req(), idempotency_key="shared-id")
-    gate.remember(d.outcome, "shared-id", "outcome-bluspark", now=NOW)
+    gate.remember(d.outcome, "shared-id", "outcome-acme", now=NOW)
     # same key under the SAME tenant hits; the scoping guards against cross-tenant collisions
     again = gate.authorize(_req(), idempotency_key="shared-id")
-    assert again.idempotent_replay == "outcome-bluspark"
+    assert again.idempotent_replay == "outcome-acme"
 
 
 # ── status mapping ──────────────────────────────────────────────────────────────────────

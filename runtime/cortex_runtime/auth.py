@@ -34,7 +34,7 @@ class AuthReason(str, Enum):
     """The verdict on an auth attempt — recorded verbatim in ``auth_log`` (§3.7).
 
     ``OK`` is the only accepting value; every other member is a rejection cause. The set is
-    closed and stable so dashboards (wbtb) can group on it.
+    closed and stable so monitoring dashboards can group on it.
     """
 
     OK = "ok"

@@ -78,7 +78,7 @@ class SecuredApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.json()["detail"], "out_of_scope")
 
-    # — monitoring routes require the token (for wbtb) —
+    # — monitoring routes require the token (for monitoring) —
     def test_monitoring_requires_token(self):
         self.assertEqual(self.client.get("/runs", params={"workspace": "host"}).status_code, 401)
         r = self.client.get("/runs", params={"workspace": "host"}, headers=self._auth())
