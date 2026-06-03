@@ -42,11 +42,14 @@ from .run import ResolvedRun, RunRequest, resolve_run
 from .session import SessionResult, mark_human_reply, run_session
 from .state_store import (
     AuditEntry,
+    AuthLogEntry,
     InMemoryStateStore,
     PostgresStateStore,
     RunRecord,
     SqliteStateStore,
     StateStore,
+    TenantRecord,
+    TokenRecord,
     local_state_store,
 )
 from .safety import (
@@ -144,6 +147,9 @@ __all__ = [
     "local_state_store",
     "RunRecord",
     "AuditEntry",
+    "TenantRecord",
+    "TokenRecord",
+    "AuthLogEntry",
     # session orchestration (§3.3 wiring)
     "run_session",
     "mark_human_reply",

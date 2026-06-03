@@ -18,7 +18,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Protocol
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol
 
 from .safety import ConversationState
 
@@ -49,6 +49,88 @@ class AuditEntry:
     kind: str
     gated: bool
     at: str
+
+
+# ── API security operational state (ADR-004 §3.7) ────────────────────────────────────────
+# These three tables are the security perimeter's state. They hold ONLY operational config
+# and the connection log — never raw secrets: HMAC secrets stay in the SecretProvider, and
+# Bearer tokens are stored as a hash (``token_hash``), never the raw value. The *spec* a
+# tenant points at remains in git (the ADR-003 firewall is untouched).
+
+@dataclass
+class TenantRecord:
+    """Per-tenant operational config (keyed by the agnostic ``tenant`` = workspace name).
+    Addable/tunable without a redeploy; the budget ceilings feed the cap (§3.5)."""
+    tenant: str
+    enabled: bool = True
+    budget_daily_usd: Optional[float] = None
+    budget_monthly_usd: Optional[float] = None
+    rate_limit_per_min: Optional[int] = None
+
+
+@dataclass
+class TokenRecord:
+    """A Bearer token at rest: its **hash**, owning tenant, and authorization scope.
+    ``scopes`` = the workspaces the token may invoke (empty ⇒ its own tenant only)."""
+    token_id: str
+    tenant: str
+    token_hash: str
+    scopes: List[str]
+    revoked: bool = False
+    label: Optional[str] = None
+    expires_at: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+@dataclass
+class AuthLogEntry:
+    """One inbound auth attempt — accepted or rejected — with the verdict and its reason.
+    The perimeter log (who tried / verdict / why), distinct from the agent ``audit`` log."""
+    at: str
+    route: str
+    method: str            # "hmac" | "bearer"
+    result: str            # "accepted" | "rejected"
+    reason: str            # an AuthReason value
+    tenant: Optional[str] = None
+    source_ip: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+def _dump_scopes(scopes: Optional[Iterable[str]]) -> str:
+    return json.dumps(list(scopes or []))
+
+
+def _load_scopes(raw: Optional[str]) -> List[str]:
+    return list(json.loads(raw)) if raw else []
+
+
+def _token_from_row(row) -> TokenRecord:
+    return TokenRecord(
+        token_id=row["token_id"], tenant=row["tenant"], token_hash=row["token_hash"],
+        scopes=_load_scopes(row["scopes"]), revoked=bool(row["revoked"]),
+        label=row["label"], expires_at=row["expires_at"], created_at=row["created_at"],
+    )
+
+
+def _tenant_from_row(row) -> TenantRecord:
+    return TenantRecord(
+        tenant=row["tenant"], enabled=bool(row["enabled"]),
+        budget_daily_usd=row["budget_daily_usd"], budget_monthly_usd=row["budget_monthly_usd"],
+        rate_limit_per_min=row["rate_limit_per_min"],
+    )
+
+
+def _authlog_from_row(row) -> AuthLogEntry:
+    return AuthLogEntry(
+        at=row["at"], route=row["route"], method=row["method"], result=row["result"],
+        reason=row["reason"], tenant=row["tenant"], source_ip=row["source_ip"],
+        request_id=row["request_id"],
+    )
+
+
+_TOKEN_COLUMNS = "token_id, tenant, token_hash, scopes, revoked, label, expires_at, created_at"
+_TENANT_COLUMNS = "tenant, enabled, budget_daily_usd, budget_monthly_usd, rate_limit_per_min"
+_AUTHLOG_COLUMNS = "at, route, method, result, reason, tenant, source_ip, request_id"
 
 
 def _usage_fields(usage: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
@@ -83,6 +165,29 @@ class StateStore(Protocol):
     def record_action(self, run_id: str, tool: str, kind: str, gated: bool, at: str) -> None: ...
     def audit_trail(self, *, workspace: Optional[str] = None, subject: Optional[str] = None) -> List[AuditEntry]: ...
 
+    # — tenant registry (ADR-004 §3.7) —
+    def upsert_tenant(self, tenant: str, *, enabled: bool = True,
+                      budget_daily_usd: Optional[float] = None,
+                      budget_monthly_usd: Optional[float] = None,
+                      rate_limit_per_min: Optional[int] = None) -> None: ...
+    def get_tenant(self, tenant: str) -> Optional[TenantRecord]: ...
+    def list_tenants(self) -> List[TenantRecord]: ...
+
+    # — Bearer tokens (stored hashed; ADR-004 §3.2/§3.7) —
+    def add_token(self, tenant: str, token_hash: str, *, scopes: Iterable[str] = (),
+                  label: Optional[str] = None, expires_at: Optional[str] = None,
+                  created_at: Optional[str] = None) -> str: ...
+    def get_token_by_hash(self, token_hash: str) -> Optional[TokenRecord]: ...
+    def revoke_token(self, token_id: str) -> None: ...
+    def list_tokens(self, tenant: str) -> List[TokenRecord]: ...
+
+    # — connection log (perimeter; ADR-004 §3.7) —
+    def record_auth(self, *, at: str, route: str, method: str, result: str, reason: str,
+                    tenant: Optional[str] = None, source_ip: Optional[str] = None,
+                    request_id: Optional[str] = None) -> None: ...
+    def auth_log(self, *, tenant: Optional[str] = None, result: Optional[str] = None,
+                 limit: int = 100) -> List[AuthLogEntry]: ...
+
 
 def _new_run_id() -> str:
     return uuid.uuid4().hex
@@ -96,6 +201,9 @@ class InMemoryStateStore:
         self._runs: dict = {}
         self._audit: List[AuditEntry] = []
         self._run_subject: dict = {}
+        self._tenants: Dict[str, TenantRecord] = {}
+        self._tokens: Dict[str, TokenRecord] = {}        # token_id → record
+        self._auth_log: List[AuthLogEntry] = []
 
     def get_conversation_state(self, workspace, subject):
         return self._state.get((workspace, subject))
@@ -137,6 +245,49 @@ class InMemoryStateStore:
             return (workspace is None or ws == workspace) and (subject is None or subj == subject)
         return [e for e in self._audit if match(e)]
 
+    def upsert_tenant(self, tenant, *, enabled=True, budget_daily_usd=None,
+                      budget_monthly_usd=None, rate_limit_per_min=None):
+        self._tenants[tenant] = TenantRecord(tenant, enabled, budget_daily_usd,
+                                             budget_monthly_usd, rate_limit_per_min)
+
+    def get_tenant(self, tenant):
+        return self._tenants.get(tenant)
+
+    def list_tenants(self):
+        return list(self._tenants.values())
+
+    def add_token(self, tenant, token_hash, *, scopes=(), label=None, expires_at=None,
+                  created_at=None):
+        token_id = uuid.uuid4().hex
+        self._tokens[token_id] = TokenRecord(token_id, tenant, token_hash, list(scopes),
+                                             False, label, expires_at, created_at)
+        return token_id
+
+    def get_token_by_hash(self, token_hash):
+        for rec in self._tokens.values():
+            if rec.token_hash == token_hash:
+                return rec
+        return None
+
+    def revoke_token(self, token_id):
+        rec = self._tokens.get(token_id)
+        if rec:
+            rec.revoked = True
+
+    def list_tokens(self, tenant):
+        return [r for r in self._tokens.values() if r.tenant == tenant]
+
+    def record_auth(self, *, at, route, method, result, reason, tenant=None,
+                    source_ip=None, request_id=None):
+        self._auth_log.append(AuthLogEntry(at, route, method, result, reason,
+                                           tenant, source_ip, request_id))
+
+    def auth_log(self, *, tenant=None, result=None, limit=100):
+        rows = [e for e in self._auth_log
+                if (tenant is None or e.tenant == tenant)
+                and (result is None or e.result == result)]
+        return list(reversed(rows))[:limit]
+
 
 _RUN_COLUMNS = "run_id, workspace, role, subject, model, state, iterations, error, " \
                "cost_usd, tokens_in, tokens_out, num_turns, duration_ms, ttft_ms, metrics_json"
@@ -165,6 +316,21 @@ class SqliteStateStore:
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
                 tool TEXT NOT NULL, kind TEXT NOT NULL, gated INTEGER NOT NULL, at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS tenants (
+                tenant TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1,
+                budget_daily_usd REAL, budget_monthly_usd REAL, rate_limit_per_min INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS api_tokens (
+                token_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+                scopes TEXT, revoked INTEGER NOT NULL DEFAULT 0,
+                label TEXT, expires_at TEXT, created_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
+            CREATE TABLE IF NOT EXISTS auth_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, route TEXT NOT NULL,
+                method TEXT NOT NULL, result TEXT NOT NULL, reason TEXT NOT NULL,
+                tenant TEXT, source_ip TEXT, request_id TEXT
             );
             """
         )
@@ -255,6 +421,74 @@ class SqliteStateStore:
         rows = self._conn.execute(sql, params).fetchall()
         return [AuditEntry(r["run_id"], r["tool"], r["kind"], bool(r["gated"]), r["at"]) for r in rows]
 
+    def upsert_tenant(self, tenant, *, enabled=True, budget_daily_usd=None,
+                      budget_monthly_usd=None, rate_limit_per_min=None):
+        self._conn.execute(
+            "INSERT INTO tenants (tenant, enabled, budget_daily_usd, budget_monthly_usd, "
+            "rate_limit_per_min) VALUES (?, ?, ?, ?, ?) ON CONFLICT(tenant) DO UPDATE SET "
+            "enabled=excluded.enabled, budget_daily_usd=excluded.budget_daily_usd, "
+            "budget_monthly_usd=excluded.budget_monthly_usd, rate_limit_per_min=excluded.rate_limit_per_min",
+            (tenant, 1 if enabled else 0, budget_daily_usd, budget_monthly_usd, rate_limit_per_min),
+        )
+        self._conn.commit()
+
+    def get_tenant(self, tenant):
+        row = self._conn.execute(
+            f"SELECT {_TENANT_COLUMNS} FROM tenants WHERE tenant=?", (tenant,)).fetchone()
+        return _tenant_from_row(row) if row else None
+
+    def list_tenants(self):
+        rows = self._conn.execute(f"SELECT {_TENANT_COLUMNS} FROM tenants ORDER BY tenant").fetchall()
+        return [_tenant_from_row(r) for r in rows]
+
+    def add_token(self, tenant, token_hash, *, scopes=(), label=None, expires_at=None,
+                  created_at=None):
+        token_id = uuid.uuid4().hex
+        self._conn.execute(
+            "INSERT INTO api_tokens (token_id, tenant, token_hash, scopes, revoked, label, "
+            "expires_at, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
+            (token_id, tenant, token_hash, _dump_scopes(scopes), label, expires_at, created_at),
+        )
+        self._conn.commit()
+        return token_id
+
+    def get_token_by_hash(self, token_hash):
+        row = self._conn.execute(
+            f"SELECT {_TOKEN_COLUMNS} FROM api_tokens WHERE token_hash=?", (token_hash,)).fetchone()
+        return _token_from_row(row) if row else None
+
+    def revoke_token(self, token_id):
+        self._conn.execute("UPDATE api_tokens SET revoked=1 WHERE token_id=?", (token_id,))
+        self._conn.commit()
+
+    def list_tokens(self, tenant):
+        rows = self._conn.execute(
+            f"SELECT {_TOKEN_COLUMNS} FROM api_tokens WHERE tenant=? ORDER BY created_at",
+            (tenant,)).fetchall()
+        return [_token_from_row(r) for r in rows]
+
+    def record_auth(self, *, at, route, method, result, reason, tenant=None,
+                    source_ip=None, request_id=None):
+        self._conn.execute(
+            f"INSERT INTO auth_log ({_AUTHLOG_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (at, route, method, result, reason, tenant, source_ip, request_id),
+        )
+        self._conn.commit()
+
+    def auth_log(self, *, tenant=None, result=None, limit=100):
+        sql = f"SELECT {_AUTHLOG_COLUMNS} FROM auth_log"
+        clauses, params = [], []
+        if tenant is not None:
+            clauses.append("tenant=?"); params.append(tenant)
+        if result is not None:
+            clauses.append("result=?"); params.append(result)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        rows = self._conn.execute(sql, params).fetchall()
+        return [_authlog_from_row(r) for r in rows]
+
 
 class PostgresStateStore:
     """PostgreSQL backend — production (and local-iso-prod). Same interface as the others;
@@ -282,6 +516,20 @@ class PostgresStateStore:
             conn.execute("CREATE TABLE IF NOT EXISTS audit ("
                          "id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL, tool TEXT NOT NULL,"
                          "kind TEXT NOT NULL, gated BOOLEAN NOT NULL, at TEXT NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS tenants ("
+                         "tenant TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT TRUE,"
+                         "budget_daily_usd DOUBLE PRECISION, budget_monthly_usd DOUBLE PRECISION,"
+                         "rate_limit_per_min INTEGER)")
+            conn.execute("CREATE TABLE IF NOT EXISTS api_tokens ("
+                         "token_id TEXT PRIMARY KEY, tenant TEXT NOT NULL,"
+                         "token_hash TEXT NOT NULL UNIQUE, scopes TEXT,"
+                         "revoked BOOLEAN NOT NULL DEFAULT FALSE, label TEXT,"
+                         "expires_at TEXT, created_at TEXT)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash)")
+            conn.execute("CREATE TABLE IF NOT EXISTS auth_log ("
+                         "id BIGSERIAL PRIMARY KEY, at TEXT NOT NULL, route TEXT NOT NULL,"
+                         "method TEXT NOT NULL, result TEXT NOT NULL, reason TEXT NOT NULL,"
+                         "tenant TEXT, source_ip TEXT, request_id TEXT)")
             for col, decl in (("error", "TEXT"), ("cost_usd", "DOUBLE PRECISION"),
                               ("tokens_in", "INTEGER"), ("tokens_out", "INTEGER"),
                               ("num_turns", "INTEGER"), ("duration_ms", "INTEGER"),
@@ -354,6 +602,77 @@ class PostgresStateStore:
         with self._pool.connection() as conn:
             rows = self._dict_rows(conn).execute(sql, params).fetchall()
         return [AuditEntry(r["run_id"], r["tool"], r["kind"], bool(r["gated"]), r["at"]) for r in rows]
+
+    def upsert_tenant(self, tenant, *, enabled=True, budget_daily_usd=None,
+                      budget_monthly_usd=None, rate_limit_per_min=None):
+        with self._pool.connection() as conn:
+            conn.execute(
+                "INSERT INTO tenants (tenant, enabled, budget_daily_usd, budget_monthly_usd, "
+                "rate_limit_per_min) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (tenant) DO UPDATE SET "
+                "enabled=EXCLUDED.enabled, budget_daily_usd=EXCLUDED.budget_daily_usd, "
+                "budget_monthly_usd=EXCLUDED.budget_monthly_usd, rate_limit_per_min=EXCLUDED.rate_limit_per_min",
+                (tenant, enabled, budget_daily_usd, budget_monthly_usd, rate_limit_per_min))
+
+    def get_tenant(self, tenant):
+        with self._pool.connection() as conn:
+            row = self._dict_rows(conn).execute(
+                f"SELECT {_TENANT_COLUMNS} FROM tenants WHERE tenant=%s", (tenant,)).fetchone()
+        return _tenant_from_row(row) if row else None
+
+    def list_tenants(self):
+        with self._pool.connection() as conn:
+            rows = self._dict_rows(conn).execute(
+                f"SELECT {_TENANT_COLUMNS} FROM tenants ORDER BY tenant").fetchall()
+        return [_tenant_from_row(r) for r in rows]
+
+    def add_token(self, tenant, token_hash, *, scopes=(), label=None, expires_at=None,
+                  created_at=None):
+        token_id = uuid.uuid4().hex
+        with self._pool.connection() as conn:
+            conn.execute(
+                "INSERT INTO api_tokens (token_id, tenant, token_hash, scopes, revoked, label, "
+                "expires_at, created_at) VALUES (%s, %s, %s, %s, FALSE, %s, %s, %s)",
+                (token_id, tenant, token_hash, _dump_scopes(scopes), label, expires_at, created_at))
+        return token_id
+
+    def get_token_by_hash(self, token_hash):
+        with self._pool.connection() as conn:
+            row = self._dict_rows(conn).execute(
+                f"SELECT {_TOKEN_COLUMNS} FROM api_tokens WHERE token_hash=%s", (token_hash,)).fetchone()
+        return _token_from_row(row) if row else None
+
+    def revoke_token(self, token_id):
+        with self._pool.connection() as conn:
+            conn.execute("UPDATE api_tokens SET revoked=TRUE WHERE token_id=%s", (token_id,))
+
+    def list_tokens(self, tenant):
+        with self._pool.connection() as conn:
+            rows = self._dict_rows(conn).execute(
+                f"SELECT {_TOKEN_COLUMNS} FROM api_tokens WHERE tenant=%s ORDER BY created_at",
+                (tenant,)).fetchall()
+        return [_token_from_row(r) for r in rows]
+
+    def record_auth(self, *, at, route, method, result, reason, tenant=None,
+                    source_ip=None, request_id=None):
+        with self._pool.connection() as conn:
+            conn.execute(
+                f"INSERT INTO auth_log ({_AUTHLOG_COLUMNS}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                (at, route, method, result, reason, tenant, source_ip, request_id))
+
+    def auth_log(self, *, tenant=None, result=None, limit=100):
+        sql = f"SELECT {_AUTHLOG_COLUMNS} FROM auth_log"
+        clauses, params = [], []
+        if tenant is not None:
+            clauses.append("tenant=%s"); params.append(tenant)
+        if result is not None:
+            clauses.append("result=%s"); params.append(result)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY id DESC LIMIT %s"
+        params.append(limit)
+        with self._pool.connection() as conn:
+            rows = self._dict_rows(conn).execute(sql, params).fetchall()
+        return [_authlog_from_row(r) for r in rows]
 
     def close(self):
         self._pool.close()

@@ -81,6 +81,49 @@ class _StateStoreContract:
                          [("read_db", False), ("open_ticket", True)])
         self.assertEqual(self.store.audit_trail(subject="NOPE"), [])
 
+    # — ADR-004 §3.7: tenants / api_tokens / auth_log —
+
+    def test_tenant_upsert_and_get(self):
+        self.assertIsNone(self.store.get_tenant("bluspark"))
+        self.store.upsert_tenant("bluspark", budget_daily_usd=5.0, rate_limit_per_min=30)
+        t = self.store.get_tenant("bluspark")
+        self.assertEqual((t.tenant, t.enabled, t.budget_daily_usd, t.rate_limit_per_min),
+                         ("bluspark", True, 5.0, 30))
+        self.store.upsert_tenant("bluspark", enabled=False, budget_daily_usd=10.0)  # overwrite
+        t = self.store.get_tenant("bluspark")
+        self.assertEqual((t.enabled, t.budget_daily_usd), (False, 10.0))
+        self.assertEqual([x.tenant for x in self.store.list_tenants()], ["bluspark"])
+
+    def test_token_add_lookup_by_hash_and_scopes(self):
+        tid = self.store.add_token("bluspark", "hash_abc", scopes=["bluspark", "wbtb"],
+                                   label="wbtb-dashboard")
+        self.assertTrue(tid)
+        rec = self.store.get_token_by_hash("hash_abc")
+        self.assertEqual((rec.tenant, rec.token_hash, rec.revoked), ("bluspark", "hash_abc", False))
+        self.assertEqual(rec.scopes, ["bluspark", "wbtb"])
+        self.assertEqual(rec.label, "wbtb-dashboard")
+        self.assertIsNone(self.store.get_token_by_hash("nope"))
+
+    def test_token_revocation(self):
+        tid = self.store.add_token("bluspark", "hash_rev")
+        self.store.revoke_token(tid)
+        self.assertTrue(self.store.get_token_by_hash("hash_rev").revoked)
+        self.assertEqual([t.token_id for t in self.store.list_tokens("bluspark")], [tid])
+
+    def test_auth_log_records_and_filters_recent_first(self):
+        self.store.record_auth(at="t1", route="/run", method="bearer", result="accepted",
+                               reason="ok", tenant="bluspark", source_ip="10.0.0.1", request_id="r1")
+        self.store.record_auth(at="t2", route="/run", method="bearer", result="rejected",
+                               reason="rate_limited", tenant="bluspark", source_ip="10.0.0.2")
+        self.store.record_auth(at="t3", route="/webhook", method="hmac", result="rejected",
+                               reason="invalid_signature")  # unidentified caller → tenant None
+        recent = self.store.auth_log(limit=10)
+        self.assertEqual([e.reason for e in recent], ["invalid_signature", "rate_limited", "ok"])
+        self.assertEqual([e.result for e in self.store.auth_log(result="rejected")],
+                         ["rejected", "rejected"])
+        self.assertEqual([e.reason for e in self.store.auth_log(tenant="bluspark")],
+                         ["rate_limited", "ok"])
+
 
 class InMemoryStateStoreTests(_StateStoreContract, unittest.TestCase):
     def make_store(self):
@@ -97,7 +140,7 @@ class PostgresStateStoreTests(_StateStoreContract, unittest.TestCase):
         except ImportError as exc:
             self.skipTest(f"psycopg not installed: {exc}")
         with store._pool.connection() as conn:        # clean slate for contract isolation
-            conn.execute("TRUNCATE conversation_state, runs, audit")
+            conn.execute("TRUNCATE conversation_state, runs, audit, tenants, api_tokens, auth_log")
         return store
 
 
