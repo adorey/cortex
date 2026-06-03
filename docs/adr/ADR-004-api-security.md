@@ -89,7 +89,8 @@ signature = HMAC_SHA256(secret, f"{timestamp}.{raw_body}")
 at · tenant (nullable when the caller isn't identified) · source_ip · route ·
 method (hmac | bearer) · result (accepted | rejected) · reason · request_id
 reason ∈ { ok, invalid_signature, stale_timestamp, replay, unknown_token,
-           revoked_token, out_of_scope, tenant_disabled, rate_limited, budget_exceeded, … }
+           revoked_token, out_of_scope, tenant_disabled, forbidden,
+           rate_limited, budget_exceeded, … }
 ```
 This is the **perimeter** log (who tried, the verdict, and why) — **distinct** from the agent `audit` table (what the agent *did* during a run). Exposed read-only for monitoring (`GET /auth-log`).
 
@@ -134,6 +135,7 @@ Implemented on `feat/api-security` (engine side):
 3. **Budget cap** — ✅ rolling-window ceiling from `cost_usd` (`budget.py`) + `GET /budget` (remaining); needed a `started_at` column on `runs`.
 4. **Idempotency store** — ✅ TTL store via `EphemeralStore`; `/run` honours `Idempotency-Key` (cached outcome, no re-run).
 5. **Secret inventory** — ✅ per-tenant HMAC secret (`<TENANT>_WEBHOOK_HMAC`) via the `SecretProvider`; Bearer tokens minted by `python -m cortex_runtime.admin` (raw shown once, hash stored).
+   - **Admin API** — ✅ a single hand-minted **master** (admin) token bootstraps the rest over the API: `POST /tenants`, `POST|GET /tokens`, `DELETE /tokens/{id}`, all gated to **admin** tokens (`api_tokens.admin`); a valid non-admin caller gets `403 forbidden` (logged).
 6. **Bearer-protected routes** — ✅ direct (`/run`, `/resolve`, `/reply`) + monitoring (`/runs`, `/runs/{id}`, `/audit`, `/auth-log`, `/budget`) for monitoring; `CORTEX_AUTH=on` enables it. `/health` stays open (liveness).
 
 Still out of scope (host-specific / later):

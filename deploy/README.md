@@ -55,8 +55,8 @@ direct routes (`/run`, `/resolve`, `/reply`) **and** the monitoring routes (`/ru
 `/runs/{id}`, `/audit`, `/auth-log`, `/budget`) with Bearer tokens, and to run the
 rate-limit / budget / idempotency chain on `/run`. `/health` stays open (liveness probe).
 
-A token is useless until a **tenant** exists and a token is **minted**. Seed them with the
-admin CLI, which writes to the same StateStore the server reads:
+**Bootstrap: one manual "master" token, then everything over the API.** Only the master
+token is created by hand; it then mints/revokes every other token via `POST /tokens`.
 
 ```bash
 cd deploy
@@ -65,15 +65,36 @@ cd deploy
 docker compose exec cortex-runtime \
   python -m cortex_runtime.admin tenant acme --daily 20 --monthly 300 --rate 60
 
-# 2. mint a token, scoped to the workspaces it may invoke. The RAW token is printed ONCE.
+# 2. mint the MASTER token (admin) — the only one made by hand. RAW printed ONCE.
 docker compose exec cortex-runtime \
-  python -m cortex_runtime.admin token acme --scope acme --label monitoring-dashboard
-#   → store the printed `rt_live_…` value now; only its SHA-256 hash is kept in the DB.
-
-# 3. call the API with it
-curl -H "Authorization: Bearer rt_live_…" \
-  "https://cortex.local.dev/runs?workspace=acme"
+  python -m cortex_runtime.admin token acme --admin --label master
+#   → store the printed `rt_live_…` now; only its SHA-256 hash is kept in the DB.
 ```
+
+From then on the master token issues the rest over the API (no shell access needed):
+
+```bash
+MASTER="rt_live_…"
+
+# mint a scoped, non-admin token (e.g. for a monitoring host)
+curl -X POST -H "Authorization: Bearer $MASTER" -H "Content-Type: application/json" \
+  -d '{"tenant":"acme","scopes":["acme"],"label":"monitoring-dashboard"}' \
+  https://cortex.local.dev/tokens
+#   → { "token_id": "...", "token": "rt_live_…" }   ← raw shown once
+
+# list (metadata only — never the hash) / revoke / register another tenant
+curl -H "Authorization: Bearer $MASTER" "https://cortex.local.dev/tokens?tenant=acme"
+curl -X DELETE -H "Authorization: Bearer $MASTER" https://cortex.local.dev/tokens/<token_id>
+curl -X POST -H "Authorization: Bearer $MASTER" -H "Content-Type: application/json" \
+  -d '{"tenant":"newco","budget_daily_usd":5}' https://cortex.local.dev/tenants
+
+# a minted token then calls the API
+curl -H "Authorization: Bearer rt_live_…" "https://cortex.local.dev/runs?workspace=acme"
+```
+
+> The admin routes (`POST /tenants`, `POST|GET /tokens`, `DELETE /tokens/{id}`) require an
+> **admin** token; a valid but non-admin token gets `403 forbidden` (logged in `auth_log`).
+> A normal token minted via `POST /tokens` is non-admin unless created with `"admin": true`.
 
 **What is stored, and how:**
 

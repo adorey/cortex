@@ -31,7 +31,9 @@ from .state_store import store_from_env
 TOKEN_PREFIX = "rt_live_"
 
 
-def _mint_raw_token() -> str:
+def mint_raw_token() -> str:
+    """A fresh high-entropy Bearer token (``rt_live_…``). Shared by the CLI and the admin API
+    so the prefix + entropy live in one place."""
     return TOKEN_PREFIX + _secrets.token_urlsafe(32)
 
 
@@ -52,7 +54,7 @@ def cmd_token(args) -> int:
         print(f"error: unknown tenant '{args.tenant}' — register it first "
               f"(`admin tenant {args.tenant}`)", file=sys.stderr)
         return 2
-    raw = _mint_raw_token()
+    raw = mint_raw_token()
     token_id = store.add_token(args.tenant, hash_token(raw),
                                scopes=args.scope or [args.tenant], label=args.label,
                                expires_at=args.expires, admin=args.admin)

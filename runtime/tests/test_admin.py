@@ -15,7 +15,7 @@ NOW = 1_700_000_000
 
 
 def test_minted_token_is_prefixed_and_unique():
-    a, b = admin._mint_raw_token(), admin._mint_raw_token()
+    a, b = admin.mint_raw_token(), admin.mint_raw_token()
     assert a.startswith("rt_live_") and b.startswith("rt_live_") and a != b
 
 

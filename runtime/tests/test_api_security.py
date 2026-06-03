@@ -26,6 +26,7 @@ except Exception:
     HAVE_FASTAPI = False
 
 TOKEN = "rt_live_host_token"
+MASTER = "rt_live_master_token"
 
 
 @unittest.skipUnless(HAVE_FASTAPI, "fastapi (+ test client deps) not installed")
@@ -34,6 +35,7 @@ class SecuredApiTests(unittest.TestCase):
         self.store = InMemoryStateStore()
         self.store.upsert_tenant("host", enabled=True)
         self.store.add_token("host", hash_token(TOKEN), scopes=["host"])
+        self.store.add_token("host", hash_token(MASTER), scopes=["host"], admin=True, label="master")
         runtime = build_runtime(
             {"host": WorkspaceConfig(root=ROOT, theme="h2g2")},
             store=self.store,
@@ -46,6 +48,9 @@ class SecuredApiTests(unittest.TestCase):
 
     def _auth(self, token=TOKEN):
         return {"Authorization": f"Bearer {token}"}
+
+    def _admin(self):
+        return {"Authorization": f"Bearer {MASTER}"}
 
     # — health stays open (liveness probe, no secret) —
     def test_health_is_open(self):
@@ -126,6 +131,65 @@ class SecuredApiTests(unittest.TestCase):
         second = self.client.post("/run", headers=h, json=body)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(first.json()["run_id"], second.json()["run_id"])   # same run, not re-executed
+
+
+    # — admin routes: tenant/token management, admin-token only —
+    def test_create_token_requires_admin(self):
+        # no token → 401
+        self.assertEqual(self.client.post("/tokens", json={"tenant": "host"}).status_code, 401)
+        # valid but NON-admin token → 403 forbidden
+        r = self.client.post("/tokens", headers=self._auth(), json={"tenant": "host"})
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()["detail"], "forbidden")
+
+    def test_admin_mints_working_token(self):
+        r = self.client.post("/tokens", headers=self._admin(),
+                             json={"tenant": "host", "scopes": ["host"], "label": "minted"})
+        self.assertEqual(r.status_code, 200)
+        raw = r.json()["token"]
+        self.assertTrue(raw.startswith("rt_live_"))
+        # the freshly-minted token authenticates on a normal route
+        got = self.client.get("/runs", params={"workspace": "host"},
+                              headers={"Authorization": f"Bearer {raw}"})
+        self.assertEqual(got.status_code, 200)
+
+    def test_admin_can_mint_another_admin(self):
+        raw = self.client.post("/tokens", headers=self._admin(),
+                               json={"tenant": "host", "admin": True}).json()["token"]
+        # the new admin token can itself mint tokens
+        r = self.client.post("/tokens", headers={"Authorization": f"Bearer {raw}"},
+                             json={"tenant": "host"})
+        self.assertEqual(r.status_code, 200)
+
+    def test_create_token_unknown_tenant_404(self):
+        r = self.client.post("/tokens", headers=self._admin(), json={"tenant": "ghost"})
+        self.assertEqual(r.status_code, 404)
+
+    def test_admin_revoke_token(self):
+        raw = self.client.post("/tokens", headers=self._admin(),
+                               json={"tenant": "host", "scopes": ["host"]}).json()
+        tid, token = raw["token_id"], raw["token"]
+        h = {"Authorization": f"Bearer {token}"}
+        self.assertEqual(self.client.get("/runs", params={"workspace": "host"}, headers=h).status_code, 200)
+        self.assertEqual(self.client.delete(f"/tokens/{tid}", headers=self._admin()).status_code, 200)
+        # revoked → no longer authenticates
+        self.assertEqual(self.client.get("/runs", params={"workspace": "host"}, headers=h).status_code, 401)
+
+    def test_admin_list_tokens_hides_hash(self):
+        r = self.client.get("/tokens", params={"tenant": "host"}, headers=self._admin())
+        self.assertEqual(r.status_code, 200)
+        for t in r.json()["tokens"]:
+            self.assertNotIn("token_hash", t)
+        self.assertIn(True, [t["admin"] for t in r.json()["tokens"]])   # the master is listed
+
+    def test_admin_upsert_tenant(self):
+        r = self.client.post("/tenants", headers=self._admin(),
+                             json={"tenant": "newco", "budget_daily_usd": 5.0, "rate_limit_per_min": 30})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["budget_daily_usd"], 5.0)
+        # now a token can be minted for it
+        self.assertEqual(self.client.post("/tokens", headers=self._admin(),
+                                          json={"tenant": "newco"}).status_code, 200)
 
 
 if __name__ == "__main__":

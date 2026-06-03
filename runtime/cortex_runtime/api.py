@@ -9,6 +9,7 @@ and its test suite need no web framework.
 - POST /{alias}      → manifest-declared domain endpoints, alias to /run
 - GET  /auth-log     → the perimeter connection log (read-only, for monitoring hosts)
 - GET  /budget       → a tenant's remaining rolling budget (read-only, for monitoring hosts)
+- POST /tenants · POST|GET /tokens · DELETE /tokens/{id}  → admin (admin-token only)
 
 Security (ADR-004) is **opt-in**: pass a :class:`SecurityGate` to enable Bearer auth on the
 direct + monitoring routes (and the full rate/budget/idempotency chain on ``/run``). With no
@@ -20,16 +21,16 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
-from .auth import AuthMethod
+from .auth import AuthMethod, AuthReason, hash_token
 from .auth_policy import AuthRequest
 from .runtime import Runtime
-from .security_gate import SecurityGate
+from .security_gate import SecurityGate, status_for
 from .session import mark_human_reply
 
 logger = logging.getLogger("cortex_runtime.api")
@@ -51,6 +52,22 @@ class RunPayload(BaseModel):
 class ReplyPayload(BaseModel):
     workspace: str
     subject: str
+
+
+class TokenCreatePayload(BaseModel):
+    tenant: str
+    scopes: Optional[List[str]] = None    # workspaces the token may invoke (default: its tenant)
+    label: Optional[str] = None
+    expires_at: Optional[str] = None      # unix seconds (default: never)
+    admin: bool = False                   # grant admin privilege (manage tenants/tokens)
+
+
+class TenantUpsertPayload(BaseModel):
+    tenant: str
+    enabled: bool = True
+    budget_daily_usd: Optional[float] = None
+    budget_monthly_usd: Optional[float] = None
+    rate_limit_per_min: Optional[int] = None
 
 
 def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> FastAPI:
@@ -78,8 +95,24 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> Fast
             return
         outcome = gate.policy.check(_bearer_request(request, workspace=workspace))
         if not outcome.ok:
-            from .security_gate import status_for
             raise HTTPException(status_code=status_for(outcome.reason), detail=outcome.reason.value)
+
+    def _require_admin(request: Request):
+        """Admin routes (tenant/token management): require an authenticated token carrying the
+        **admin** privilege. Admin is global, not workspace-scoped. Logs exactly one auth_log row
+        with the decisive reason (the auth failure, or ``forbidden`` for a valid-but-non-admin)."""
+        if gate is None:
+            return None
+        req = _bearer_request(request)        # workspace=None → no scope check; admin is global
+        outcome = gate.policy.check(req, record=False)
+        if not outcome.ok:
+            gate.policy.log_attempt(req, outcome)
+            raise HTTPException(status_code=status_for(outcome.reason), detail=outcome.reason.value)
+        if not outcome.admin:
+            gate.policy.log_attempt(req, replace(outcome, reason=AuthReason.FORBIDDEN))
+            raise HTTPException(status_code=403, detail=AuthReason.FORBIDDEN.value)
+        gate.policy.log_attempt(req, outcome)
+        return outcome
 
     def _authorize_run(request: Request, workspace: str):
         """The full spend-guarding chain for ``/run`` (auth → idempotency → rate → budget).
@@ -158,6 +191,46 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> Fast
         decision = check_budget(store, store.get_tenant(workspace), now=int(time.time()))
         return {"workspace": workspace, "allowed": decision.allowed,
                 "daily": _window(decision.daily), "monthly": _window(decision.monthly)}
+
+    # — admin (tenant/token management, ADR-004 §3.7): admin-token only. The "master" token is
+    #   minted by hand once (`admin token … --admin`); it bootstraps every other token here. —
+    @app.post("/tenants")
+    def upsert_tenant(payload: TenantUpsertPayload, request: Request):
+        _require_admin(request)
+        store.upsert_tenant(payload.tenant, enabled=payload.enabled,
+                            budget_daily_usd=payload.budget_daily_usd,
+                            budget_monthly_usd=payload.budget_monthly_usd,
+                            rate_limit_per_min=payload.rate_limit_per_min)
+        return asdict(store.get_tenant(payload.tenant))
+
+    @app.post("/tokens")
+    def create_token(payload: TokenCreatePayload, request: Request):
+        """Mint a Bearer token for a tenant. The RAW token is returned ONCE (only its hash is
+        stored). Requires an admin token — this is how the master token issues all the others."""
+        from .admin import mint_raw_token
+        _require_admin(request)
+        if store.get_tenant(payload.tenant) is None:
+            raise HTTPException(status_code=404, detail=f"unknown tenant: {payload.tenant}")
+        scopes = payload.scopes or [payload.tenant]
+        raw = mint_raw_token()
+        token_id = store.add_token(payload.tenant, hash_token(raw), scopes=scopes,
+                                   label=payload.label, expires_at=payload.expires_at,
+                                   admin=payload.admin)
+        return {"token_id": token_id, "tenant": payload.tenant, "scopes": scopes,
+                "admin": payload.admin, "token": raw}   # raw shown once — never recoverable later
+
+    @app.get("/tokens")
+    def list_tokens(request: Request, tenant: str):
+        """List a tenant's tokens — metadata only, never the hash (nor the raw, which is gone)."""
+        _require_admin(request)
+        return {"tokens": [{k: v for k, v in asdict(t).items() if k != "token_hash"}
+                           for t in store.list_tokens(tenant)]}
+
+    @app.delete("/tokens/{token_id}")
+    def revoke_token(token_id: str, request: Request):
+        _require_admin(request)
+        store.revoke_token(token_id)
+        return {"token_id": token_id, "revoked": True}
 
     @app.post("/resolve")
     def resolve(payload: RunPayload, request: Request):
