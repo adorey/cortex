@@ -39,7 +39,7 @@ echo "127.0.0.1 cortex.local.dev" | sudo tee -a /etc/hosts
 ```bash
 cd deploy
 cp .env.example .env                       # fill in CORTEX_PROJECT_PATH + secrets
-cp cortex-mcp.json.example cortex-mcp.json  # the mcp_bindings (adjust if needed)
+cp cortex-mcp.json.example cortex-mcp.json  # declares + binds the cortex_jsm MCP (adjust if needed)
 docker compose up --build
 # → https://cortex.local.dev/health
 ```
@@ -53,6 +53,14 @@ image).
 - **Backend**: the image bundles the Claude Code CLI (for `claude-cli`) **and** the `cortex_jsm`
   MCP (`cortex-jsm-mcp` on PATH). For `CORTEX_BACKEND=anthropic-api` or `demo` you can drop the
   Node layer from the Dockerfile for a smaller image.
+- **Custom MCP (`cortex_jsm`)**: the Dockerfile installs it (`pip install /app/mcp` → the
+  `cortex-jsm-mcp` command on PATH); `cortex-mcp.json` (mounted at `/config`, pointed to by
+  `CORTEX_MCP_CONFIG`) both **declares** the server (`mcp_servers`) and **binds** its tools to
+  `ActionKind`s (`mcp_bindings`). The server reads `JIRA_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN`;
+  the example wires those from `.env` via `${JIRA_URL}` / `${JIRA_EMAIL}` / `${JIRA_BEARER_TOKEN}`,
+  so set the `JIRA_*` secrets in `.env`. Posting `public:false` internal comments requires the
+  account to be an **agent** on the service desk. (Installing it **outside Docker** — `pipx
+  install ./mcp` — and the tool reference are documented in [`mcp/README.md`](../mcp/README.md).)
 - **Secrets**: `.env` is gitignored; in a real cluster these come from a K8s Secret via the
   `SecretProvider` — the app code is unchanged (ADR-002 §3.6).
 - **Postgres**: the compose ships a `postgres` service and the runtime uses the
