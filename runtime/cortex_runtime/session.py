@@ -42,11 +42,17 @@ def run_session(
     handoff: bool = False,
     force: bool = False,
     at: str = "",
+    run_id: Optional[str] = None,
 ) -> SessionResult:
     """Run one invocation with durable conversation state + audit.
 
     If the persisted state is not ``awaiting-agent`` (e.g. the trigger fired off the agent's
     own previous output), the run is **skipped** — the durable anti-recursion guarantee.
+
+    ``run_id`` lets the async worker (ADR-005) pass a **pre-created** queued run so the API can
+    return its id immediately; the anti-recursion check still runs here (the state may have
+    changed between enqueue and execution), and a skip is recorded on that queued run. When
+    ``run_id`` is ``None`` (synchronous path) the run record is created here.
     """
     persisted = store.get_conversation_state(workspace, subject)
     # force: treat as a fresh awaiting-agent run, ignoring persisted state (testing override).
@@ -54,10 +60,14 @@ def run_session(
         StateMachine(persisted) if persisted is not None else StateMachine())
 
     if not force and not machine.can_trigger_agent():
-        return SessionResult(None, None, skipped=True,
-                             reason=f"state '{machine.state.value}' is not awaiting-agent (anti-recursion)")
+        reason = f"state '{machine.state.value}' is not awaiting-agent (anti-recursion)"
+        if run_id is not None:        # record the skip on the already-queued run
+            store.skip_run(run_id, reason)
+        return SessionResult(run_id, None, skipped=True, reason=reason)
 
-    run_id = store.start_run(workspace, role, subject, model_id)
+    if run_id is None:
+        run_id = store.start_run(workspace, role, subject, model_id)
+    store.mark_running(run_id)
 
     try:
         outcome = loop.run(system_prompt, initial_input, model, machine=machine,

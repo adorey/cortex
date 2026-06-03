@@ -45,6 +45,7 @@ from .state_store import (
     LIFECYCLE_FAILED,
     LIFECYCLE_QUEUED,
     LIFECYCLE_RUNNING,
+    LIFECYCLE_SKIPPED,
     AuditEntry,
     InMemoryStateStore,
     PostgresStateStore,
@@ -134,6 +135,7 @@ __all__ = [
     "LIFECYCLE_RUNNING",
     "LIFECYCLE_DONE",
     "LIFECYCLE_FAILED",
+    "LIFECYCLE_SKIPPED",
     # session orchestration (§3.3 wiring)
     "run_session",
     "mark_human_reply",

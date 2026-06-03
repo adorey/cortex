@@ -5,19 +5,27 @@ app.py (testable without FastAPI). FastAPI is imported here only, so the rest of
 and its test suite need no web framework.
 
 - POST /resolve      → the resolved identity bundle (resolution only)
-- POST /run          → resolve AND execute the agentic loop (durable state + audit)
+- POST /run          → enqueue the agentic loop, return 202 + run_id (sync via ?wait=true)
 - POST /{alias}      → manifest-declared domain endpoints, alias to /run
+- GET  /runs/{id}    → poll a run's lifecycle + outcome
+
+Async (ADR-005) is **opt-in via a queue**: pass a started :class:`JobQueue` to enqueue runs
+(202 accept-then-process) with ``?wait=true`` preserving the synchronous path. With no queue
+the API is fully synchronous (the local-dev / demo default, and what the base tests exercise).
 """
 
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .job_queue import JobQueue, QueueFull
 from .runtime import Runtime
 from .session import mark_human_reply
 
@@ -42,10 +50,37 @@ class ReplyPayload(BaseModel):
     subject: str
 
 
-def create_app(runtime: Runtime) -> FastAPI:
-    """Build the API over a configured ``Runtime`` (workspaces, store, model backend, manifest)."""
-    app = FastAPI(title="cortex-runtime", version="0.1.0")
+def create_app(runtime: Runtime, *, queue: Optional[JobQueue] = None) -> FastAPI:
+    """Build the API over a configured ``Runtime`` (workspaces, store, model backend, manifest).
+
+    ``queue`` enables async ADR-005 execution; ``None`` runs everything synchronously."""
+    lifespan = None
+    if queue is not None:
+        @asynccontextmanager
+        async def lifespan(app):
+            queue.start()                    # idempotent — fine if already started by the host
+            try:
+                yield
+            finally:
+                queue.shutdown(drain=True)   # graceful: finish in-flight runs on SIGTERM (§2.5)
+
+    app = FastAPI(title="cortex-runtime", version="0.0.1", lifespan=lifespan)
     manifest = dict(runtime.cfg.manifest)
+
+    def _run_or_enqueue(payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]], wait: bool):
+        """Async by default (202 + run_id); ``wait=true`` or no queue → synchronous (200)."""
+        if queue is None or wait:
+            return _guard(lambda: runtime.run(payload, alias))
+        prepared = _guard(lambda: runtime.prepare(payload, alias))   # validates → 404/422 fast
+        try:
+            queue.submit({"run_id": prepared["run_id"], "payload": dict(payload),
+                          "alias": dict(alias) if alias else None})
+        except QueueFull:
+            raise HTTPException(status_code=429, detail="queue at capacity",
+                                headers={"Retry-After": "5"})
+        return JSONResponse(status_code=202,
+                            content={"run_id": prepared["run_id"], "subject": prepared["subject"],
+                                     "status": "queued"})
 
     def _require_role(payload: RunPayload, alias: Optional[Mapping[str, Any]]):
         if payload.role is None and not (alias and alias.get("role")):
@@ -91,9 +126,9 @@ def create_app(runtime: Runtime) -> FastAPI:
         return _guard(lambda: asdict(runtime.resolve(payload.model_dump())))
 
     @app.post("/run")
-    def run(payload: RunPayload):
+    def run(payload: RunPayload, wait: bool = False):
         _require_role(payload, None)
-        return _guard(lambda: runtime.run(payload.model_dump()))
+        return _run_or_enqueue(payload.model_dump(), None, wait)
 
     @app.post("/reply")
     def reply(payload: ReplyPayload):
@@ -106,9 +141,9 @@ def create_app(runtime: Runtime) -> FastAPI:
 
     for path, alias in manifest.items():
         def _make(alias_defaults: Mapping[str, Any]):
-            def handler(payload: RunPayload):
+            def handler(payload: RunPayload, wait: bool = False):
                 _require_role(payload, alias_defaults)
-                return _guard(lambda: runtime.run(payload.model_dump(), alias_defaults))
+                return _run_or_enqueue(payload.model_dump(), alias_defaults, wait)
             return handler
         app.add_api_route(path, _make(alias), methods=["POST"], name=path.strip("/").replace("/", "_"))
 

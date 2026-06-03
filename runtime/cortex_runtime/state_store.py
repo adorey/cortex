@@ -30,6 +30,7 @@ LIFECYCLE_QUEUED = "queued"
 LIFECYCLE_RUNNING = "running"
 LIFECYCLE_DONE = "done"
 LIFECYCLE_FAILED = "failed"
+LIFECYCLE_SKIPPED = "skipped"   # picked up, then anti-recursion declined to act (ADR-002 §3.3)
 
 
 @dataclass
@@ -87,6 +88,7 @@ class StateStore(Protocol):
     def finish_run(self, run_id: str, state: ConversationState, iterations: int,
                    usage: Optional[Mapping[str, Any]] = None) -> None: ...
     def fail_run(self, run_id: str, error: str) -> None: ...
+    def skip_run(self, run_id: str, reason: str) -> None: ...   # anti-recursion skip on a queued run
     def get_run(self, run_id: str) -> Optional[RunRecord]: ...
     def list_runs(self, workspace: str, *, limit: int = 50) -> List[RunRecord]: ...
 
@@ -137,6 +139,11 @@ class InMemoryStateStore:
         rec.state = "failed"
         rec.error = error
         rec.lifecycle = LIFECYCLE_FAILED
+
+    def skip_run(self, run_id, reason):
+        rec = self._runs[run_id]
+        rec.lifecycle = LIFECYCLE_SKIPPED
+        rec.error = reason
 
     def get_run(self, run_id):
         return self._runs.get(run_id)
@@ -247,6 +254,11 @@ class SqliteStateStore:
                            (LIFECYCLE_FAILED, error, run_id))
         self._conn.commit()
 
+    def skip_run(self, run_id, reason):
+        self._conn.execute("UPDATE runs SET lifecycle=?, error=? WHERE run_id=?",
+                           (LIFECYCLE_SKIPPED, reason, run_id))
+        self._conn.commit()
+
     def get_run(self, run_id):
         row = self._conn.execute(
             f"SELECT {_RUN_COLUMNS} FROM runs WHERE run_id=?", (run_id,)).fetchone()
@@ -354,6 +366,11 @@ class PostgresStateStore:
         with self._pool.connection() as conn:
             conn.execute("UPDATE runs SET state='failed', lifecycle=%s, error=%s WHERE run_id=%s",
                          (LIFECYCLE_FAILED, error, run_id))
+
+    def skip_run(self, run_id, reason):
+        with self._pool.connection() as conn:
+            conn.execute("UPDATE runs SET lifecycle=%s, error=%s WHERE run_id=%s",
+                         (LIFECYCLE_SKIPPED, reason, run_id))
 
     def get_run(self, run_id):
         with self._pool.connection() as conn:
