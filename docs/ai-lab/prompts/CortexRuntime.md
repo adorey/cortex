@@ -247,6 +247,16 @@
 - **Reste** (host-specific / plus tard) : route `/webhook/{tenant}` (le chemin HMAC est codé+testé mais non monté), backend Redis `EphemeralStore`, puis **branche async** (ADR-005).
 **Tags :** `adr-004`, `adr-005`, `security`, `bearer`, `hmac`, `rate-limit`, `budget-cap`, `idempotency`, `auth-log`, `monitoring`, `admin-cli`
 
+### 2026-06-03 — ADR-004 : route admin de création de tokens + scrub agnostique total
+**Contexte :** revue ADR-004 OK (théorique). L'humanoïde demande : route API pour créer des tokens, réservée à un token **master/admin** (seul token fait à la mano) ; scrub **complet** des noms privés (y compris ADR-001).
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Capacité admin sur les tokens** : flag `admin` sur `api_tokens` (3 backends), propagé dans `AuthOutcome.admin`, nouveau verdict `forbidden` (403, loggé). CLI `admin token … --admin` pour forger le master.
+- **Routes admin** (gated admin-token, admin global non-scopé) : `POST /tenants`, `POST|GET /tokens`, `DELETE /tokens/{id}`. Le brut n'est montré **qu'une fois** (création) ; `GET /tokens` ne renvoie jamais le hash. **Bootstrap** : 1 master à la main (CLI) → il émet tout le reste par l'API (zéro accès shell ensuite).
+- **Scrub agnostique total** : tous les noms de projets privés → `acme` / `monitoring` / `<TENANT>_WEBHOOK_HMAC`, **y compris ADR-001** (la trace ratifiée est désormais agnostique elle aussi). `deploy/.env` (réel, gitignored) laissé tel quel.
+- 252 tests verts.
+**Tags :** `adr-004`, `admin-token`, `master-token`, `token-api`, `forbidden`, `agnostic-scrub`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
