@@ -1,7 +1,7 @@
 # ADR-004 — API security & trust model
 
-- **Status:** Proposed
-- **Date:** 2026-06-03 (proposed)
+- **Status:** Accepted
+- **Date:** 2026-06-03 (proposed) · 2026-06-03 (accepted)
 - **Authors:** Cortex maintainers (initiated by l'humanoïde, dispatched by @Oolon)
 - **Affects:** `cortex-runtime` API boundary (`/run`, `/resolve`, monitoring routes, future `/webhook`), the `SecretProvider` (ADR-002 §3.6), the cost metrics in the `StateStore` (ADR-003)
 - **Relates to:** [ADR-002](ADR-002-cortex-runtime.md) §3.6 (secrets inventory: HMAC secret + Runtime API token) and §3.3 (per-run cost guards); [ADR-003](ADR-003-persistence-state-layer.md) (cost/usage persisted per run → budget enforcement)
@@ -72,7 +72,28 @@ signature = HMAC_SHA256(secret, f"{timestamp}.{raw_body}")
 
 ### 3.6 Shape
 - An **`AuthPolicy`** / boundary middleware, framework-agnostic and **pure-testable** (sign/verify, window check, rate-limit counter, budget check) — the FastAPI layer stays a thin shell, exactly like the rest of the runtime.
-- Failures return clean `401 / 403 / 429 / 402`, are **logged**, and are written to an **auth-failure audit trail** (reuse the audit store) for monitoring.
+- Failures return clean `401 / 403 / 429 / 402`, are **logged**, and are recorded in the connection log (§3.7).
+
+### 3.7 Tenant model & connection logging
+
+**Tenant registry (operational config → DB).** A `tenants` table holds per-tenant config: `workspace`, `enabled`, budget ceilings (daily/monthly `cost_usd`), rate-limit. A tenant can be added/configured **without a redeploy** (this subsumes ADR-003's workspace-registry grey zone). The *spec* it points at stays in git — the firewall is untouched.
+
+**Bearer tokens (hashed → DB).** An `api_tokens` table stores a **hash** of each token (never the raw value) + `tenant_id`, `scopes` (allowed workspaces), `revoked`, `expires_at`. The raw token is shown to the caller once at issuance; verification hashes the incoming token and compares constant-time. Supports rotation, revocation and multiple tokens per tenant.
+
+**HMAC secrets (raw → SecretProvider, NOT the DB).** Verifying an HMAC requires the *raw* shared secret to recompute the signature, so per-tenant/source HMAC secrets live in the `SecretProvider` (K8s Secret / vault) — never in the app database.
+
+**Budget** is computed from `runs.cost_usd` (ADR-003) over the window versus the tenant's ceiling — no separate spend table.
+
+**Connection log — every attempt, with a reason.** A dedicated `auth_log` table records **every** inbound auth attempt, accepted or rejected:
+```
+at · tenant (nullable when the caller isn't identified) · source_ip · route ·
+method (hmac | bearer) · result (accepted | rejected) · reason · request_id
+reason ∈ { ok, invalid_signature, stale_timestamp, replay, unknown_token,
+           revoked_token, out_of_scope, rate_limited, budget_exceeded, … }
+```
+This is the **perimeter** log (who tried, the verdict, and why) — **distinct** from the agent `audit` table (what the agent *did* during a run). Exposed read-only for monitoring (`GET /auth-log`).
+
+**New tables:** `tenants`, `api_tokens`, `auth_log` (+ idempotency keys, and rate-limit counters if not on Redis). Raw HMAC secrets and issued raw tokens **never touch the database**.
 
 ## 4. Consequences
 
@@ -80,7 +101,8 @@ signature = HMAC_SHA256(secret, f"{timestamp}.{raw_body}")
 - **Credits protected** by the controls that actually matter (rate-limit + budget cap), reusing the cost data we already persist.
 - **Only genuine triggers act** (HMAC), with **no replay** and **no double-spend** (idempotency).
 - **Cheap & pre-AI** — every rejection happens before a single token is spent.
-- **Reuses what we built** — `SecretProvider` for secrets, the `StateStore` for rate-limit/idempotency/budget state and the auth-failure audit.
+- **Reuses what we built** — `SecretProvider` for secrets, the `StateStore` for the new `tenants` / `api_tokens` / `auth_log` tables, rate-limit/idempotency state, and the budget computed from `runs.cost_usd`.
+- **Full perimeter observability** — every connection attempt is logged with its verdict and reason (§3.7).
 
 ### Negative
 - **More to configure** per tenant (HMAC secret, Bearer token, budget). Operational surface grows.
@@ -104,7 +126,8 @@ signature = HMAC_SHA256(secret, f"{timestamp}.{raw_body}")
 
 ## 6. Follow-ups (out of scope for this ADR)
 
-1. **`AuthPolicy`** boundary middleware — HMAC verify + Bearer + replay window, pure helpers tested.
+0. **Data model** — `tenants` (config + budget), `api_tokens` (hashed), `auth_log` (connection log) tables; HMAC secrets in the `SecretProvider`.
+1. **`AuthPolicy`** boundary middleware — HMAC verify + Bearer + replay window, pure helpers tested; writes every attempt to `auth_log`.
 2. **Rate-limiter** (StateStore-backed counter; Redis backend later).
 3. **Budget cap** — per-workspace ceiling + `GET /budget` (remaining), enforced from `cost_usd`.
 4. **Idempotency store** (StateStore table, TTL).
