@@ -61,6 +61,7 @@ from .safety import (
     StateMachine,
 )
 from .tools import Tool, ToolRegistry
+from .job_queue import InProcessJobQueue, JobQueue, QueueFull
 
 __all__ = [
     # resolver
@@ -87,6 +88,10 @@ __all__ = [
     "SAFE_DEFAULT_ACTIONS",
     "ConversationState",
     "StateMachine",
+    # async execution (ADR-005)
+    "JobQueue",
+    "InProcessJobQueue",
+    "QueueFull",
     # tools + loop
     "Tool",
     "ToolRegistry",
