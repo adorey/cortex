@@ -44,7 +44,7 @@ class ReplyPayload(BaseModel):
 
 def create_app(runtime: Runtime) -> FastAPI:
     """Build the API over a configured ``Runtime`` (workspaces, store, model backend, manifest)."""
-    app = FastAPI(title="cortex-runtime", version="0.0.1")
+    app = FastAPI(title="cortex-runtime", version="0.1.0")
     manifest = dict(runtime.cfg.manifest)
 
     def _require_role(payload: RunPayload, alias: Optional[Mapping[str, Any]]):
