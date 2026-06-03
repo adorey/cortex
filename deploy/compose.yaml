@@ -13,19 +13,15 @@ services:
     image: cortex-runtime
     container_name: cortex-runtime
     restart: unless-stopped
+    # .env is injected directly into the container (authoritative — a stale shell var can't
+    # shadow it, unlike ${VAR} interpolation). Holds CORTEX_*, CLAUDE_CODE_OAUTH_TOKEN, JIRA_*…
+    env_file:
+      - .env
     environment:
-      CORTEX_WORKSPACE: ${CORTEX_WORKSPACE:-bluspark}
+      # container-specific values (these win over env_file)
       CORTEX_ROOT: /workspace                 # the mounted project (contains its cortex/ submodule)
-      CORTEX_THEME: ${CORTEX_THEME:-h2g2}
-      CORTEX_BACKEND: ${CORTEX_BACKEND:-claude-cli}
-      # internal connection over the `backend` network — always the container's port 5432
       CORTEX_DATABASE_URL: postgresql://cortex:${POSTGRES_PASSWORD:-cortex}@postgres:5432/cortex
       CORTEX_MCP_CONFIG: /config/cortex-mcp.json
-      # secrets — provided by .env / the host, NEVER baked into the image
-      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
-      JIRA_URL: ${JIRA_URL:-}
-      JIRA_EMAIL: ${JIRA_EMAIL:-}
-      JIRA_API_TOKEN: ${JIRA_BEARER_TOKEN:-}
     volumes:
       - ${CORTEX_PROJECT_PATH}:/workspace:ro          # the project the agent investigates
       - ./cortex-mcp.json:/config/cortex-mcp.json:ro  # the mcp_bindings
