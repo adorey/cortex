@@ -1,0 +1,34 @@
+name: runtime tests
+
+on:
+  push:
+    paths:
+      - "runtime/**"
+      - ".github/workflows/runtime-tests.yml"
+  pull_request:
+    paths:
+      - "runtime/**"
+      - ".github/workflows/runtime-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install runtime (with API + test deps)
+        working-directory: runtime
+        # fastapi (core) + httpx (dev) make the API tests run rather than skip;
+        # the parity test shells out to bin/validate-overlays.sh (bash, present on the runner).
+        run: pip install -e ".[dev,serve]"
+
+      - name: Run the test suite
+        working-directory: runtime
+        run: python -m unittest discover -s tests -v

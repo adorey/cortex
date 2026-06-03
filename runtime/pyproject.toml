@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "httpx>=0.27",          # fastapi TestClient needs it → the API tests run (not skipped)
 ]
 serve = [
     "uvicorn>=0.27",        # ASGI server for `python -m cortex_runtime`
