@@ -115,3 +115,4 @@ signature = HMAC_SHA256(secret, f"{timestamp}.{raw_body}")
 
 - [ADR-002 — Cortex Runtime](ADR-002-cortex-runtime.md) — §3.6 (secrets: HMAC secret + Runtime API token), §3.3 (iteration cap / `max_tokens` as per-run cost guards)
 - [ADR-003 — Persistence & operational state layer](ADR-003-persistence-state-layer.md) — `cost_usd` per run, which the budget cap enforces; the StateStore that holds rate-limit / idempotency / auth-audit state
+- [ADR-005 — Execution model & resilience](ADR-005-execution-model-resilience.md) — the robustness counterpart; both gate the autonomous opening (security vs holding up under load/faults)

@@ -221,6 +221,15 @@
 - **[ADR-004](../../adr/ADR-004-api-security.md) rédigé (Proposed)** : modèle de sécu en couches — **HMAC** (webhook) + **Bearer** (direct) + **anti-rejeu** + **idempotence** + **rate-limit** + **budget cap par tenant** (branché sur le `cost_usd` déjà persisté). Insight clé : *l'auth arrête les inconnus, mais ce qui protège les crédits = rate-limit + budget cap*. Toutes les vérifs **avant** le moindre appel IA.
 **Tags :** `ci`, `docker`, `traefik`, `postgres`, `adr-004`, `security`, `hmac`, `budget-cap`
 
+### 2026-06-03 — Pré-ouverture : ADR-005 (robustesse) + timeout par run
+**Contexte :** MVP dockerisé validé bout-en-bout. L'humanoïde demande si la « mini » API suffit. Distinction posée : **robustesse ≠ sécurité**.
+**Participants :** @Oolon → @Ford (exécution/infra) → @Marvin (résilience)
+**Décisions / outputs :**
+- **Verdict** : framework FastAPI = production-grade (le « mini » = notre shell mince, *par design*) ; sécurité = ADR-004 ; **mais** vrai trou robustesse = le **modèle d'exécution synchrone** (`/run` bloque tout le run → saturation threadpool, hung runs) — c'est le §3.7 async qu'on avait noté.
+- **[ADR-005](../../adr/ADR-005-execution-model-resilience.md) rédigé (Proposed)** : passage **sync → async accept-then-process** (`202` + queue + worker + `GET /runs/{id}` / callback ; mode sync gardé pour le dev), **timeouts** partout, **cap de concurrence**/backpressure, **readiness probe** + shutdown gracieux + multi-workers, `JobQueue` swappable (in-process / broker). Lifecycle de run (`queued/running/…`) distinct de l'état de conversation.
+- **Timeout par run implémenté** *(`CORTEX_RUN_TIMEOUT`, défaut 600s)* : subprocess `claude` + appel anthropic → un run qui pend est tué → `failed` propre (plus de thread zombie).
+**Tags :** `adr-005`, `resilience`, `async`, `queue-worker`, `timeout`, `readiness`, `robustness`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
