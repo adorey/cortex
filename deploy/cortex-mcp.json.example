@@ -1,0 +1,6 @@
+{
+  "mcp_bindings": {
+    "issue-read":       ["mcp__cortex_jsm__get_jira_issue"],
+    "internal-comment": ["mcp__cortex_jsm__add_internal_comment"]
+  }
+}

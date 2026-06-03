@@ -1,0 +1,47 @@
+# cortex-runtime — local deploy behind a GLOBAL, host-side Traefik (not shipped here).
+# See README.md for the Traefik prerequisite (shared `traefik` network + TLS for *.local.dev).
+#
+#   cp .env.example .env   # fill in secrets + the project path
+#   docker compose up --build
+#   → https://cortex.local.dev
+
+services:
+  cortex-runtime:
+    build:
+      context: ..                     # repo root (the image needs runtime/ and mcp/)
+      dockerfile: deploy/Dockerfile
+    image: cortex-runtime
+    container_name: cortex-runtime
+    restart: unless-stopped
+    environment:
+      CORTEX_WORKSPACE: ${CORTEX_WORKSPACE:-bluspark}
+      CORTEX_ROOT: /workspace                 # the mounted project (contains its cortex/ submodule)
+      CORTEX_THEME: ${CORTEX_THEME:-h2g2}
+      CORTEX_BACKEND: ${CORTEX_BACKEND:-claude-cli}
+      CORTEX_DB: /data/cortex-runtime.db
+      CORTEX_MCP_CONFIG: /config/cortex-mcp.json
+      # secrets — provided by .env / the host, NEVER baked into the image
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      JIRA_URL: ${JIRA_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_BEARER_TOKEN:-}
+    volumes:
+      - ${CORTEX_PROJECT_PATH}:/workspace:ro          # the project the agent investigates
+      - ./cortex-mcp.json:/config/cortex-mcp.json:ro  # the mcp_bindings
+      - cortex-data:/data                             # the SQLite state store (persisted)
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cortex.rule=Host(`cortex.local.dev`)"
+      - "traefik.http.routers.cortex.entrypoints=websecure"
+      - "traefik.http.routers.cortex.tls=true"
+      - "traefik.http.services.cortex.loadbalancer.server.port=8000"
+
+volumes:
+  cortex-data:
+
+networks:
+  # The Traefik network is GLOBAL / host-side — created once, outside this project.
+  traefik:
+    external: true
