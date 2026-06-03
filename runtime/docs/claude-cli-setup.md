@@ -108,6 +108,9 @@ CORTEX_MCP_CONFIG=./mcp.json  CORTEX_BACKEND=claude-cli  ...  python -m cortex_r
   `internal-comment` (on by default) lets the agent call your Jira comment tool — and it shows up,
   gated-aware, in the audit. Replace the server config and tool names with your actual Jira MCP server.
 
+> A ready-made, headless-friendly Jira server (read + true `public:false` internal comment) lives
+> in [`../../mcp/`](../../mcp/) — see its README for the exact `.mcp.json` + bindings.
+
 ## Troubleshooting
 
 - **`'claude' CLI not found`** → Step 1 didn't put it on PATH (check `which claude`).
