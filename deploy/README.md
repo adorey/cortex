@@ -48,6 +48,51 @@ The compose file mounts your project (`CORTEX_PROJECT_PATH`) read-only at `/work
 the SQLite state store in a named volume, and passes secrets from `.env` (never baked into the
 image).
 
+## Security (ADR-004) — enabling Bearer auth
+
+By default the API is **open** (local dev). Set `CORTEX_AUTH=on` in `.env` to protect the
+direct routes (`/run`, `/resolve`, `/reply`) **and** the monitoring routes (`/runs`,
+`/runs/{id}`, `/audit`, `/auth-log`, `/budget`) with Bearer tokens, and to run the
+rate-limit / budget / idempotency chain on `/run`. `/health` stays open (liveness probe).
+
+A token is useless until a **tenant** exists and a token is **minted**. Seed them with the
+admin CLI, which writes to the same StateStore the server reads:
+
+```bash
+cd deploy
+
+# 1. register the tenant (idempotent — re-run to reconfigure budgets / rate limit)
+docker compose exec cortex-runtime \
+  python -m cortex_runtime.admin tenant bluspark --daily 20 --monthly 300 --rate 60
+
+# 2. mint a token, scoped to the workspaces it may invoke. The RAW token is printed ONCE.
+docker compose exec cortex-runtime \
+  python -m cortex_runtime.admin token bluspark --scope bluspark --label wbtb-dashboard
+#   → store the printed `rt_live_…` value now; only its SHA-256 hash is kept in the DB.
+
+# 3. call the API with it
+curl -H "Authorization: Bearer rt_live_…" \
+  "https://cortex.local.dev/runs?workspace=bluspark"
+```
+
+**What is stored, and how:**
+
+| Secret | Where | Form |
+|---|---|---|
+| **Bearer tokens** | `api_tokens` table | **SHA-256 hash** only — never the raw value. Verified by hashing the incoming token + constant-time compare. Revocable / scoped / expirable. |
+| **HMAC secrets** (webhook path) | `SecretProvider` (env / K8s Secret), key `<TENANT>_WEBHOOK_HMAC` | **raw** — HMAC must recompute the signature, so it can't be hashed; it therefore **never touches the DB**. |
+| **Tenant config** (budgets, rate limit, enabled) | `tenants` table | plain operational config — no secrets. |
+| **Every auth attempt** | `auth_log` table | who / route / verdict / reason — the perimeter log (read via `GET /auth-log`). |
+
+> Tokens are **hashed, not encrypted**: they only ever need verifying, never recovering, so a
+> one-way hash is strictly safer (no decryption key to leak). Plain SHA-256 is sufficient here
+> because the token is a 256-bit random value (not a guessable password) — salting / bcrypt guard
+> low-entropy inputs, which this isn't. Full at-rest encryption (TDE / encrypted volume) is a
+> Postgres / disk concern, orthogonal to this.
+
+**wbtb dashboards:** mint a token scoped to the workspaces it monitors and poll `GET /runs`,
+`GET /auth-log`, `GET /budget` with it — all Bearer-protected, all read-only.
+
 ## Notes
 
 - **Backend**: the image bundles the Claude Code CLI (for `claude-cli`) **and** the `cortex_jsm`
