@@ -40,9 +40,11 @@ def make_model_client(backend: str, registry: ToolRegistry,
                       model_id: Optional[str] = None,
                       root=None, allowed_actions: Optional[list] = None,
                       mcp_servers: Optional[dict] = None,
-                      mcp_bindings: Optional[dict] = None) -> ModelClient:
+                      mcp_bindings: Optional[dict] = None,
+                      timeout: int = 600) -> ModelClient:
     """Build the model client for a backend. ``demo`` needs nothing; the real backends are
-    imported lazily so the engine stays install-free until one is actually used."""
+    imported lazily so the engine stays install-free until one is actually used. ``timeout``
+    caps a single model/agent call so a hung run fails cleanly instead of blocking forever."""
     if backend == "demo":
         return DemoModelClient(registry)
     if backend == "claude-cli":
@@ -52,12 +54,12 @@ def make_model_client(backend: str, registry: ToolRegistry,
         from .agent_client import ClaudeCodeCliClient, cli_allowed_tools
         return ClaudeCodeCliClient(model=model_id or DEFAULT_MODEL, root=root,
                                    allowed_tools=cli_allowed_tools(allowed_actions or [], mcp_bindings),
-                                   mcp_servers=mcp_servers)
+                                   mcp_servers=mcp_servers, timeout=timeout)
     if backend == "anthropic-api":
         from .agent_client import AnthropicAgentClient
         if secrets is None:
             raise ValueError("anthropic-api backend requires a SecretProvider (llm_key)")
-        return AnthropicAgentClient(registry, secrets, model=model_id or DEFAULT_MODEL)
+        return AnthropicAgentClient(registry, secrets, model=model_id or DEFAULT_MODEL, timeout=timeout)
     raise ValueError(f"unknown model backend: {backend}")
 
 
@@ -69,6 +71,7 @@ class RuntimeConfig:
     model_backend: str = "demo"
     secrets: Optional[SecretProvider] = None
     max_iterations: int = 12
+    run_timeout: int = 600          # per-call timeout (s) — kills a hung agent run
 
 
 class Runtime:
@@ -95,7 +98,8 @@ class Runtime:
         registry, comments = local_tool_registry(wcfg.root)
         model = make_model_client(self.cfg.model_backend, registry, self.cfg.secrets, req.model,
                                   root=wcfg.root, allowed_actions=resolved.allowed_actions,
-                                  mcp_servers=wcfg.mcp_servers, mcp_bindings=wcfg.mcp_bindings)
+                                  mcp_servers=wcfg.mcp_servers, mcp_bindings=wcfg.mcp_bindings,
+                                  timeout=self.cfg.run_timeout)
         loop = AgentLoop(registry, ActionPolicy.from_names(req.autonomy), self.cfg.max_iterations)
         subject = req.subject or req.input.get("issue") or "default"
 
@@ -131,7 +135,8 @@ def build_runtime(workspaces: Mapping[str, WorkspaceConfig], *,
                   manifest: Optional[Mapping[str, Mapping[str, Any]]] = None,
                   model_backend: str = "demo",
                   secrets: Optional[SecretProvider] = None,
-                  max_iterations: int = 12) -> Runtime:
+                  max_iterations: int = 12,
+                  run_timeout: int = 600) -> Runtime:
     """Convenience builder. Defaults: in-memory store, demo backend, local secrets."""
     return Runtime(RuntimeConfig(
         workspaces=workspaces,
@@ -140,4 +145,5 @@ def build_runtime(workspaces: Mapping[str, WorkspaceConfig], *,
         model_backend=model_backend,
         secrets=secrets if secrets is not None else local_secret_provider(),
         max_iterations=max_iterations,
+        run_timeout=run_timeout,
     ))

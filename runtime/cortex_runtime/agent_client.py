@@ -72,12 +72,12 @@ class AnthropicAgentClient:
 
     def __init__(self, registry: ToolRegistry, secrets: SecretProvider,
                  model: str = "claude-opus-4-8", max_tokens: int = 4096,
-                 secret_name: str = "llm_key"):
+                 secret_name: str = "llm_key", timeout: int = 600):
         try:
             import anthropic  # lazy: keeps the package importable without the SDK
         except ImportError as exc:  # pragma: no cover - integration-only
             raise ImportError("AnthropicAgentClient requires the 'anthropic' package") from exc
-        self._client = anthropic.Anthropic(api_key=secrets.get(secret_name))
+        self._client = anthropic.Anthropic(api_key=secrets.get(secret_name), timeout=timeout)
         self._registry = registry
         self._model = model
         self._max_tokens = max_tokens
@@ -261,7 +261,7 @@ class ClaudeCodeCliClient:
 
     def __init__(self, model: str = "claude-opus-4-8", root=None, allowed_tools: str = "Read,Grep,Glob",
                  cli: str = "claude", permission_mode: Optional[str] = None,
-                 mcp_servers: Optional[dict] = None):
+                 mcp_servers: Optional[dict] = None, timeout: int = 600):
         import shutil
         if shutil.which(cli) is None:  # pragma: no cover - integration-only
             raise FileNotFoundError(
@@ -274,6 +274,7 @@ class ClaudeCodeCliClient:
         self._cli = cli
         self._permission_mode = permission_mode
         self._mcp_servers = mcp_servers     # passed to the CLI via --mcp-config (e.g. a Jira server)
+        self._timeout = timeout             # kill a hung claude run instead of blocking forever
         self.last_usage: Optional[Dict[str, Any]] = None
         self.last_actions: Optional[List] = None   # (cli_tool, ActionKind, gated) for the audit log
 
@@ -302,7 +303,10 @@ class ClaudeCodeCliClient:
         env.setdefault("DISABLE_TELEMETRY", "1")
 
         try:
-            proc = subprocess.run(argv, cwd=self._root, env=env, capture_output=True, text=True)
+            proc = subprocess.run(argv, cwd=self._root, env=env, capture_output=True,
+                                  text=True, timeout=self._timeout)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"claude CLI timed out after {self._timeout}s") from exc
         finally:
             if mcp_path:
                 os.unlink(mcp_path)

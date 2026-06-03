@@ -9,6 +9,7 @@ Serves a single-workspace runtime configured from environment variables — enou
     CORTEX_BACKEND     demo | claude-cli | anthropic-api          (default: "demo")
     CORTEX_DATABASE_URL  postgres DSN (postgresql://…) — preferred for prod / local-iso-prod
     CORTEX_DB          sqlite path              (used only if no DATABASE_URL; default: in-memory)
+    CORTEX_RUN_TIMEOUT per-run timeout seconds  (kills a hung agent run; default: 600)
     CORTEX_MCP_CONFIG  path to a JSON file: {"mcp_servers": {...}, "mcp_bindings": {...}}
                        — MCP servers for the CLI (e.g. Jira) + ActionKind→MCP-tool bindings
     CORTEX_HOST/PORT   bind address             (default: 127.0.0.1:8000)
@@ -59,6 +60,7 @@ def main():
                                     mcp_servers=mcp_servers, mcp_bindings=mcp_bindings)},
         store=store,
         model_backend=backend,
+        run_timeout=int(os.environ.get("CORTEX_RUN_TIMEOUT", "600")),
     )
     app = create_app(runtime)
     uvicorn.run(app, host=os.environ.get("CORTEX_HOST", "127.0.0.1"),
