@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol
@@ -40,6 +41,7 @@ class RunRecord:
     duration_ms: Optional[int] = None
     ttft_ms: Optional[int] = None
     metrics_json: Optional[str] = None   # full usage blob (cache tokens, per-model breakdown…)
+    started_at: Optional[int] = None     # unix seconds at start_run — windows the budget cap (ADR-004 §3.5)
 
 
 @dataclass
@@ -154,12 +156,14 @@ class StateStore(Protocol):
     def set_conversation_state(self, workspace: str, subject: str, state: ConversationState) -> None: ...
 
     # — run lifecycle + history —
-    def start_run(self, workspace: str, role: str, subject: str, model: Optional[str] = None) -> str: ...
+    def start_run(self, workspace: str, role: str, subject: str, model: Optional[str] = None,
+                  started_at: Optional[int] = None) -> str: ...
     def finish_run(self, run_id: str, state: ConversationState, iterations: int,
                    usage: Optional[Mapping[str, Any]] = None) -> None: ...
     def fail_run(self, run_id: str, error: str) -> None: ...
     def get_run(self, run_id: str) -> Optional[RunRecord]: ...
     def list_runs(self, workspace: str, *, limit: int = 50) -> List[RunRecord]: ...
+    def spent_since(self, workspace: str, since_epoch: int) -> float: ...   # Σ cost_usd (ADR-004 §3.5)
 
     # — audit log (append-only) —
     def record_action(self, run_id: str, tool: str, kind: str, gated: bool, at: str) -> None: ...
@@ -193,6 +197,10 @@ def _new_run_id() -> str:
     return uuid.uuid4().hex
 
 
+def _now_epoch() -> int:
+    return int(time.time())
+
+
 class InMemoryStateStore:
     """Non-persistent backend for tests and ephemeral runs."""
 
@@ -211,9 +219,11 @@ class InMemoryStateStore:
     def set_conversation_state(self, workspace, subject, state):
         self._state[(workspace, subject)] = state
 
-    def start_run(self, workspace, role, subject, model=None):
+    def start_run(self, workspace, role, subject, model=None, started_at=None):
         run_id = _new_run_id()
-        self._runs[run_id] = RunRecord(run_id, workspace, role, subject, model, None, None)
+        rec = RunRecord(run_id, workspace, role, subject, model, None, None,
+                        started_at=started_at if started_at is not None else _now_epoch())
+        self._runs[run_id] = rec
         self._run_subject[run_id] = (workspace, subject)
         return run_id
 
@@ -235,6 +245,11 @@ class InMemoryStateStore:
     def list_runs(self, workspace, *, limit=50):
         runs = [r for r in self._runs.values() if r.workspace == workspace]
         return list(reversed(runs))[:limit]
+
+    def spent_since(self, workspace, since_epoch):
+        return sum(r.cost_usd for r in self._runs.values()
+                   if r.workspace == workspace and r.cost_usd
+                   and (r.started_at or 0) >= since_epoch)
 
     def record_action(self, run_id, tool, kind, gated, at):
         self._audit.append(AuditEntry(run_id, tool, kind, gated, at))
@@ -290,7 +305,8 @@ class InMemoryStateStore:
 
 
 _RUN_COLUMNS = "run_id, workspace, role, subject, model, state, iterations, error, " \
-               "cost_usd, tokens_in, tokens_out, num_turns, duration_ms, ttft_ms, metrics_json"
+               "cost_usd, tokens_in, tokens_out, num_turns, duration_ms, ttft_ms, metrics_json, " \
+               "started_at"
 
 
 class SqliteStateStore:
@@ -311,7 +327,7 @@ class SqliteStateStore:
                 subject TEXT NOT NULL, model TEXT, state TEXT, iterations INTEGER,
                 error TEXT, cost_usd REAL, tokens_in INTEGER, tokens_out INTEGER,
                 num_turns INTEGER, duration_ms INTEGER, ttft_ms INTEGER, metrics_json TEXT,
-                seq INTEGER
+                started_at INTEGER, seq INTEGER
             );
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
@@ -342,7 +358,8 @@ class SqliteStateStore:
         existing = {r["name"] for r in self._conn.execute("PRAGMA table_info(runs)")}
         for col, decl in (("error", "TEXT"), ("cost_usd", "REAL"), ("tokens_in", "INTEGER"),
                           ("tokens_out", "INTEGER"), ("num_turns", "INTEGER"),
-                          ("duration_ms", "INTEGER"), ("ttft_ms", "INTEGER"), ("metrics_json", "TEXT")):
+                          ("duration_ms", "INTEGER"), ("ttft_ms", "INTEGER"),
+                          ("metrics_json", "TEXT"), ("started_at", "INTEGER")):
             if col not in existing:
                 self._conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {decl}")
 
@@ -364,12 +381,14 @@ class SqliteStateStore:
         )
         self._conn.commit()
 
-    def start_run(self, workspace, role, subject, model=None):
+    def start_run(self, workspace, role, subject, model=None, started_at=None):
         run_id = _new_run_id()
         seq = self._conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM runs").fetchone()[0]
         self._conn.execute(
-            "INSERT INTO runs (run_id, workspace, role, subject, model, seq) VALUES (?, ?, ?, ?, ?, ?)",
-            (run_id, workspace, role, subject, model, seq),
+            "INSERT INTO runs (run_id, workspace, role, subject, model, started_at, seq) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (run_id, workspace, role, subject, model,
+             started_at if started_at is not None else _now_epoch(), seq),
         )
         self._conn.commit()
         return run_id
@@ -399,6 +418,13 @@ class SqliteStateStore:
             (workspace, limit),
         ).fetchall()
         return [RunRecord(**dict(r)) for r in rows]
+
+    def spent_since(self, workspace, since_epoch):
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM runs WHERE workspace=? AND started_at>=?",
+            (workspace, since_epoch),
+        ).fetchone()
+        return float(row[0])
 
     def record_action(self, run_id, tool, kind, gated, at):
         self._conn.execute(
@@ -512,7 +538,7 @@ class PostgresStateStore:
                          "subject TEXT NOT NULL, model TEXT, state TEXT, iterations INTEGER,"
                          "error TEXT, cost_usd DOUBLE PRECISION, tokens_in INTEGER, tokens_out INTEGER,"
                          "num_turns INTEGER, duration_ms INTEGER, ttft_ms INTEGER, metrics_json TEXT,"
-                         "seq BIGSERIAL)")
+                         "started_at BIGINT, seq BIGSERIAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS audit ("
                          "id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL, tool TEXT NOT NULL,"
                          "kind TEXT NOT NULL, gated BOOLEAN NOT NULL, at TEXT NOT NULL)")
@@ -533,7 +559,8 @@ class PostgresStateStore:
             for col, decl in (("error", "TEXT"), ("cost_usd", "DOUBLE PRECISION"),
                               ("tokens_in", "INTEGER"), ("tokens_out", "INTEGER"),
                               ("num_turns", "INTEGER"), ("duration_ms", "INTEGER"),
-                              ("ttft_ms", "INTEGER"), ("metrics_json", "TEXT")):
+                              ("ttft_ms", "INTEGER"), ("metrics_json", "TEXT"),
+                              ("started_at", "BIGINT")):
                 conn.execute(f"ALTER TABLE runs ADD COLUMN IF NOT EXISTS {col} {decl}")
 
     def _dict_rows(self, conn):
@@ -552,11 +579,13 @@ class PostgresStateStore:
                          "ON CONFLICT (workspace, subject) DO UPDATE SET state=EXCLUDED.state",
                          (workspace, subject, state.value))
 
-    def start_run(self, workspace, role, subject, model=None):
+    def start_run(self, workspace, role, subject, model=None, started_at=None):
         run_id = _new_run_id()
         with self._pool.connection() as conn:
-            conn.execute("INSERT INTO runs (run_id, workspace, role, subject, model) VALUES (%s,%s,%s,%s,%s)",
-                         (run_id, workspace, role, subject, model))
+            conn.execute("INSERT INTO runs (run_id, workspace, role, subject, model, started_at) "
+                         "VALUES (%s,%s,%s,%s,%s,%s)",
+                         (run_id, workspace, role, subject, model,
+                          started_at if started_at is not None else _now_epoch()))
         return run_id
 
     def finish_run(self, run_id, state, iterations, usage=None):
@@ -583,6 +612,13 @@ class PostgresStateStore:
                 f"SELECT {_RUN_COLUMNS} FROM runs WHERE workspace=%s ORDER BY seq DESC LIMIT %s",
                 (workspace, limit)).fetchall()
         return [RunRecord(**r) for r in rows]
+
+    def spent_since(self, workspace, since_epoch):
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0) FROM runs WHERE workspace=%s AND started_at>=%s",
+                (workspace, since_epoch)).fetchone()
+        return float(row[0])
 
     def record_action(self, run_id, tool, kind, gated, at):
         with self._pool.connection() as conn:

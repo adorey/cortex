@@ -79,6 +79,7 @@ from .ephemeral import (
     RateDecision,
     check_rate,
 )
+from .budget import BudgetDecision, BudgetWindow, check_budget
 
 __all__ = [
     # resolver
@@ -123,6 +124,9 @@ __all__ = [
     "InMemoryEphemeralStore",
     "RateDecision",
     "check_rate",
+    "BudgetDecision",
+    "BudgetWindow",
+    "check_budget",
     # tools + loop
     "Tool",
     "ToolRegistry",
