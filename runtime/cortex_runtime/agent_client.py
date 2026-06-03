@@ -307,7 +307,10 @@ class ClaudeCodeCliClient:
             if mcp_path:
                 os.unlink(mcp_path)
         if proc.returncode != 0:
-            raise RuntimeError(f"claude CLI failed (exit {proc.returncode}): {proc.stderr.strip()}")
+            # in stream-json mode the CLI often reports the error on stdout (a result event),
+            # not stderr — surface whichever is present so the failure is diagnosable.
+            detail = proc.stderr.strip() or proc.stdout.strip()[-800:] or "(no output)"
+            raise RuntimeError(f"claude CLI failed (exit {proc.returncode}): {detail}")
         text, self.last_usage, self.last_actions = parse_cli_stream(proc.stdout)
         return ModelTurn(final_text=text)
 
