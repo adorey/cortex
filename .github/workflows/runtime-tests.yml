@@ -16,6 +16,21 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cortex
+          POSTGRES_PASSWORD: cortex
+          POSTGRES_DB: cortex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cortex -d cortex_test"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    env:
+      # exercises the PostgresStateStore contract against the service above
+      CORTEX_TEST_DATABASE_URL: postgresql://cortex:cortex@localhost:5432/cortex_test
     steps:
       - uses: actions/checkout@v4
 
@@ -23,11 +38,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install runtime (with API + test deps)
+      - name: Install runtime (with API, Postgres + test deps)
         working-directory: runtime
         # fastapi (core) + httpx (dev) make the API tests run rather than skip;
+        # postgres extra makes the PostgresStateStore contract run against the service;
         # the parity test shells out to bin/validate-overlays.sh (bash, present on the runner).
-        run: pip install -e ".[dev,serve]"
+        run: pip install -e ".[dev,serve,postgres]"
 
       - name: Run the test suite
         working-directory: runtime

@@ -43,6 +43,7 @@ from .session import SessionResult, mark_human_reply, run_session
 from .state_store import (
     AuditEntry,
     InMemoryStateStore,
+    PostgresStateStore,
     RunRecord,
     SqliteStateStore,
     StateStore,
@@ -116,6 +117,7 @@ __all__ = [
     "StateStore",
     "InMemoryStateStore",
     "SqliteStateStore",
+    "PostgresStateStore",
     "local_state_store",
     "RunRecord",
     "AuditEntry",

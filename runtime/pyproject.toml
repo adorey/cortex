@@ -24,6 +24,10 @@ serve = [
 anthropic = [
     "anthropic>=0.40",      # API-key model backend (the deployed service)
 ]
+postgres = [
+    "psycopg[binary]>=3.1", # PostgreSQL StateStore backend (prod / local-iso-prod)
+    "psycopg-pool>=3.2",
+]
 # The Pro/Max path uses the Claude Code CLI (a subprocess), not a Python package:
 #   npm i -g @anthropic-ai/claude-code  &&  claude setup-token
 

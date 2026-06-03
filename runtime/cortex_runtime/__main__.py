@@ -7,7 +7,8 @@ Serves a single-workspace runtime configured from environment variables — enou
     CORTEX_ROOT        path to the project root (default: ".")
     CORTEX_THEME       active theme             (default: none)
     CORTEX_BACKEND     demo | claude-cli | anthropic-api          (default: "demo")
-    CORTEX_DB          sqlite path              (default: in-memory)
+    CORTEX_DATABASE_URL  postgres DSN (postgresql://…) — preferred for prod / local-iso-prod
+    CORTEX_DB          sqlite path              (used only if no DATABASE_URL; default: in-memory)
     CORTEX_MCP_CONFIG  path to a JSON file: {"mcp_servers": {...}, "mcp_bindings": {...}}
                        — MCP servers for the CLI (e.g. Jira) + ActionKind→MCP-tool bindings
     CORTEX_HOST/PORT   bind address             (default: 127.0.0.1:8000)
@@ -35,8 +36,16 @@ def main():
     root = Path(os.environ.get("CORTEX_ROOT", "."))
     theme = os.environ.get("CORTEX_THEME") or None
     backend = os.environ.get("CORTEX_BACKEND", "demo")
+
+    db_url = os.environ.get("CORTEX_DATABASE_URL")
     db = os.environ.get("CORTEX_DB")
-    store = SqliteStateStore(db) if db else InMemoryStateStore()
+    if db_url:
+        from .state_store import PostgresStateStore
+        store = PostgresStateStore(db_url)
+    elif db:
+        store = SqliteStateStore(db)
+    else:
+        store = InMemoryStateStore()
 
     mcp_servers = mcp_bindings = None
     mcp_cfg = os.environ.get("CORTEX_MCP_CONFIG")

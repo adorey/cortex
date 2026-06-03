@@ -256,6 +256,109 @@ class SqliteStateStore:
         return [AuditEntry(r["run_id"], r["tool"], r["kind"], bool(r["gated"]), r["at"]) for r in rows]
 
 
+class PostgresStateStore:
+    """PostgreSQL backend — production (and local-iso-prod). Same interface as the others;
+    ``psycopg`` is imported lazily so the package stays install-free until Postgres is used.
+
+    ``dsn`` e.g. ``postgresql://user:pass@host:5432/db``. A small connection pool makes it safe
+    under FastAPI's threadpool (sync handlers run concurrently)."""
+
+    def __init__(self, dsn: str):
+        from psycopg_pool import ConnectionPool
+        self._pool = ConnectionPool(dsn, min_size=1, open=True)
+        self._init_schema()
+
+    def _init_schema(self):
+        with self._pool.connection() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS conversation_state ("
+                         "workspace TEXT NOT NULL, subject TEXT NOT NULL, state TEXT NOT NULL,"
+                         "PRIMARY KEY (workspace, subject))")
+            conn.execute("CREATE TABLE IF NOT EXISTS runs ("
+                         "run_id TEXT PRIMARY KEY, workspace TEXT NOT NULL, role TEXT NOT NULL,"
+                         "subject TEXT NOT NULL, model TEXT, state TEXT, iterations INTEGER,"
+                         "error TEXT, cost_usd DOUBLE PRECISION, tokens_in INTEGER, tokens_out INTEGER,"
+                         "num_turns INTEGER, duration_ms INTEGER, ttft_ms INTEGER, metrics_json TEXT,"
+                         "seq BIGSERIAL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS audit ("
+                         "id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL, tool TEXT NOT NULL,"
+                         "kind TEXT NOT NULL, gated BOOLEAN NOT NULL, at TEXT NOT NULL)")
+            for col, decl in (("error", "TEXT"), ("cost_usd", "DOUBLE PRECISION"),
+                              ("tokens_in", "INTEGER"), ("tokens_out", "INTEGER"),
+                              ("num_turns", "INTEGER"), ("duration_ms", "INTEGER"),
+                              ("ttft_ms", "INTEGER"), ("metrics_json", "TEXT")):
+                conn.execute(f"ALTER TABLE runs ADD COLUMN IF NOT EXISTS {col} {decl}")
+
+    def _dict_rows(self, conn):
+        from psycopg.rows import dict_row
+        return conn.cursor(row_factory=dict_row)
+
+    def get_conversation_state(self, workspace, subject):
+        with self._pool.connection() as conn:
+            row = conn.execute("SELECT state FROM conversation_state WHERE workspace=%s AND subject=%s",
+                               (workspace, subject)).fetchone()
+        return ConversationState(row[0]) if row else None
+
+    def set_conversation_state(self, workspace, subject, state):
+        with self._pool.connection() as conn:
+            conn.execute("INSERT INTO conversation_state (workspace, subject, state) VALUES (%s, %s, %s) "
+                         "ON CONFLICT (workspace, subject) DO UPDATE SET state=EXCLUDED.state",
+                         (workspace, subject, state.value))
+
+    def start_run(self, workspace, role, subject, model=None):
+        run_id = _new_run_id()
+        with self._pool.connection() as conn:
+            conn.execute("INSERT INTO runs (run_id, workspace, role, subject, model) VALUES (%s,%s,%s,%s,%s)",
+                         (run_id, workspace, role, subject, model))
+        return run_id
+
+    def finish_run(self, run_id, state, iterations, usage=None):
+        u = _usage_fields(usage)
+        with self._pool.connection() as conn:
+            conn.execute("UPDATE runs SET state=%s, iterations=%s, cost_usd=%s, tokens_in=%s, tokens_out=%s, "
+                         "num_turns=%s, duration_ms=%s, ttft_ms=%s, metrics_json=%s WHERE run_id=%s",
+                         (state.value, iterations, u["cost_usd"], u["tokens_in"], u["tokens_out"],
+                          u["num_turns"], u["duration_ms"], u["ttft_ms"], u["metrics_json"], run_id))
+
+    def fail_run(self, run_id, error):
+        with self._pool.connection() as conn:
+            conn.execute("UPDATE runs SET state='failed', error=%s WHERE run_id=%s", (error, run_id))
+
+    def get_run(self, run_id):
+        with self._pool.connection() as conn:
+            row = self._dict_rows(conn).execute(
+                f"SELECT {_RUN_COLUMNS} FROM runs WHERE run_id=%s", (run_id,)).fetchone()
+        return RunRecord(**row) if row else None
+
+    def list_runs(self, workspace, *, limit=50):
+        with self._pool.connection() as conn:
+            rows = self._dict_rows(conn).execute(
+                f"SELECT {_RUN_COLUMNS} FROM runs WHERE workspace=%s ORDER BY seq DESC LIMIT %s",
+                (workspace, limit)).fetchall()
+        return [RunRecord(**r) for r in rows]
+
+    def record_action(self, run_id, tool, kind, gated, at):
+        with self._pool.connection() as conn:
+            conn.execute("INSERT INTO audit (run_id, tool, kind, gated, at) VALUES (%s,%s,%s,%s,%s)",
+                         (run_id, tool, kind, bool(gated), at))
+
+    def audit_trail(self, *, workspace=None, subject=None):
+        sql = "SELECT a.run_id, a.tool, a.kind, a.gated, a.at FROM audit a JOIN runs r ON r.run_id = a.run_id"
+        clauses, params = [], []
+        if workspace is not None:
+            clauses.append("r.workspace=%s"); params.append(workspace)
+        if subject is not None:
+            clauses.append("r.subject=%s"); params.append(subject)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY a.id"
+        with self._pool.connection() as conn:
+            rows = self._dict_rows(conn).execute(sql, params).fetchall()
+        return [AuditEntry(r["run_id"], r["tool"], r["kind"], bool(r["gated"]), r["at"]) for r in rows]
+
+    def close(self):
+        self._pool.close()
+
+
 def local_state_store(path: str = "cortex-runtime.db") -> StateStore:
     """Dev convenience: a file-backed SQLite store."""
     return SqliteStateStore(path)

@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY runtime/ /app/runtime/
 COPY mcp/ /app/mcp/
-RUN pip install --no-cache-dir "/app/runtime/.[serve]" "/app/mcp"
+RUN pip install --no-cache-dir "/app/runtime/.[serve,postgres]" "/app/mcp"
 
 RUN useradd -m -u 10001 cortex && chown -R cortex /app
 USER cortex

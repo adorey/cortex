@@ -1,5 +1,6 @@
 """Tests for the StateStore backends — ADR-003. Run against both InMemory and SQLite."""
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -84,6 +85,20 @@ class _StateStoreContract:
 class InMemoryStateStoreTests(_StateStoreContract, unittest.TestCase):
     def make_store(self):
         return InMemoryStateStore()
+
+
+@unittest.skipUnless(os.environ.get("CORTEX_TEST_DATABASE_URL"),
+                     "set CORTEX_TEST_DATABASE_URL to run the Postgres contract")
+class PostgresStateStoreTests(_StateStoreContract, unittest.TestCase):
+    def make_store(self):
+        try:
+            from cortex_runtime.state_store import PostgresStateStore
+            store = PostgresStateStore(os.environ["CORTEX_TEST_DATABASE_URL"])
+        except ImportError as exc:
+            self.skipTest(f"psycopg not installed: {exc}")
+        with store._pool.connection() as conn:        # clean slate for contract isolation
+            conn.execute("TRUNCATE conversation_state, runs, audit")
+        return store
 
 
 class SqliteStateStoreTests(_StateStoreContract, unittest.TestCase):

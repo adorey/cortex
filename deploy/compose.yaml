@@ -18,7 +18,8 @@ services:
       CORTEX_ROOT: /workspace                 # the mounted project (contains its cortex/ submodule)
       CORTEX_THEME: ${CORTEX_THEME:-h2g2}
       CORTEX_BACKEND: ${CORTEX_BACKEND:-claude-cli}
-      CORTEX_DB: /data/cortex-runtime.db
+      # internal connection over the `backend` network — always the container's port 5432
+      CORTEX_DATABASE_URL: postgresql://cortex:${POSTGRES_PASSWORD:-cortex}@postgres:5432/cortex
       CORTEX_MCP_CONFIG: /config/cortex-mcp.json
       # secrets — provided by .env / the host, NEVER baked into the image
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
@@ -28,9 +29,12 @@ services:
     volumes:
       - ${CORTEX_PROJECT_PATH}:/workspace:ro          # the project the agent investigates
       - ./cortex-mcp.json:/config/cortex-mcp.json:ro  # the mcp_bindings
-      - cortex-data:/data                             # the SQLite state store (persisted)
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - traefik
+      - backend
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cortex.rule=Host(`cortex.local.dev`)"
@@ -38,10 +42,34 @@ services:
       - "traefik.http.routers.cortex.tls=true"
       - "traefik.http.services.cortex.loadbalancer.server.port=8000"
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: cortex-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cortex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex}
+      POSTGRES_DB: cortex
+    volumes:
+      - cortex-pgdata:/var/lib/postgresql/data
+    ports:
+      # publish to the HOST on a configurable port (avoids clashing with other local Postgres);
+      # connect your DB editor to localhost:${POSTGRES_PORT}. The container port stays 5432.
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cortex -d cortex"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
 volumes:
-  cortex-data:
+  cortex-pgdata:
 
 networks:
   # The Traefik network is GLOBAL / host-side — created once, outside this project.
   traefik:
     external: true
+  # Private network between the runtime and its database.
+  backend: {}

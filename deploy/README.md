@@ -55,5 +55,10 @@ image).
   Node layer from the Dockerfile for a smaller image.
 - **Secrets**: `.env` is gitignored; in a real cluster these come from a K8s Secret via the
   `SecretProvider` — the app code is unchanged (ADR-002 §3.6).
-- **Postgres**: the SQLite store is fine for a single local node; multi-replica / production needs
-  the Postgres `StateStore` backend (ADR-003 follow-up).
+- **Postgres**: the compose ships a `postgres` service and the runtime uses the
+  `PostgresStateStore` (`CORTEX_DATABASE_URL`) — so local is iso-prod (same backend as a cluster).
+  State persists in the `cortex-pgdata` volume. (SQLite remains available via `CORTEX_DB` for a
+  quick no-DB run.)
+- **DB editor / port**: the runtime reaches Postgres internally on `postgres:5432` (the container
+  port — never changes). To inspect the DB from your host, set `POSTGRES_PORT` to a free host port
+  and connect your editor to `localhost:${POSTGRES_PORT}` (user `cortex`, db `cortex`).
