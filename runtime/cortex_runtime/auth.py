@@ -41,9 +41,10 @@ class AuthReason(str, Enum):
     INVALID_SIGNATURE = "invalid_signature"   # HMAC mismatch
     STALE_TIMESTAMP = "stale_timestamp"       # outside the ±window (or unpar.seable)
     REPLAY = "replay"                         # exact signature seen again inside the window
-    UNKNOWN_TOKEN = "unknown_token"           # Bearer token not on file
+    UNKNOWN_TOKEN = "unknown_token"           # Bearer token (or webhook source) not on file
     REVOKED_TOKEN = "revoked_token"           # token revoked or expired
     OUT_OF_SCOPE = "out_of_scope"             # token not scoped to this workspace
+    TENANT_DISABLED = "tenant_disabled"       # tenant exists but is turned off
     RATE_LIMITED = "rate_limited"             # sliding-window ceiling hit
     BUDGET_EXCEEDED = "budget_exceeded"       # tenant over its cost ceiling
 

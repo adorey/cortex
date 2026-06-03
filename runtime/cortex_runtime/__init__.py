@@ -72,6 +72,7 @@ from .auth import (
     token_matches,
     verify_hmac,
 )
+from .auth_policy import AuthPolicy, AuthRequest, HmacSecretLookup
 
 __all__ = [
     # resolver
@@ -109,6 +110,9 @@ __all__ = [
     "hash_token",
     "token_matches",
     "parse_bearer",
+    "AuthPolicy",
+    "AuthRequest",
+    "HmacSecretLookup",
     # tools + loop
     "Tool",
     "ToolRegistry",

@@ -89,7 +89,7 @@ signature = HMAC_SHA256(secret, f"{timestamp}.{raw_body}")
 at · tenant (nullable when the caller isn't identified) · source_ip · route ·
 method (hmac | bearer) · result (accepted | rejected) · reason · request_id
 reason ∈ { ok, invalid_signature, stale_timestamp, replay, unknown_token,
-           revoked_token, out_of_scope, rate_limited, budget_exceeded, … }
+           revoked_token, out_of_scope, tenant_disabled, rate_limited, budget_exceeded, … }
 ```
 This is the **perimeter** log (who tried, the verdict, and why) — **distinct** from the agent `audit` table (what the agent *did* during a run). Exposed read-only for monitoring (`GET /auth-log`).
 
