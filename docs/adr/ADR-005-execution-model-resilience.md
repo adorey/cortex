@@ -1,7 +1,7 @@
 # ADR-005 — Execution model & resilience
 
-- **Status:** Proposed
-- **Date:** 2026-06-03 (proposed)
+- **Status:** Accepted
+- **Date:** 2026-06-03 (proposed) · 2026-06-03 (accepted)
 - **Authors:** Cortex maintainers (initiated by l'humanoïde, dispatched by @Oolon)
 - **Affects:** `cortex-runtime` API + execution path (`/run`, the agentic loop, the model clients), deployment (K8s probes, serving), the `StateStore` (run lifecycle)
 - **Relates to:** [ADR-002](ADR-002-cortex-runtime.md) §3.7 (trigger/queue/worker — host-specific; this ADR pins the runtime's side) and §3.3 (iteration cap / `max_tokens` — per-run cost guards); [ADR-003](ADR-003-persistence-state-layer.md) (run records persist lifecycle → durable async results); [ADR-004](ADR-004-api-security.md) (security — its idempotency key dedups at the queue)
@@ -25,7 +25,7 @@ This is the **robustness** counterpart to ADR-004 (security). Both gate the full
 Move from **synchronous request-blocking** to **async accept-then-process**, and add resilience guards. Six parts:
 
 1. **Async trigger contract.** `POST /run` (and webhooks) **accept (`202`)** with a `run_id`, **enqueue** the work, and return immediately. The agent run executes on a **worker**. Results are read via the monitoring routes (`GET /runs/{run_id}`) and/or pushed to an optional `callback_url`. A **synchronous mode is preserved for dev/testing** (`?wait=true` or a config flag) — today's behaviour.
-2. **Queue + worker, behind an interface.** A `JobQueue` abstraction (the SecretProvider/StateStore discipline): an **in-process async backend** for a single node, a **broker** (Redis / RQ / arq / Celery) for multi-node. The runtime defines the contract; the backend is swappable.
+2. **Queue + worker, behind an interface.** A `JobQueue` abstraction (the SecretProvider/StateStore discipline): an **in-process async backend** for a single node, a **broker** for multi-node. The runtime defines the contract; the backend is swappable. Recommended split for a stack that already runs both: **RabbitMQ** for the job queue (durable work-queue, ack/nack + requeue on worker crash, dead-letter for poison jobs) and **Redis** for the ephemeral security state (rate-limit counters, idempotency keys, HMAC nonce cache — TTL-native).
 3. **Timeouts everywhere.** Per-run timeout on the CLI subprocess and the model API call *(done)*; extend to MCP tool calls. A hung call is killed → the run is recorded `failed` (we already do this), never a zombie thread.
 4. **Concurrency cap / backpressure.** Bound in-flight runs (a worker-pool size / semaphore). Beyond it, jobs wait in the queue (not in blocked HTTP threads); optionally shed with `429`.
 5. **Health vs readiness.** Keep `/health` (liveness) and add `/ready` (readiness: DB reachable, worker alive) for K8s probes; **graceful shutdown** drains in-flight runs on `SIGTERM`.
