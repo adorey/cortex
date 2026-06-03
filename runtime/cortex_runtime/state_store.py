@@ -717,3 +717,14 @@ class PostgresStateStore:
 def local_state_store(path: str = "cortex-runtime.db") -> StateStore:
     """Dev convenience: a file-backed SQLite store."""
     return SqliteStateStore(path)
+
+
+def store_from_env() -> StateStore:
+    """Select a backend from the environment (shared by the server and the admin CLI):
+    ``CORTEX_DATABASE_URL`` → Postgres, else ``CORTEX_DB`` → SQLite file, else in-memory."""
+    import os
+    db_url = os.environ.get("CORTEX_DATABASE_URL")
+    if db_url:
+        return PostgresStateStore(db_url)
+    db = os.environ.get("CORTEX_DB")
+    return SqliteStateStore(db) if db else InMemoryStateStore()

@@ -19,9 +19,10 @@ from dataclasses import dataclass, replace
 from typing import Optional
 
 from .auth import AuthMethod, AuthOutcome, AuthReason
-from .auth_policy import AuthPolicy, AuthRequest
+from .auth_policy import AuthPolicy, AuthRequest, DEFAULT_REPLAY_WINDOW_S
 from .budget import BudgetDecision, check_budget
-from .ephemeral import EphemeralStore, check_rate
+from .ephemeral import EphemeralStore, InMemoryEphemeralStore, check_rate
+from .secret_provider import SecretProvider
 from .state_store import StateStore
 
 IDEMPOTENCY_TTL_S = 24 * 60 * 60   # remember a delivery's outcome for a day (ADR-004 §3.3)
@@ -122,3 +123,22 @@ class SecurityGate:
     def _finish(self, req: AuthRequest, outcome: AuthOutcome, **extra) -> GateDecision:
         self._policy.log_attempt(req, outcome)
         return GateDecision(outcome, status_for(outcome.reason), **extra)
+
+
+def build_gate(store: StateStore, secrets: SecretProvider, *,
+               ephemeral: Optional[EphemeralStore] = None,
+               replay_window: int = DEFAULT_REPLAY_WINDOW_S) -> SecurityGate:
+    """Assemble a production gate from a store + SecretProvider.
+
+    Per-tenant HMAC secrets are read from the provider as ``<tenant>_webhook_hmac`` (e.g.
+    ``BLUSPARK_WEBHOOK_HMAC``) — raw, never the DB (ADR-004 §3.7). The ephemeral state
+    (rate-limit / nonce / idempotency) defaults to an in-process store for a single node;
+    pass a Redis-backed :class:`EphemeralStore` for multi-replica (ADR-005 §2.2)."""
+    eph = ephemeral or InMemoryEphemeralStore()   # shared: nonce (policy) + rate/idem (gate)
+    policy = AuthPolicy(
+        store,
+        hmac_secret_for=lambda tenant: secrets.get_optional(f"{tenant}_webhook_hmac"),
+        replay_window=replay_window,
+        ephemeral=eph,
+    )
+    return SecurityGate(store, policy, ephemeral=eph)

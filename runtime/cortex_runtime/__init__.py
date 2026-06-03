@@ -80,7 +80,7 @@ from .ephemeral import (
     check_rate,
 )
 from .budget import BudgetDecision, BudgetWindow, check_budget
-from .security_gate import GateDecision, SecurityGate, status_for
+from .security_gate import GateDecision, SecurityGate, build_gate, status_for
 
 __all__ = [
     # resolver
@@ -130,6 +130,7 @@ __all__ = [
     "check_budget",
     "SecurityGate",
     "GateDecision",
+    "build_gate",
     "status_for",
     # tools + loop
     "Tool",
