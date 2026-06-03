@@ -57,6 +57,18 @@ from .safety import (
     StateMachine,
 )
 from .tools import Tool, ToolRegistry
+from .auth import (
+    DEFAULT_REPLAY_WINDOW_S,
+    AuthMethod,
+    AuthOutcome,
+    AuthReason,
+    hash_token,
+    hmac_signature,
+    parse_bearer,
+    timestamp_in_window,
+    token_matches,
+    verify_hmac,
+)
 
 __all__ = [
     # resolver
@@ -83,6 +95,17 @@ __all__ = [
     "SAFE_DEFAULT_ACTIONS",
     "ConversationState",
     "StateMachine",
+    # api security core (ADR-004)
+    "AuthMethod",
+    "AuthReason",
+    "AuthOutcome",
+    "DEFAULT_REPLAY_WINDOW_S",
+    "hmac_signature",
+    "verify_hmac",
+    "timestamp_in_window",
+    "hash_token",
+    "token_matches",
+    "parse_bearer",
     # tools + loop
     "Tool",
     "ToolRegistry",
