@@ -90,6 +90,26 @@ class AsyncApiTests(unittest.TestCase):
             self.assertEqual(r.status_code, 202)
             self.assertEqual(self._poll(client, r.json()["run_id"])["lifecycle"], "done")
 
+    def test_ready_probe_ok(self):
+        with TestClient(self.app) as client:
+            r = client.get("/ready")
+            self.assertEqual(r.status_code, 200)
+            body = r.json()
+            self.assertTrue(body["ready"] and body["db"] and body["worker"])
+            self.assertEqual(body["queue"]["workers"], 4)   # the worker pool is up
+
+    def test_ready_503_when_worker_down(self):
+        # before the lifespan starts the queue, the worker pool is not alive → not ready
+        client = TestClient(self.app)   # NOT entered as a context manager → no startup
+        r = client.get("/ready")
+        self.assertEqual(r.status_code, 503)
+        self.assertFalse(r.json()["ready"])
+        self.assertFalse(r.json()["worker"])
+
+    def test_health_is_liveness_only(self):
+        client = TestClient(self.app)   # health needs no started worker
+        self.assertEqual(client.get("/health").status_code, 200)
+
     def test_async_anti_recursion_records_skip(self):
         with TestClient(self.app) as client:
             first = client.post("/run", json={"workspace": "host", "role": "support-engineer",

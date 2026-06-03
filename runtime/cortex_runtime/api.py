@@ -101,8 +101,28 @@ def create_app(runtime: Runtime, *, queue: Optional[JobQueue] = None) -> FastAPI
 
     @app.get("/health")
     def health():
+        """Liveness (ADR-005 §2.5): the process is up. Cheap, dependency-free."""
         return {"status": "ok", "backend": runtime.cfg.model_backend,
                 "workspaces": sorted(runtime.cfg.workspaces), "endpoints": sorted(manifest)}
+
+    @app.get("/ready")
+    def ready():
+        """Readiness (ADR-005 §2.5): safe to receive traffic — the store answers and the
+        worker pool is alive. K8s gates rollouts/routing on this; `503` keeps a not-ready
+        replica out of the pool."""
+        try:
+            store.get_run("__readiness_probe__")    # cheap round-trip; None is a fine answer
+            db_ok = True
+        except Exception:
+            logger.exception("readiness: store unreachable")
+            db_ok = False
+        worker_ok = queue.healthy() if queue is not None else True
+        body: Dict[str, Any] = {"ready": db_ok and worker_ok, "db": db_ok, "worker": worker_ok}
+        if queue is not None:
+            body["queue"] = queue.stats()
+        if not body["ready"]:
+            return JSONResponse(status_code=503, content=body)
+        return body
 
     # — monitoring (read-only): run history, run detail, audit trail —
     @app.get("/runs")

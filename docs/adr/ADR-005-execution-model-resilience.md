@@ -80,14 +80,18 @@ Pulls a job, runs `run_session` with the per-run timeout, records lifecycle tran
 | **Fire-and-forget background task (no persistence)** | Runs are lost on restart. Our run records are persisted → a durable queue (or at least persisted lifecycle) is the right base. |
 | **A full external workflow engine (Temporal, …)** | Powerful but heavy for the MVP. An interface + a simple broker covers the need; revisit if durable multi-step orchestration is required. |
 
-## 6. Follow-ups (out of scope for this ADR)
+## 6. Follow-ups
 
-1. **Async `/run` (202) + worker + `GET /runs/{id}`** (+ optional callback); sync mode behind `?wait=true`.
-2. **Timeouts** — CLI + model *(done)*; extend to MCP tool calls.
-3. **Concurrency cap** (semaphore / worker-pool) + backpressure.
-4. **Readiness probe** + graceful shutdown + multi-worker serving (compose/K8s).
-5. **`JobQueue` interface** + in-process backend; Redis/broker backend for multi-node.
-6. **Run lifecycle states** (`queued` / `running`) on the run record.
+Implemented on `feat/async-execution`:
+
+1. **Async `/run`** — ✅ `POST /run` → `202 {run_id, status:queued}`, a worker executes it, `GET /runs/{id}` polls the lifecycle; **sync via `?wait=true`** and fully sync when no queue is configured (`runtime.prepare`/`execute` split). *Optional `callback_url` push: not yet (poll only).*
+2. **Timeouts** — ✅ CLI + model (`CORTEX_RUN_TIMEOUT`). *MCP tool-call timeout: still TODO.*
+3. **Concurrency cap + backpressure** — ✅ worker-pool size (`max_concurrent_runs`) + bounded queue → `429 Retry-After` on `QueueFull` (`max_pending_runs`).
+4. **Readiness + graceful shutdown** — ✅ `GET /ready` (store reachable + worker alive → `503` when not) + `/health` liveness; the queue drains in-flight runs on shutdown (lifespan). Container healthcheck hits `/ready`. *Multi-replica uvicorn workers: serving concern, deferred.*
+5. **`JobQueue` interface + in-process backend** — ✅ `JobQueue` Protocol + `InProcessJobQueue` (thread pool, jobs are plain dicts → broker-ready). *RabbitMQ backend: TODO (multi-node).*
+6. **Run lifecycle states** — ✅ `queued → running → {done | failed | skipped}` on the run record (distinct from the conversation `state`).
+
+Still out of scope (later): the **broker (RabbitMQ) `JobQueue`** + **Redis** ephemeral backend (multi-node), the **`callback_url`** push, MCP tool-call timeouts, and multi-worker uvicorn serving.
 
 ## 7. References
 

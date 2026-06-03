@@ -230,6 +230,17 @@
 - **Timeout par run implémenté** *(`CORTEX_RUN_TIMEOUT`, défaut 600s)* : subprocess `claude` + appel anthropic → un run qui pend est tué → `failed` propre (plus de thread zombie).
 **Tags :** `adr-005`, `resilience`, `async`, `queue-worker`, `timeout`, `readiness`, `robustness`
 
+### 2026-06-03 — ADR-005 implémenté (branche `feat/async-execution`)
+**Contexte :** après l'ADR-004 (branche sécu séparée), passage à la robustesse. Branche dédiée partant de `feat/cortex-runtime`, implémentation point par point, commit par commit.
+**Participants :** @Oolon → @Ford (exécution/infra)
+**Décisions / outputs :**
+- **#6 Lifecycle de run** : colonne `lifecycle` (`queued → running → {done | failed | skipped}`) sur les 3 backends, **distincte** de l'état de conversation. `mark_running` / `skip_run` ajoutés.
+- **#5+#3 `JobQueue`** : interface + `InProcessJobQueue` (pool de threads daemon, jobs = dicts sérialisables → **broker-ready**). Cap de concurrence (`max_workers`), **backpressure** (queue bornée → `QueueFull`), shutdown gracieux (drain), `healthy()`/`stats()`. Tests déterministes (Events, pas de sleep).
+- **#1 Async `/run`** : split `runtime.prepare` (crée le run *queued*, valide → 404/422 *fast*) / `runtime.execute` (handler worker, par `run_id`). `POST /run` → **202 {run_id, queued}**, worker exécute, `GET /runs/{id}` poll le lifecycle. **`?wait=true`** garde le sync ; sans queue = 100% sync (rétrocompat). `QueueFull` → **429 Retry-After**. Anti-récursion re-vérifiée au worker (course enqueue↔exec) → `skip_run`.
+- **#4 Readiness** : `GET /ready` (store joignable + worker vivant → `503` sinon) vs `/health` (liveness). Shutdown gracieux via lifespan FastAPI (drain). Healthcheck container sur `/ready`. Knobs `__main__` : `CORTEX_ASYNC`, `CORTEX_MAX_CONCURRENT_RUNS`, `CORTEX_MAX_PENDING_RUNS`.
+- **Reste** : backend **RabbitMQ** (`JobQueue`) + **Redis** (multi-nœud), `callback_url` (push), timeout outils MCP, uvicorn multi-workers. 155 tests verts.
+**Tags :** `adr-005`, `async`, `job-queue`, `lifecycle`, `backpressure`, `readiness`, `graceful-shutdown`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
