@@ -28,7 +28,8 @@ mcp = FastMCP("cortex_jsm")
 
 JIRA_URL = os.environ.get("JIRA_URL", "").rstrip("/")
 JIRA_EMAIL = os.environ.get("JIRA_EMAIL", "")
-JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
+# accept either name — JIRA_API_TOKEN (canonical) or JIRA_BEARER_TOKEN (common host var)
+JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN") or os.environ.get("JIRA_BEARER_TOKEN", "")
 _BASIC = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_API_TOKEN}".encode()).decode()
 
 
