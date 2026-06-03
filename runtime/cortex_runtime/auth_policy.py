@@ -102,9 +102,19 @@ class AuthPolicy:
         self._ephemeral = ephemeral
         self._nonce_ttl = nonce_ttl if nonce_ttl is not None else replay_window
 
-    def check(self, req: AuthRequest) -> AuthOutcome:
-        """Authenticate + authorize, **log the attempt**, and return the verdict."""
+    def check(self, req: AuthRequest, *, record: bool = True) -> AuthOutcome:
+        """Authenticate + authorize and return the verdict.
+
+        Logs the attempt to ``auth_log`` by default. The :class:`~cortex_runtime.security_gate.
+        SecurityGate` passes ``record=False`` so it can write a single consolidated row with the
+        *final* reason (which may be ``rate_limited`` / ``budget_exceeded`` from a later layer)."""
         outcome = self._authenticate(req)
+        if record:
+            self.log_attempt(req, outcome)
+        return outcome
+
+    def log_attempt(self, req: AuthRequest, outcome: AuthOutcome) -> None:
+        """Write one ``auth_log`` row for ``req`` with ``outcome``'s verdict (§3.7)."""
         self._store.record_auth(
             at=req.at or str(req.now),
             route=req.route,
@@ -115,7 +125,6 @@ class AuthPolicy:
             source_ip=req.source_ip,
             request_id=req.request_id,
         )
-        return outcome
 
     # — internals (no logging here; check() logs once) ——————————————————————————————————
 

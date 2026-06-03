@@ -80,6 +80,7 @@ from .ephemeral import (
     check_rate,
 )
 from .budget import BudgetDecision, BudgetWindow, check_budget
+from .security_gate import GateDecision, SecurityGate, status_for
 
 __all__ = [
     # resolver
@@ -127,6 +128,9 @@ __all__ = [
     "BudgetDecision",
     "BudgetWindow",
     "check_budget",
+    "SecurityGate",
+    "GateDecision",
+    "status_for",
     # tools + loop
     "Tool",
     "ToolRegistry",
