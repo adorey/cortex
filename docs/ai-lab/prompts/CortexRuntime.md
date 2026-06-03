@@ -107,7 +107,7 @@
 - **Multi-provider : laissé tel quel** pour l'instant (`llm_key` conservé, Anthropic-only). La vraie réponse = **model gateway LiteLLM** (§3.5) : une clé virtuelle par tenant, routing provider dans le gateway → le nommage cesse d'être un frein. Différé.
 - **Persistance : OUI, mais opérationnel uniquement**, derrière une interface `StateStore` swappable (SQLite dev / Postgres prod), même discipline que `SecretProvider`. **Frontière git↔DB validée** par l'humanoïde : git = ce qui *définit* l'agent (spec) ; DB = ce que l'agent *produit/vit* (état de conversation pour l'anti-récursion, audit §3.6, run history). La spec n'est **jamais** déplacée en base (firewall ADR-002 §5).
 - **Trou identifié** : la `StateMachine` anti-récursion est aujourd'hui en mémoire → non-fonctionnelle entre deux webhooks. La persistance la rend durable.
-- **[ADR-003](../../adr/ADR-003-persistence-state-layer.md) rédigé et accepté** — après revue humanoïde : `ticket` → `subject` (agnostique), et scrub des noms de projets privés (WBTB/Bluspark → `acme`) dans les fichiers de session + le guide `extending-layers.md` (ADR-001 laissé tel quel comme trace ratifiée).
+- **[ADR-003](../../adr/ADR-003-persistence-state-layer.md) rédigé et accepté** — après revue humanoïde : `ticket` → `subject` (agnostique), et scrub des noms de projets privés (monitoring/Acme → `acme`) dans les fichiers de session + le guide `extending-layers.md` (ADR-001 laissé tel quel comme trace ratifiée).
 **Tags :** `adr-003`, `persistence`, `state-store`, `audit`, `git-vs-db`, `litellm`, `multi-provider`
 
 ### 2026-06-02 — ADR-003 follow-up #1 : StateStore + session orchestration
@@ -158,7 +158,7 @@
 **Tags :** `iteration`, `robustness`, `fail-run`, `audit`, `stream-json`, `cost-tracking`, `observability`
 
 ### 2026-06-02 — Itération : métriques de monitoring riches (vraie sortie CLI confirmée)
-**Contexte :** l'humanoïde a fourni la vraie sortie `stream-json` (events `tool_use` + `result`). Le parser tapait juste sur `result`/`total_cost_usd`/`num_turns`/`usage`. Diagnostic du seq-4 vide : serveur uvicorn pas redémarré (l'édition `.py` ne recharge pas un process en cours). Demande : loguer **tout** ce qui est monitorables (tokens, durée…) pour ressortir vers WBTB par API (next step).
+**Contexte :** l'humanoïde a fourni la vraie sortie `stream-json` (events `tool_use` + `result`). Le parser tapait juste sur `result`/`total_cost_usd`/`num_turns`/`usage`. Diagnostic du seq-4 vide : serveur uvicorn pas redémarré (l'édition `.py` ne recharge pas un process en cours). Demande : loguer **tout** ce qui est monitorables (tokens, durée…) pour ressortir vers monitoring par API (next step).
 **Participants :** @Oolon → @Deep-Thought (métriques) → @Vogon (schéma)
 **Décisions / outputs :**
 - **`parse_cli_stream` enrichi** : capte `total_cost_usd`, `num_turns`, `duration_ms`, `duration_api_ms`, `ttft_ms`, `subtype`, `is_error`, tokens (in/out/cache) et `modelUsage`. Les **`permission_denials`** (outils refusés car hors `--allowedTools`, ex. `Bash`) deviennent des actions d'audit `gated=True` → l'audit montre ce qui a tourné **ET** ce qui a été bloqué.
@@ -168,8 +168,8 @@
 - **Cause du seq-4 vide = serveur non redémarré** → relancer uvicorn charge le nouveau code.
 **Tags :** `iteration`, `monitoring`, `metrics`, `stream-json`, `permission-denials`, `gated`, `metrics-json`
 
-### 2026-06-02 — Routes de monitoring (exposition vers WBTB)
-**Contexte :** maintenant que les métriques sont stockées, les exposer en lecture pour qu'un hôte (WBTB) les consomme.
+### 2026-06-02 — Routes de monitoring (exposition vers monitoring)
+**Contexte :** maintenant que les métriques sont stockées, les exposer en lecture pour qu'un hôte (monitoring) les consomme.
 **Participants :** @Oolon → @Hactar
 **Décisions / outputs :**
 - `StateStore.get_run(run_id)` ajouté (manquait pour le détail).
