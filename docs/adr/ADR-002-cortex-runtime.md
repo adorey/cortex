@@ -270,6 +270,7 @@ Dependent on this ADR, tracked separately:
 
 - [ADR-001 — Layered overrides](ADR-001-layered-overrides.md) — the cascade contract this ADR makes executable
 - [ADR-003 — Persistence & operational state layer](ADR-003-persistence-state-layer.md) — adds the runtime's operational state (conversation state §3.3, audit §3.6) without breaching this ADR's firewall
+- [ADR-004 — API security & trust model](ADR-004-api-security.md) — secures the API boundary (HMAC webhook + Bearer + rate-limit + budget cap), realising the §3.6 HMAC-secret / API-token controls
 - [cortex/agents/roles/prompt-manager.md](../../agents/roles/prompt-manager.md) — dispatch protocol
 - [cortex/agents/workflows/README.md](../../agents/workflows/README.md) — workflow cascade
 - [cortex/bin/validate-overlays.sh](../../bin/validate-overlays.sh) — existing partial resolver (validation)

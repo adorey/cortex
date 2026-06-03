@@ -211,6 +211,16 @@
 - 134 tests. Reste côté humanoïde : fournir le **serveur Jira MCP** + le **nom exact de l'outil** « add internal comment ».
 **Tags :** `mcp`, `jira`, `internal-comment`, `claude-cli`, `mcp-config`, `tool-bindings`
 
+### 2026-06-03 — Productionisation : CI, Docker/Traefik, Postgres, ADR-004 sécurité
+**Contexte :** valider le MVP en local dockerisé, puis sécuriser avant ouverture autonome.
+**Participants :** @Oolon → @Ford (infra) → @Marvin (sécu)
+**Décisions / outputs :**
+- **CI GitHub Actions** : tests runtime sur push/PR (3.11/3.12), `fastapi`+`httpx` → 0 skip, **service Postgres** qui exécute le contrat `PostgresStateStore`.
+- **Docker + Traefik** : image (runtime + CLI Claude + `cortex-jsm-mcp`), `deploy/compose.yaml` derrière un **Traefik GLOBAL hors-projet** (réseau externe `traefik`, TLS mkcert, `cortex.local.dev`), doc dédiée.
+- **PostgreSQL StateStore** (ADR-003 follow-up #2) : backend `PostgresStateStore` (psycopg + pool), sélection par `CORTEX_DATABASE_URL`, service postgres dans le compose → **local iso-prod**. Port interne fixe `5432`, port hôte publié `${POSTGRES_PORT}` (anti-collision + éditeur DB).
+- **[ADR-004](../../adr/ADR-004-api-security.md) rédigé (Proposed)** : modèle de sécu en couches — **HMAC** (webhook) + **Bearer** (direct) + **anti-rejeu** + **idempotence** + **rate-limit** + **budget cap par tenant** (branché sur le `cost_usd` déjà persisté). Insight clé : *l'auth arrête les inconnus, mais ce qui protège les crédits = rate-limit + budget cap*. Toutes les vérifs **avant** le moindre appel IA.
+**Tags :** `ci`, `docker`, `traefik`, `postgres`, `adr-004`, `security`, `hmac`, `budget-cap`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
