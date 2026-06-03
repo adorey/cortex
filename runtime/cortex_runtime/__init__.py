@@ -73,6 +73,12 @@ from .auth import (
     verify_hmac,
 )
 from .auth_policy import AuthPolicy, AuthRequest, HmacSecretLookup
+from .ephemeral import (
+    EphemeralStore,
+    InMemoryEphemeralStore,
+    RateDecision,
+    check_rate,
+)
 
 __all__ = [
     # resolver
@@ -113,6 +119,10 @@ __all__ = [
     "AuthPolicy",
     "AuthRequest",
     "HmacSecretLookup",
+    "EphemeralStore",
+    "InMemoryEphemeralStore",
+    "RateDecision",
+    "check_rate",
     # tools + loop
     "Tool",
     "ToolRegistry",

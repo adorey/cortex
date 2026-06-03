@@ -7,6 +7,7 @@ import pytest
 
 from cortex_runtime.auth import AuthMethod, AuthReason, hash_token, hmac_signature
 from cortex_runtime.auth_policy import AuthPolicy, AuthRequest
+from cortex_runtime.ephemeral import InMemoryEphemeralStore
 from cortex_runtime.state_store import InMemoryStateStore
 
 NOW = 1_700_000_000
@@ -143,6 +144,21 @@ def test_hmac_no_secret_configured(store):
     pol = AuthPolicy(store, hmac_secret_for=lambda t: None)
     out = pol.check(_hmac_req())
     assert out.reason is AuthReason.UNKNOWN_TOKEN
+
+
+def test_hmac_replay_rejected_when_nonce_cache_present(store):
+    pol = AuthPolicy(store, hmac_secret_for={"bluspark": HMAC_SECRET}.get,
+                     ephemeral=InMemoryEphemeralStore())
+    req = _hmac_req()                       # same timestamp+body+secret → same signature
+    assert pol.check(req).ok                # first delivery accepted
+    assert pol.check(req).reason is AuthReason.REPLAY   # exact replay caught
+
+
+def test_hmac_no_replay_check_without_nonce_cache(policy):
+    # Without an ephemeral store the window still bounds replay, but exact replays inside it pass.
+    req = _hmac_req()
+    assert policy.check(req).ok
+    assert policy.check(req).ok
 
 
 # ── logging: every attempt lands in auth_log with the verdict ───────────────────────────

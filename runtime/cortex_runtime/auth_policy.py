@@ -28,6 +28,7 @@ from .auth import (
     parse_bearer,
     verify_hmac,
 )
+from .ephemeral import EphemeralStore
 from .state_store import StateStore, TokenRecord
 
 # How the policy obtains a tenant's *raw* HMAC secret. Injected (not a SecretProvider directly)
@@ -88,10 +89,18 @@ class AuthPolicy:
         *,
         hmac_secret_for: HmacSecretLookup,
         replay_window: int = DEFAULT_REPLAY_WINDOW_S,
+        ephemeral: Optional[EphemeralStore] = None,
+        nonce_ttl: Optional[int] = None,
     ):
         self._store = store
         self._hmac_secret_for = hmac_secret_for
         self._window = replay_window
+        # Anti-replay nonce cache (ADR-004 §3.2). Optional: without it the timestamp window
+        # still bounds replay; with it, exact-signature replays inside the window are caught.
+        # The nonce must outlive the window (else a replay could land just after it expires
+        # but still inside the window) → default to the window itself.
+        self._ephemeral = ephemeral
+        self._nonce_ttl = nonce_ttl if nonce_ttl is not None else replay_window
 
     def check(self, req: AuthRequest) -> AuthOutcome:
         """Authenticate + authorize, **log the attempt**, and return the verdict."""
@@ -147,4 +156,9 @@ class AuthPolicy:
             return AuthOutcome(AuthReason.UNKNOWN_TOKEN, AuthMethod.HMAC, tenant=name)
         reason = verify_hmac(secret, req.timestamp or "", req.body or "",
                              req.signature or "", now=req.now, window=self._window)
+        if reason is AuthReason.OK and self._ephemeral is not None:
+            # The signature is unique per (secret, timestamp, body) → a perfect replay key.
+            key = f"nonce:{name}:{req.signature}"
+            if self._ephemeral.seen_nonce(key, now=req.now, ttl_s=self._nonce_ttl):
+                return AuthOutcome(AuthReason.REPLAY, AuthMethod.HMAC, tenant=name)
         return AuthOutcome(reason, AuthMethod.HMAC, tenant=name)
