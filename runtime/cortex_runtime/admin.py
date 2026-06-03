@@ -10,6 +10,10 @@ environment, like the server: ``CORTEX_DATABASE_URL`` → Postgres, ``CORTEX_DB`
     # mint a token scoped to one or more workspaces — the RAW token is printed ONCE
     python -m cortex_runtime.admin token acme --scope acme --label monitoring-dashboard
 
+    # the "master" token: an ADMIN token, minted by hand once, that can then create/revoke
+    # every other token over the API (POST /tokens). This is the only token made manually.
+    python -m cortex_runtime.admin token acme --admin --label master
+
 Only a **hash** of the token is stored (§3.7); if the printed value is lost, revoke and
 re-issue. HMAC webhook secrets are NOT managed here — they live in the SecretProvider
 (``<TENANT>_WEBHOOK_HMAC``), never the DB.
@@ -51,10 +55,11 @@ def cmd_token(args) -> int:
     raw = _mint_raw_token()
     token_id = store.add_token(args.tenant, hash_token(raw),
                                scopes=args.scope or [args.tenant], label=args.label,
-                               expires_at=args.expires)
+                               expires_at=args.expires, admin=args.admin)
     print(f"token_id: {token_id}")
     print(f"tenant:   {args.tenant}")
     print(f"scopes:   {args.scope or [args.tenant]}")
+    print(f"admin:    {args.admin}")
     print("\nRAW TOKEN (shown once — store it now):\n")
     print(f"  {raw}\n")
     return 0
@@ -78,6 +83,8 @@ def main(argv=None) -> int:
     pk.add_argument("--scope", action="append", help="workspace the token may invoke (repeatable)")
     pk.add_argument("--label", default=None, help="human label (e.g. monitoring-dashboard)")
     pk.add_argument("--expires", default=None, help="expiry as unix seconds (default: never)")
+    pk.add_argument("--admin", action="store_true",
+                    help="grant admin privilege (manage tenants/tokens via the API) — the master token")
     pk.set_defaults(func=cmd_token)
 
     args = parser.parse_args(argv)

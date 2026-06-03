@@ -39,6 +39,15 @@ def test_minted_token_authenticates_and_is_stored_hashed(monkeypatch, capsys):
     assert out.reason is AuthReason.OK
 
 
+def test_minted_admin_token_carries_privilege(monkeypatch, capsys):
+    store = InMemoryStateStore()
+    store.upsert_tenant("acme", enabled=True)
+    monkeypatch.setattr(admin, "store_from_env", lambda: store)
+    assert admin.main(["token", "acme", "--admin", "--label", "master"]) == 0
+    raw = re.search(r"(rt_live_[\w-]+)", capsys.readouterr().out).group(1)
+    assert store.get_token_by_hash(hash_token(raw)).admin is True
+
+
 def test_token_for_unknown_tenant_errors(monkeypatch):
     store = InMemoryStateStore()
     monkeypatch.setattr(admin, "store_from_env", lambda: store)

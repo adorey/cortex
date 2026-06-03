@@ -104,6 +104,14 @@ class _StateStoreContract:
         self.assertEqual(rec.label, "monitoring-dashboard")
         self.assertIsNone(self.store.get_token_by_hash("nope"))
 
+    def test_token_admin_flag(self):
+        normal = self.store.add_token("acme", "hash_n")
+        master = self.store.add_token("acme", "hash_m", admin=True, label="master")
+        self.assertFalse(self.store.get_token_by_hash("hash_n").admin)
+        self.assertTrue(self.store.get_token_by_hash("hash_m").admin)
+        by_id = {t.token_id: t.admin for t in self.store.list_tokens("acme")}
+        self.assertEqual(by_id, {normal: False, master: True})
+
     def test_token_revocation(self):
         tid = self.store.add_token("acme", "hash_rev")
         self.store.revoke_token(tid)

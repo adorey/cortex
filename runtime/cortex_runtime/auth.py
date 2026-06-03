@@ -45,6 +45,7 @@ class AuthReason(str, Enum):
     REVOKED_TOKEN = "revoked_token"           # token revoked or expired
     OUT_OF_SCOPE = "out_of_scope"             # token not scoped to this workspace
     TENANT_DISABLED = "tenant_disabled"       # tenant exists but is turned off
+    FORBIDDEN = "forbidden"                   # authenticated but lacks the privilege (e.g. non-admin)
     RATE_LIMITED = "rate_limited"             # sliding-window ceiling hit
     BUDGET_EXCEEDED = "budget_exceeded"       # tenant over its cost ceiling
 
@@ -65,6 +66,7 @@ class AuthOutcome:
     method: AuthMethod
     tenant: Optional[str] = None
     token_id: Optional[str] = None
+    admin: bool = False         # the resolved Bearer token carries admin privilege
 
     @property
     def ok(self) -> bool:

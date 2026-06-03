@@ -38,6 +38,7 @@ _STATUS = {
     AuthReason.REVOKED_TOKEN: 401,
     AuthReason.OUT_OF_SCOPE: 403,
     AuthReason.TENANT_DISABLED: 403,
+    AuthReason.FORBIDDEN: 403,
     AuthReason.RATE_LIMITED: 429,
     AuthReason.BUDGET_EXCEEDED: 402,
 }

@@ -73,7 +73,8 @@ class TenantRecord:
 @dataclass
 class TokenRecord:
     """A Bearer token at rest: its **hash**, owning tenant, and authorization scope.
-    ``scopes`` = the workspaces the token may invoke (empty ⇒ its own tenant only)."""
+    ``scopes`` = the workspaces the token may invoke (empty ⇒ its own tenant only).
+    ``admin`` = may manage tenants/tokens via the admin API (the "master" token is admin)."""
     token_id: str
     tenant: str
     token_hash: str
@@ -82,6 +83,7 @@ class TokenRecord:
     label: Optional[str] = None
     expires_at: Optional[str] = None
     created_at: Optional[str] = None
+    admin: bool = False
 
 
 @dataclass
@@ -111,6 +113,7 @@ def _token_from_row(row) -> TokenRecord:
         token_id=row["token_id"], tenant=row["tenant"], token_hash=row["token_hash"],
         scopes=_load_scopes(row["scopes"]), revoked=bool(row["revoked"]),
         label=row["label"], expires_at=row["expires_at"], created_at=row["created_at"],
+        admin=bool(row["admin"]),
     )
 
 
@@ -130,7 +133,7 @@ def _authlog_from_row(row) -> AuthLogEntry:
     )
 
 
-_TOKEN_COLUMNS = "token_id, tenant, token_hash, scopes, revoked, label, expires_at, created_at"
+_TOKEN_COLUMNS = "token_id, tenant, token_hash, scopes, revoked, label, expires_at, created_at, admin"
 _TENANT_COLUMNS = "tenant, enabled, budget_daily_usd, budget_monthly_usd, rate_limit_per_min"
 _AUTHLOG_COLUMNS = "at, route, method, result, reason, tenant, source_ip, request_id"
 
@@ -180,7 +183,7 @@ class StateStore(Protocol):
     # — Bearer tokens (stored hashed; ADR-004 §3.2/§3.7) —
     def add_token(self, tenant: str, token_hash: str, *, scopes: Iterable[str] = (),
                   label: Optional[str] = None, expires_at: Optional[str] = None,
-                  created_at: Optional[str] = None) -> str: ...
+                  created_at: Optional[str] = None, admin: bool = False) -> str: ...
     def get_token_by_hash(self, token_hash: str) -> Optional[TokenRecord]: ...
     def revoke_token(self, token_id: str) -> None: ...
     def list_tokens(self, tenant: str) -> List[TokenRecord]: ...
@@ -272,10 +275,10 @@ class InMemoryStateStore:
         return list(self._tenants.values())
 
     def add_token(self, tenant, token_hash, *, scopes=(), label=None, expires_at=None,
-                  created_at=None):
+                  created_at=None, admin=False):
         token_id = uuid.uuid4().hex
         self._tokens[token_id] = TokenRecord(token_id, tenant, token_hash, list(scopes),
-                                             False, label, expires_at, created_at)
+                                             False, label, expires_at, created_at, admin)
         return token_id
 
     def get_token_by_hash(self, token_hash):
@@ -340,7 +343,7 @@ class SqliteStateStore:
             CREATE TABLE IF NOT EXISTS api_tokens (
                 token_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
                 scopes TEXT, revoked INTEGER NOT NULL DEFAULT 0,
-                label TEXT, expires_at TEXT, created_at TEXT
+                label TEXT, expires_at TEXT, created_at TEXT, admin INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
             CREATE TABLE IF NOT EXISTS auth_log (
@@ -362,6 +365,9 @@ class SqliteStateStore:
                           ("metrics_json", "TEXT"), ("started_at", "INTEGER")):
             if col not in existing:
                 self._conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {decl}")
+        tok_cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(api_tokens)")}
+        if "admin" not in tok_cols:
+            self._conn.execute("ALTER TABLE api_tokens ADD COLUMN admin INTEGER NOT NULL DEFAULT 0")
 
     def close(self):
         self._conn.close()
@@ -468,12 +474,13 @@ class SqliteStateStore:
         return [_tenant_from_row(r) for r in rows]
 
     def add_token(self, tenant, token_hash, *, scopes=(), label=None, expires_at=None,
-                  created_at=None):
+                  created_at=None, admin=False):
         token_id = uuid.uuid4().hex
         self._conn.execute(
             "INSERT INTO api_tokens (token_id, tenant, token_hash, scopes, revoked, label, "
-            "expires_at, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
-            (token_id, tenant, token_hash, _dump_scopes(scopes), label, expires_at, created_at),
+            "expires_at, created_at, admin) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
+            (token_id, tenant, token_hash, _dump_scopes(scopes), label, expires_at, created_at,
+             1 if admin else 0),
         )
         self._conn.commit()
         return token_id
@@ -550,7 +557,9 @@ class PostgresStateStore:
                          "token_id TEXT PRIMARY KEY, tenant TEXT NOT NULL,"
                          "token_hash TEXT NOT NULL UNIQUE, scopes TEXT,"
                          "revoked BOOLEAN NOT NULL DEFAULT FALSE, label TEXT,"
-                         "expires_at TEXT, created_at TEXT)")
+                         "expires_at TEXT, created_at TEXT,"
+                         "admin BOOLEAN NOT NULL DEFAULT FALSE)")
+            conn.execute("ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS admin BOOLEAN NOT NULL DEFAULT FALSE")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash)")
             conn.execute("CREATE TABLE IF NOT EXISTS auth_log ("
                          "id BIGSERIAL PRIMARY KEY, at TEXT NOT NULL, route TEXT NOT NULL,"
@@ -662,13 +671,14 @@ class PostgresStateStore:
         return [_tenant_from_row(r) for r in rows]
 
     def add_token(self, tenant, token_hash, *, scopes=(), label=None, expires_at=None,
-                  created_at=None):
+                  created_at=None, admin=False):
         token_id = uuid.uuid4().hex
         with self._pool.connection() as conn:
             conn.execute(
                 "INSERT INTO api_tokens (token_id, tenant, token_hash, scopes, revoked, label, "
-                "expires_at, created_at) VALUES (%s, %s, %s, %s, FALSE, %s, %s, %s)",
-                (token_id, tenant, token_hash, _dump_scopes(scopes), label, expires_at, created_at))
+                "expires_at, created_at, admin) VALUES (%s, %s, %s, %s, FALSE, %s, %s, %s, %s)",
+                (token_id, tenant, token_hash, _dump_scopes(scopes), label, expires_at,
+                 created_at, admin))
         return token_id
 
     def get_token_by_hash(self, token_hash):

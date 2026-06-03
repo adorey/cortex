@@ -140,7 +140,8 @@ class AuthPolicy:
         rec = self._store.get_token_by_hash(hash_token(token))
         if rec is None:
             return AuthOutcome(AuthReason.UNKNOWN_TOKEN, AuthMethod.BEARER)
-        ident = dict(method=AuthMethod.BEARER, tenant=rec.tenant, token_id=rec.token_id)
+        ident = dict(method=AuthMethod.BEARER, tenant=rec.tenant, token_id=rec.token_id,
+                     admin=rec.admin)
         if rec.revoked or _expired(rec.expires_at, req.now):
             return AuthOutcome(AuthReason.REVOKED_TOKEN, **ident)
         tenant = self._store.get_tenant(rec.tenant)

@@ -43,6 +43,15 @@ def test_bearer_ok(store, policy):
     out = policy.check(AuthRequest(AuthMethod.BEARER, "/run", NOW,
                                    authorization=f"Bearer {raw}", workspace="acme"))
     assert out.ok and out.tenant == "acme" and out.token_id == tid
+    assert out.admin is False   # a normal token carries no admin privilege
+
+
+def test_bearer_admin_flag_propagates(store, policy):
+    raw = "rt_live_master"
+    store.add_token("acme", hash_token(raw), scopes=["acme"], admin=True)
+    out = policy.check(AuthRequest(AuthMethod.BEARER, "/tokens", NOW,
+                                   authorization=f"Bearer {raw}", workspace="acme"))
+    assert out.ok and out.admin is True
 
 
 @pytest.mark.parametrize("header", [None, "Basic abc", "Bearer wrong-token", "Bearer "])
