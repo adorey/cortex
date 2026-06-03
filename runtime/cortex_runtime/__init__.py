@@ -41,6 +41,10 @@ from .secret_provider import (
 from .run import ResolvedRun, RunRequest, resolve_run
 from .session import SessionResult, mark_human_reply, run_session
 from .state_store import (
+    LIFECYCLE_DONE,
+    LIFECYCLE_FAILED,
+    LIFECYCLE_QUEUED,
+    LIFECYCLE_RUNNING,
     AuditEntry,
     InMemoryStateStore,
     PostgresStateStore,
@@ -121,6 +125,10 @@ __all__ = [
     "local_state_store",
     "RunRecord",
     "AuditEntry",
+    "LIFECYCLE_QUEUED",
+    "LIFECYCLE_RUNNING",
+    "LIFECYCLE_DONE",
+    "LIFECYCLE_FAILED",
     # session orchestration (§3.3 wiring)
     "run_session",
     "mark_human_reply",

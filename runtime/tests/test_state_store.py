@@ -59,6 +59,21 @@ class _StateStoreContract:
         self.assertEqual(rec.state, "failed")
         self.assertEqual(rec.error, "RuntimeError: bad path")
 
+    def test_run_lifecycle_transitions(self):
+        rid = self.store.start_run("acme", "r", "ACME-1")
+        self.assertEqual(self.store.get_run(rid).lifecycle, "queued")   # enqueued
+        self.store.mark_running(rid)
+        self.assertEqual(self.store.get_run(rid).lifecycle, "running")  # worker picked it up
+        self.store.finish_run(rid, ConversationState.RESOLVED, 1)
+        self.assertEqual(self.store.get_run(rid).lifecycle, "done")     # terminal (state=resolved)
+        self.assertEqual(self.store.get_run(rid).state, "resolved")
+
+    def test_fail_run_marks_lifecycle_failed(self):
+        rid = self.store.start_run("acme", "r", "ACME-1")
+        self.store.mark_running(rid)
+        self.store.fail_run(rid, "boom")
+        self.assertEqual(self.store.get_run(rid).lifecycle, "failed")
+
     def test_finish_run_stores_usage(self):
         import json
         rid = self.store.start_run("acme", "r", "ACME-1")
