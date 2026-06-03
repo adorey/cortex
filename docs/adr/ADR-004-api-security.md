@@ -124,15 +124,22 @@ This is the **perimeter** log (who tried, the verdict, and why) — **distinct**
 | **Delegate all of it to an API gateway / WAF** | Good for edge rate-limiting/WAF, but the **budget cap is app-specific** (needs our per-run cost data) → it stays in-app; a gateway can layer on top. |
 | **No idempotency, rely on the StateMachine anti-recursion** | Anti-recursion stops reacting to the agent's *own* output; it does not stop a duplicate *delivery* of the same event from double-running before the first finishes. Explicit idempotency is cleaner. |
 
-## 6. Follow-ups (out of scope for this ADR)
+## 6. Follow-ups
 
-0. **Data model** — `tenants` (config + budget), `api_tokens` (hashed), `auth_log` (connection log) tables; HMAC secrets in the `SecretProvider`.
-1. **`AuthPolicy`** boundary middleware — HMAC verify + Bearer + replay window, pure helpers tested; writes every attempt to `auth_log`.
-2. **Rate-limiter** (StateStore-backed counter; Redis backend later).
-3. **Budget cap** — per-workspace ceiling + `GET /budget` (remaining), enforced from `cost_usd`.
-4. **Idempotency store** (StateStore table, TTL).
-5. **Secret inventory update** — per-tenant HMAC secret, Bearer tokens, budget config (extends ADR-002 §3.6).
-6. **Webhook receiver** endpoint(s) + the trigger/queue/worker wiring (ADR-002 §3.7) — host-specific.
+Implemented on `feat/api-security` (engine side):
+
+0. **Data model** — ✅ `tenants` / `api_tokens` (hashed) / `auth_log` in every `StateStore` backend; HMAC secrets in the `SecretProvider`.
+1. **`AuthPolicy`** boundary — ✅ HMAC verify + Bearer + replay window (pure core in `auth.py`, store-backed policy in `auth_policy.py`); the ordered chain + single-row logging in `security_gate.py`; writes every attempt to `auth_log`.
+2. **Rate-limiter** — ✅ fixed-window counter behind the `EphemeralStore` boundary (`ephemeral.py`), in-process now / Redis later (ADR-005 §2.2).
+3. **Budget cap** — ✅ rolling-window ceiling from `cost_usd` (`budget.py`) + `GET /budget` (remaining); needed a `started_at` column on `runs`.
+4. **Idempotency store** — ✅ TTL store via `EphemeralStore`; `/run` honours `Idempotency-Key` (cached outcome, no re-run).
+5. **Secret inventory** — ✅ per-tenant HMAC secret (`<TENANT>_WEBHOOK_HMAC`) via the `SecretProvider`; Bearer tokens minted by `python -m cortex_runtime.admin` (raw shown once, hash stored).
+6. **Bearer-protected routes** — ✅ direct (`/run`, `/resolve`, `/reply`) + monitoring (`/runs`, `/runs/{id}`, `/audit`, `/auth-log`, `/budget`) for wbtb; `CORTEX_AUTH=on` enables it. `/health` stays open (liveness).
+
+Still out of scope (host-specific / later):
+
+- **Webhook receiver** endpoint(s) + the trigger/queue/worker wiring (ADR-002 §3.7, ADR-005) — the HMAC path is built and tested but no `/webhook/{tenant}` route is mounted yet.
+- **Redis `EphemeralStore`** backend for multi-replica (ADR-005 §2.2).
 
 ## 7. References
 
