@@ -68,6 +68,10 @@ class RuntimeConfig:
     workspaces: Mapping[str, WorkspaceConfig]
     store: StateStore
     manifest: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    # Webhook bindings (ADR-002 §3.7, ADR-004 §3.1): {source → {tenant, role, workflow?,
+    # subject_path}}. Host-declared, agnostic — `subject_path` is a generic dotted lookup into
+    # the provider payload; the engine never interprets a specific provider.
+    webhooks: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     model_backend: str = "demo"
     secrets: Optional[SecretProvider] = None
     max_iterations: int = 12
@@ -171,6 +175,7 @@ class Runtime:
 def build_runtime(workspaces: Mapping[str, WorkspaceConfig], *,
                   store: Optional[StateStore] = None,
                   manifest: Optional[Mapping[str, Mapping[str, Any]]] = None,
+                  webhooks: Optional[Mapping[str, Mapping[str, Any]]] = None,
                   model_backend: str = "demo",
                   secrets: Optional[SecretProvider] = None,
                   max_iterations: int = 12,
@@ -182,6 +187,7 @@ def build_runtime(workspaces: Mapping[str, WorkspaceConfig], *,
         workspaces=workspaces,
         store=store or InMemoryStateStore(),
         manifest=dict(manifest or {}),
+        webhooks=dict(webhooks or {}),
         model_backend=model_backend,
         secrets=secrets if secrets is not None else local_secret_provider(),
         max_iterations=max_iterations,
