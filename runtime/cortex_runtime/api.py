@@ -22,7 +22,6 @@ With neither, the API is open and synchronous (the local-dev / demo default).
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -135,15 +134,16 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
         gate.policy.log_attempt(req, outcome)
         return outcome
 
-    def _authorize_run(request: Request, workspace: str):
-        """The full spend-guarding chain for ``/run`` (auth → idempotency → rate → budget).
-        Returns ``(decision, idempotency_key)`` or raises with the verdict's status code."""
+    def _authorize_run(request: Request, workspace: str, run_id: str):
+        """The full spend-guarding chain for ``/run`` (auth → idempotency claim → rate → budget).
+        Returns ``(decision, idempotency_key)``; raises on a hard rejection. A *duplicate* is not
+        a rejection — it comes back on ``decision.is_duplicate`` for the caller to short-circuit."""
         if gate is None:
             return None, None
         idem_key = request.headers.get("idempotency-key")
         decision = gate.authorize(_bearer_request(request, workspace=workspace),
-                                  idempotency_key=idem_key)
-        if not decision.allowed:
+                                  idempotency_key=idem_key, run_id=run_id)
+        if not decision.is_duplicate and not decision.allowed:
             headers = {"Retry-After": str(decision.retry_after_s)} if decision.retry_after_s else None
             raise HTTPException(status_code=decision.status,
                                 detail=decision.outcome.reason.value, headers=headers)
@@ -166,27 +166,39 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
 
     def _dispatch_run(payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]],
                       request: Request, wait: bool):
-        """The integrated /run path: security chain → (idempotent replay) → enqueue (async) or
-        run (sync). Security and async are independent — either, both, or neither may be on."""
-        decision, idem_key = _authorize_run(request, payload["workspace"])
-        if decision is not None and decision.idempotent_replay is not None:
-            return json.loads(decision.idempotent_replay)        # duplicate delivery → cached outcome
+        """The integrated /run path. A ``run_id`` is **pre-minted** so the security chain can
+        atomically *claim* it as the idempotency key BEFORE any record or model call exists —
+        a duplicate (in-flight or completed) short-circuits here, never spawning a second run.
+        Then sync and async share one path (``prepare`` → ``execute`` | enqueue)."""
+        run_id = runtime.new_run_id()
+        decision, idem_key = _authorize_run(request, payload["workspace"], run_id)
 
-        if queue is not None and not wait:                       # async: accept-then-process
-            prepared = _guard(lambda: runtime.prepare(payload, alias))   # validates → 404/422 fast
+        if decision is not None and decision.is_duplicate:
+            entry = decision.idempotent_entry                   # {"run_id": ..., "result": ...}
+            if entry.get("result") is not None:
+                return entry["result"]                          # completed earlier → cached result
+            return JSONResponse(status_code=202,                # still in flight → poll the original
+                                content={"run_id": entry["run_id"], "status": "duplicate",
+                                         "detail": "already accepted; poll the run"})
+
+        # We hold the claim (or there is no gate). Create the queued record with OUR run_id.
+        prepared = _guard(lambda: runtime.prepare(payload, alias, run_id=run_id))
+        job = {"run_id": run_id, "payload": dict(payload), "alias": dict(alias) if alias else None}
+
+        if queue is not None and not wait:                      # async: accept-then-process
             try:
-                queue.submit({"run_id": prepared["run_id"], "payload": dict(payload),
-                              "alias": dict(alias) if alias else None})
+                queue.submit(job)
             except QueueFull:
                 raise HTTPException(status_code=429, detail="queue at capacity",
                                     headers={"Retry-After": "5"})
             return JSONResponse(status_code=202,
-                                content={"run_id": prepared["run_id"], "subject": prepared["subject"],
+                                content={"run_id": run_id, "subject": prepared["subject"],
                                          "status": "queued"})
 
-        result = _guard(lambda: runtime.run(payload, alias))     # sync (no queue, or ?wait=true)
-        if gate is not None and idem_key:
-            gate.remember(decision.outcome, idem_key, json.dumps(result), now=int(time.time()))
+        result = _guard(lambda: runtime.execute(job))           # sync (no queue, or ?wait=true)
+        if gate is not None and idem_key:                       # cache the result for later duplicates
+            gate.remember(idempotency_key=idem_key, tenant=decision.outcome.tenant,
+                          run_id=run_id, result=result, now=int(time.time()))
         return result
 
     @app.get("/health")

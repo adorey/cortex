@@ -171,7 +171,7 @@ class StateStore(Protocol):
 
     # — run lifecycle + history —
     def start_run(self, workspace: str, role: str, subject: str, model: Optional[str] = None,
-                  started_at: Optional[int] = None) -> str: ...
+                  started_at: Optional[int] = None, run_id: Optional[str] = None) -> str: ...
     def mark_running(self, run_id: str) -> None: ...   # queued → running (worker picked it up)
     def finish_run(self, run_id: str, state: ConversationState, iterations: int,
                    usage: Optional[Mapping[str, Any]] = None) -> None: ...
@@ -235,8 +235,8 @@ class InMemoryStateStore:
     def set_conversation_state(self, workspace, subject, state):
         self._state[(workspace, subject)] = state
 
-    def start_run(self, workspace, role, subject, model=None, started_at=None):
-        run_id = _new_run_id()
+    def start_run(self, workspace, role, subject, model=None, started_at=None, run_id=None):
+        run_id = run_id or _new_run_id()
         self._runs[run_id] = RunRecord(
             run_id, workspace, role, subject, model, None, None,
             started_at=started_at if started_at is not None else _now_epoch(),
@@ -412,8 +412,8 @@ class SqliteStateStore:
         )
         self._conn.commit()
 
-    def start_run(self, workspace, role, subject, model=None, started_at=None):
-        run_id = _new_run_id()
+    def start_run(self, workspace, role, subject, model=None, started_at=None, run_id=None):
+        run_id = run_id or _new_run_id()
         seq = self._conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM runs").fetchone()[0]
         self._conn.execute(
             "INSERT INTO runs (run_id, workspace, role, subject, model, started_at, lifecycle, seq) "
@@ -623,8 +623,8 @@ class PostgresStateStore:
                          "ON CONFLICT (workspace, subject) DO UPDATE SET state=EXCLUDED.state",
                          (workspace, subject, state.value))
 
-    def start_run(self, workspace, role, subject, model=None, started_at=None):
-        run_id = _new_run_id()
+    def start_run(self, workspace, role, subject, model=None, started_at=None, run_id=None):
+        run_id = run_id or _new_run_id()
         with self._pool.connection() as conn:
             conn.execute("INSERT INTO runs (run_id, workspace, role, subject, model, started_at, lifecycle) "
                          "VALUES (%s,%s,%s,%s,%s,%s,%s)",

@@ -93,6 +93,33 @@ class SecuredAsyncApiTests(unittest.TestCase):
             self.assertEqual(client.get("/runs", params={"workspace": "host"}).status_code, 401)
             self.assertEqual(client.get("/ready").status_code, 200)   # /ready stays open
 
+    # ── idempotency: a spammed delivery must spawn exactly ONE run (the whole point) ──────
+    def test_spammed_delivery_runs_once(self):
+        body = {"workspace": "host", "role": "support-engineer", "subject": "SPAM", "input": {}}
+        h = {**self._auth(), "Idempotency-Key": "delivery-XYZ"}
+        with TestClient(self.app) as client:
+            responses = [client.post("/run", headers=h, json=body) for _ in range(8)]
+            self.assertTrue(all(r.status_code == 202 for r in responses))
+            statuses = [r.json()["status"] for r in responses]
+            self.assertEqual(statuses.count("queued"), 1)        # exactly one real enqueue
+            self.assertEqual(statuses.count("duplicate"), 7)     # the rest deduped
+            run_ids = {r.json()["run_id"] for r in responses}
+            self.assertEqual(len(run_ids), 1)                    # all point at the same run
+            self._poll(client, run_ids.pop())
+            # the store proves it: a single run record for the subject, not eight
+            self.assertEqual(len(self.store.list_runs("host")), 1)
+
+    def test_sync_duplicate_returns_cached_result(self):
+        body = {"workspace": "host", "role": "support-engineer", "subject": "SYNCDUP", "input": {}}
+        h = {**self._auth(), "Idempotency-Key": "d-sync"}
+        with TestClient(self.app) as client:
+            first = client.post("/run?wait=true", headers=h, json=body)
+            self.assertEqual(first.status_code, 200)
+            second = client.post("/run?wait=true", headers=h, json=body)
+            self.assertEqual(second.status_code, 200)
+            self.assertEqual(first.json()["run_id"], second.json()["run_id"])   # cached, not re-run
+            self.assertEqual(len(self.store.list_runs("host")), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

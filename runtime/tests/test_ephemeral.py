@@ -74,3 +74,19 @@ def test_idempotency_roundtrip(store):
 def test_idempotency_expires(store):
     store.put_idempotent("key", "outcome", now=NOW, ttl_s=600)
     assert store.get_idempotent("key", now=NOW + 601) is None
+
+
+# ── atomic claim (SET NX) ───────────────────────────────────────────────────────────────
+
+def test_claim_is_atomic_set_nx(store):
+    # first claim wins (None); subsequent claims see the existing value, never overwrite it
+    assert store.claim_idempotent("k", "owner-A", now=NOW, ttl_s=600) is None
+    assert store.claim_idempotent("k", "owner-B", now=NOW, ttl_s=600) == "owner-A"
+    assert store.claim_idempotent("k", "owner-C", now=NOW + 10, ttl_s=600) == "owner-A"
+    assert store.get_idempotent("k", now=NOW) == "owner-A"   # unchanged
+
+
+def test_claim_reclaimable_after_expiry(store):
+    store.claim_idempotent("k", "owner-A", now=NOW, ttl_s=600)
+    assert store.claim_idempotent("k", "owner-B", now=NOW + 601, ttl_s=600) is None   # expired → free
+    assert store.get_idempotent("k", now=NOW + 601) == "owner-B"
