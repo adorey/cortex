@@ -28,6 +28,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      # readiness (ADR-005): store reachable + worker pool alive. `python` is always in the
+      # image; urlopen raises on a 503 → the container is marked unhealthy.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
     networks:
       - traefik
       - backend

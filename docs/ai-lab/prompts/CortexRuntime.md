@@ -257,6 +257,27 @@
 - 252 tests verts.
 **Tags :** `adr-004`, `admin-token`, `master-token`, `token-api`, `forbidden`, `agnostic-scrub`
 
+### 2026-06-03 — ADR-005 implémenté (branche `feat/async-execution`)
+**Contexte :** après l'ADR-004 (branche sécu séparée), passage à la robustesse. Branche dédiée partant de `feat/cortex-runtime`, implémentation point par point, commit par commit.
+**Participants :** @Oolon → @Ford (exécution/infra)
+**Décisions / outputs :**
+- **#6 Lifecycle de run** : colonne `lifecycle` (`queued → running → {done | failed | skipped}`) sur les 3 backends, **distincte** de l'état de conversation. `mark_running` / `skip_run` ajoutés.
+- **#5+#3 `JobQueue`** : interface + `InProcessJobQueue` (pool de threads daemon, jobs = dicts sérialisables → **broker-ready**). Cap de concurrence (`max_workers`), **backpressure** (queue bornée → `QueueFull`), shutdown gracieux (drain), `healthy()`/`stats()`. Tests déterministes (Events, pas de sleep).
+- **#1 Async `/run`** : split `runtime.prepare` (crée le run *queued*, valide → 404/422 *fast*) / `runtime.execute` (handler worker, par `run_id`). `POST /run` → **202 {run_id, queued}**, worker exécute, `GET /runs/{id}` poll le lifecycle. **`?wait=true`** garde le sync ; sans queue = 100% sync (rétrocompat). `QueueFull` → **429 Retry-After**. Anti-récursion re-vérifiée au worker (course enqueue↔exec) → `skip_run`.
+- **#4 Readiness** : `GET /ready` (store joignable + worker vivant → `503` sinon) vs `/health` (liveness). Shutdown gracieux via lifespan FastAPI (drain). Healthcheck container sur `/ready`. Knobs `__main__` : `CORTEX_ASYNC`, `CORTEX_MAX_CONCURRENT_RUNS`, `CORTEX_MAX_PENDING_RUNS`.
+- **Reste** : backend **RabbitMQ** (`JobQueue`) + **Redis** (multi-nœud), `callback_url` (push), timeout outils MCP, uvicorn multi-workers.
+**Tags :** `adr-005`, `async`, `job-queue`, `lifecycle`, `backpressure`, `readiness`, `graceful-shutdown`
+
+### 2026-06-03 — Intégration sur `release/0.3.0` (sécu + async réconciliés)
+**Contexte :** `release/0.3.0` = base + ADR-004 (PR #9). Rebase de `feat/async-execution` sur la release → beaucoup de conflits (les deux features touchent `state_store`, `api`, `__main__`, `__init__`). Merge de la release dans la branche async, résolution.
+**Participants :** @Oolon
+**Décisions / outputs :**
+- **`state_store`** : `runs` porte **les deux** colonnes `started_at` (budget) **et** `lifecycle` (async) ; `mark_running`/`skip_run`/`spent_since` + tables sécu coexistent.
+- **`api.py`** : `create_app(runtime, *, gate=None, queue=None)` — sécu et async **orthogonales**. `/run` = chaîne sécu (`_authorize_run`) → (replay idempotent) → **enqueue (202) si queue & non-`wait`, sinon run sync** (+ `gate.remember` au sync). Toutes les routes sécu + `/ready` présentes.
+- **`__main__`** : `CORTEX_AUTH` **et** `CORTEX_ASYNC` activables ensemble (gate + queue passés à `create_app`).
+- *Limite notée* : en async pur, l'idempotence ne dédoublonne pas deux livraisons back-to-back **avant** complétion (le `remember` est au worker, post-run) — dédup-à-l'enqueue = follow-up.
+**Tags :** `integration`, `release-0.3.0`, `merge`, `gate+queue`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
