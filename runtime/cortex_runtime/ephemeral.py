@@ -27,6 +27,7 @@ class EphemeralStore(Protocol):
     def seen_nonce(self, key: str, *, now: int, ttl_s: int) -> bool: ...
     def get_idempotent(self, key: str, *, now: int) -> Optional[str]: ...
     def put_idempotent(self, key: str, value: str, *, now: int, ttl_s: int) -> None: ...
+    def claim_idempotent(self, key: str, value: str, *, now: int, ttl_s: int) -> Optional[str]: ...
 
 
 class InMemoryEphemeralStore:
@@ -64,6 +65,17 @@ class InMemoryEphemeralStore:
     def put_idempotent(self, key: str, value: str, *, now: int, ttl_s: int) -> None:
         self._idem = {k: v for k, v in self._idem.items() if v[1] > now}  # prune expired
         self._idem[key] = (value, now + ttl_s)
+
+    # — atomic claim (SET NX): None ⇒ we claimed it; else the value already on file (a duplicate).
+    #   This is what lets the boundary dedup duplicates *before* they spawn a run — the expensive
+    #   thing — instead of only after one completes (ADR-004 §3.3, the in-flight gap).
+    def claim_idempotent(self, key: str, value: str, *, now: int, ttl_s: int) -> Optional[str]:
+        self._idem = {k: v for k, v in self._idem.items() if v[1] > now}  # prune expired
+        existing = self._idem.get(key)
+        if existing is not None:
+            return existing[0]
+        self._idem[key] = (value, now + ttl_s)
+        return None
 
 
 @dataclass(frozen=True)

@@ -275,8 +275,19 @@
 - **`state_store`** : `runs` porte **les deux** colonnes `started_at` (budget) **et** `lifecycle` (async) ; `mark_running`/`skip_run`/`spent_since` + tables sécu coexistent.
 - **`api.py`** : `create_app(runtime, *, gate=None, queue=None)` — sécu et async **orthogonales**. `/run` = chaîne sécu (`_authorize_run`) → (replay idempotent) → **enqueue (202) si queue & non-`wait`, sinon run sync** (+ `gate.remember` au sync). Toutes les routes sécu + `/ready` présentes.
 - **`__main__`** : `CORTEX_AUTH` **et** `CORTEX_ASYNC` activables ensemble (gate + queue passés à `create_app`).
-- *Limite notée* : en async pur, l'idempotence ne dédoublonne pas deux livraisons back-to-back **avant** complétion (le `remember` est au worker, post-run) — dédup-à-l'enqueue = follow-up.
+- *Limite notée (→ corrigée juste après, cf. entrée suivante)* : l'idempotence ne dédoublonnait qu'**après** complétion, pas les doublons in-flight.
 **Tags :** `integration`, `release-0.3.0`, `merge`, `gate+queue`
+
+### 2026-06-04 — Idempotence à l'enqueue (claim atomique) — `feat/async-execution`
+**Contexte :** l'humanoïde pointe le vrai danger : un même traitement « spammé » lancerait, **pendant** le 1er run, des milliers d'appels modèle en parallèle (un call IA = plusieurs secondes/minutes). Il faut dédoublonner **en amont** (avant le run) ET après (cache existant). « Ça ne touche pas que l'async. »
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Claim atomique** (`SET NX`) sur `EphemeralStore` (`claim_idempotent`) : la 1re livraison **réserve** la clé avec un `run_id` **pré-frappé**, **avant** rate/budget et **avant** toute création de run. Tout doublon (in-flight ou complété) court-circuite → renvoie le `run_id` existant (202, à poller) ou le `result` caché (200).
+- **`run_id` pré-généré** (`runtime.new_run_id`) → `start_run(run_id=…)` (3 backends) → la réservation précède le record DB. Chemin **unifié** sync/async : `prepare` (record *queued*) → `execute` | `enqueue`.
+- `gate.authorize(…, run_id=…)` fait le claim ; `gate.remember(result)` (sync) écrase le claim avec le résultat. `GateDecision.is_duplicate` / `idempotent_entry`.
+- **Couvre sync ET async** (pas que l'async) : un spam sync est aussi dédoublonné. Test clé : **8 livraisons identiques → 1 seul run** (`list_runs == 1`). 281 tests verts.
+- *Reste* : en async, le `result` n'est pas re-caché à la complétion du worker (le doublon récupère le `run_id` et poll) — suffisant ; re-cache au worker = optionnel.
+**Tags :** `idempotency`, `claim`, `set-nx`, `in-flight-dedup`, `anti-spam`, `async-idempotency`
 
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)

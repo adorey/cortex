@@ -15,6 +15,7 @@ into an :class:`AuthRequest`, calls :meth:`authorize`, and maps the verdict to a
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -55,11 +56,15 @@ class GateDecision:
     status: int
     retry_after_s: Optional[int] = None        # set on RATE_LIMITED
     budget: Optional[BudgetDecision] = None     # populated when a budget was evaluated
-    idempotent_replay: Optional[str] = None     # a prior outcome to return verbatim (no re-run)
+    idempotent_entry: Optional[dict] = None     # a duplicate: the existing claim {"run_id","result"}
 
     @property
     def allowed(self) -> bool:
         return self.outcome.ok
+
+    @property
+    def is_duplicate(self) -> bool:
+        return self.idempotent_entry is not None
 
 
 class SecurityGate:
@@ -79,7 +84,8 @@ class SecurityGate:
         (monitoring) that need identity + scope but not the rate/budget spend guards."""
         return self._policy
 
-    def authorize(self, req: AuthRequest, *, idempotency_key: Optional[str] = None) -> GateDecision:
+    def authorize(self, req: AuthRequest, *, idempotency_key: Optional[str] = None,
+                  run_id: Optional[str] = None) -> GateDecision:
         # 1. authenticate + authorize (+ HMAC exact-replay) — no logging yet; the gate logs once.
         outcome = self._policy.check(req, record=False)
         if not outcome.ok:
@@ -87,12 +93,17 @@ class SecurityGate:
 
         tenant_rec = self._store.get_tenant(outcome.tenant) if outcome.tenant else None
 
-        # 2. idempotency — a known delivery returns its prior outcome, skipping the run (and all
-        #    spend). Checked before rate/budget so a retry is never penalised.
-        if idempotency_key and self._ephemeral is not None:
-            prior = self._ephemeral.get_idempotent(self._idem_key(outcome, idempotency_key), now=req.now)
-            if prior is not None:
-                return self._finish(req, outcome, idempotent_replay=prior)
+        # 2. idempotency — an ATOMIC CLAIM on the key, scoped to the tenant. The FIRST delivery
+        #    reserves the key with its (pre-minted) ``run_id``; any concurrent or later duplicate
+        #    finds the key taken and short-circuits HERE — before rate/budget, and crucially
+        #    before a single run is spawned. This closes the in-flight gap: a spammed delivery
+        #    can no longer fan out into N parallel model calls (ADR-004 §3.3).
+        if idempotency_key and run_id and self._ephemeral is not None:
+            claim = json.dumps({"run_id": run_id, "result": None})
+            existing = self._ephemeral.claim_idempotent(
+                self._idem_key(outcome, idempotency_key), claim, now=req.now, ttl_s=self._idem_ttl)
+            if existing is not None:
+                return self._finish(req, outcome, idempotent_entry=json.loads(existing))
 
         # 3. rate-limit — per token when identified, else per IP. Tenant ceiling drives it.
         if self._ephemeral is not None and tenant_rec is not None:
@@ -109,17 +120,24 @@ class SecurityGate:
 
         return self._finish(req, outcome, budget=budget)
 
-    def remember(self, outcome: AuthOutcome, idempotency_key: str, value: str, *, now: int) -> None:
-        """Record a completed run's outcome under its idempotency key (call after the run)."""
+    def remember(self, *, idempotency_key: str, tenant: Optional[str], run_id: str,
+                 result: dict, now: int) -> None:
+        """Overwrite a run's idempotency claim with its completed result, so a later duplicate
+        gets the cached outcome inline (not just the run_id). Call after a SYNCHRONOUS run; an
+        async run leaves the claim at ``{run_id, result:None}`` and a duplicate polls the run."""
         if self._ephemeral is not None:
-            self._ephemeral.put_idempotent(self._idem_key(outcome, idempotency_key), value,
-                                           now=now, ttl_s=self._idem_ttl)
+            self._ephemeral.put_idempotent(
+                self._idem_key_for(tenant, idempotency_key),
+                json.dumps({"run_id": run_id, "result": result}), now=now, ttl_s=self._idem_ttl)
 
     # — internals ————————————————————————————————————————————————————————————————————————
 
     def _idem_key(self, outcome: AuthOutcome, key: str) -> str:
+        return self._idem_key_for(outcome.tenant, key)
+
+    def _idem_key_for(self, tenant: Optional[str], key: str) -> str:
         # Scope the key to the tenant so two tenants' identical delivery ids never collide.
-        return f"idem:{outcome.tenant or 'anon'}:{key}"
+        return f"idem:{tenant or 'anon'}:{key}"
 
     def _finish(self, req: AuthRequest, outcome: AuthOutcome, **extra) -> GateDecision:
         self._policy.log_attempt(req, outcome)
