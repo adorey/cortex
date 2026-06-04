@@ -1,0 +1,8 @@
+{
+  "jira": {
+    "tenant": "acme",
+    "role": "support-engineer",
+    "workflow": "support-triage",
+    "subject_path": "issue.key"
+  }
+}

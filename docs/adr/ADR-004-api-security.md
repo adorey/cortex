@@ -139,10 +139,10 @@ Implemented on `feat/api-security` (engine side):
 5. **Secret inventory** — ✅ per-tenant HMAC secret (`<TENANT>_WEBHOOK_HMAC`) via the `SecretProvider`; Bearer tokens minted by `python -m cortex_runtime.admin` (raw shown once, hash stored).
    - **Admin API** — ✅ a single hand-minted **master** (admin) token bootstraps the rest over the API: `POST /tenants`, `POST|GET /tokens`, `DELETE /tokens/{id}`, all gated to **admin** tokens (`api_tokens.admin`); a valid non-admin caller gets `403 forbidden` (logged).
 6. **Bearer-protected routes** — ✅ direct (`/run`, `/resolve`, `/reply`) + monitoring (`/runs`, `/runs/{id}`, `/audit`, `/auth-log`, `/budget`) for monitoring; `CORTEX_AUTH=on` enables it. `/health` stays open (liveness).
+7. **Webhook receiver** — ✅ `POST /webhook/{source}`: HMAC over the **raw body** (+ timestamp window + anti-replay nonce), then the same gate chain (idempotency / rate / budget) and dispatch (202 async by default) as `/run`. The payload→run mapping is a **host-declared binding** per source — `{tenant, role, workflow?, subject_path}` (`CORTEX_WEBHOOK_CONFIG`); `subject_path` is a generic dotted lookup, so the engine stays agnostic (no provider parsing). **Anti-replay vs idempotency**: an exact resend (same signature) is a `replay` (401); a re-signed retry (same delivery id, fresh signature) is deduped by idempotency (202 duplicate, points at the original run).
 
 Still out of scope (host-specific / later):
 
-- **Webhook receiver** endpoint(s) + the trigger/queue/worker wiring (ADR-002 §3.7, ADR-005) — the HMAC path is built and tested but no `/webhook/{tenant}` route is mounted yet.
 - **Redis `EphemeralStore`** backend for multi-replica (ADR-005 §2.2).
 
 ## 7. References
