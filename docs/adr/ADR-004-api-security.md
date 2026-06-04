@@ -62,7 +62,9 @@ signature = HMAC_SHA256(secret, f"{timestamp}.{raw_body}")
 - `Authorization: Bearer <token>`; one token per caller, **revocable, scoped** (which workspaces it may invoke), constant-time compared, from the `SecretProvider`.
 
 ### 3.3 Idempotency
-- Key = the provider delivery id (or `Idempotency-Key`). A `(key → outcome, expires_at)` store (a StateStore table) with a TTL. On a hit within TTL: return the stored outcome, **skip the run**.
+- Key = the provider delivery id (or `Idempotency-Key`). A `(key → {run_id, result}, expires_at)` store with a TTL.
+- **Atomic claim, not a read-then-write.** The first delivery *claims* the key (SET NX) with a pre-minted `run_id`, **before** rate/budget and **before** any run is created. A concurrent or later duplicate finds the key taken and short-circuits: it returns the existing `run_id` (still in flight → poll it) or the cached `result` (already completed). This closes the **in-flight gap** — a spammed delivery cannot fan out into N parallel model calls while the first is still running (a model call is seconds–minutes, so the blast radius would otherwise be huge). A read-then-write check would only dedup *after* the first completes.
+- A synchronous run overwrites the claim with its result on completion (later duplicates get it inline); an async run leaves `{run_id, result:null}` and duplicates poll the run.
 
 ### 3.4 Rate-limiting
 - Sliding-window counter keyed by token / IP, plus a global ceiling. Backed by the StateStore now; a Redis backend is a later optimisation. `429` + `Retry-After` on exceed.
@@ -133,14 +135,14 @@ Implemented on `feat/api-security` (engine side):
 1. **`AuthPolicy`** boundary — ✅ HMAC verify + Bearer + replay window (pure core in `auth.py`, store-backed policy in `auth_policy.py`); the ordered chain + single-row logging in `security_gate.py`; writes every attempt to `auth_log`.
 2. **Rate-limiter** — ✅ fixed-window counter behind the `EphemeralStore` boundary (`ephemeral.py`), in-process now / Redis later (ADR-005 §2.2).
 3. **Budget cap** — ✅ rolling-window ceiling from `cost_usd` (`budget.py`) + `GET /budget` (remaining); needed a `started_at` column on `runs`.
-4. **Idempotency store** — ✅ TTL store via `EphemeralStore`; `/run` honours `Idempotency-Key` (cached outcome, no re-run).
+4. **Idempotency store** — ✅ TTL store via `EphemeralStore` with an **atomic claim** (`claim_idempotent`); `/run` honours `Idempotency-Key` and dedups **in-flight** duplicates (claim before the run is spawned), not just post-completion — closing the spam-fan-out gap.
 5. **Secret inventory** — ✅ per-tenant HMAC secret (`<TENANT>_WEBHOOK_HMAC`) via the `SecretProvider`; Bearer tokens minted by `python -m cortex_runtime.admin` (raw shown once, hash stored).
    - **Admin API** — ✅ a single hand-minted **master** (admin) token bootstraps the rest over the API: `POST /tenants`, `POST|GET /tokens`, `DELETE /tokens/{id}`, all gated to **admin** tokens (`api_tokens.admin`); a valid non-admin caller gets `403 forbidden` (logged).
 6. **Bearer-protected routes** — ✅ direct (`/run`, `/resolve`, `/reply`) + monitoring (`/runs`, `/runs/{id}`, `/audit`, `/auth-log`, `/budget`) for monitoring; `CORTEX_AUTH=on` enables it. `/health` stays open (liveness).
+7. **Webhook receiver** — ✅ `POST /webhook/{source}`: HMAC over the **raw body** (+ timestamp window + anti-replay nonce), then the same gate chain (idempotency / rate / budget) and dispatch (202 async by default) as `/run`. The payload→run mapping is a **host-declared binding** per source — `{tenant, role, workflow?, subject_path}` (`CORTEX_WEBHOOK_CONFIG`); `subject_path` is a generic dotted lookup, so the engine stays agnostic (no provider parsing). **Anti-replay vs idempotency**: an exact resend (same signature) is a `replay` (401); a re-signed retry (same delivery id, fresh signature) is deduped by idempotency (202 duplicate, points at the original run).
 
 Still out of scope (host-specific / later):
 
-- **Webhook receiver** endpoint(s) + the trigger/queue/worker wiring (ADR-002 §3.7, ADR-005) — the HMAC path is built and tested but no `/webhook/{tenant}` route is mounted yet.
 - **Redis `EphemeralStore`** backend for multi-replica (ADR-005 §2.2).
 
 ## 7. References

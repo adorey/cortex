@@ -23,6 +23,16 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol
 
 from .safety import ConversationState
 
+# Run lifecycle (ADR-005 §2) — the execution phase of a run, DISTINCT from the conversation
+# ``state`` (ADR-003): a run is QUEUED → RUNNING → {DONE | FAILED}. ``state`` then carries the
+# conversation outcome (resolved / awaiting-human / escalated) for a DONE run. Tracking the
+# lifecycle is what lets ``/run`` return a 202 with a ``run_id`` and a poller read its progress.
+LIFECYCLE_QUEUED = "queued"
+LIFECYCLE_RUNNING = "running"
+LIFECYCLE_DONE = "done"
+LIFECYCLE_FAILED = "failed"
+LIFECYCLE_SKIPPED = "skipped"   # picked up, then anti-recursion declined to act (ADR-002 §3.3)
+
 
 @dataclass
 class RunRecord:
@@ -42,6 +52,7 @@ class RunRecord:
     ttft_ms: Optional[int] = None
     metrics_json: Optional[str] = None   # full usage blob (cache tokens, per-model breakdown…)
     started_at: Optional[int] = None     # unix seconds at start_run — windows the budget cap (ADR-004 §3.5)
+    lifecycle: Optional[str] = None      # queued | running | done | failed | skipped (ADR-005 §2)
 
 
 @dataclass
@@ -160,10 +171,12 @@ class StateStore(Protocol):
 
     # — run lifecycle + history —
     def start_run(self, workspace: str, role: str, subject: str, model: Optional[str] = None,
-                  started_at: Optional[int] = None) -> str: ...
+                  started_at: Optional[int] = None, run_id: Optional[str] = None) -> str: ...
+    def mark_running(self, run_id: str) -> None: ...   # queued → running (worker picked it up)
     def finish_run(self, run_id: str, state: ConversationState, iterations: int,
                    usage: Optional[Mapping[str, Any]] = None) -> None: ...
     def fail_run(self, run_id: str, error: str) -> None: ...
+    def skip_run(self, run_id: str, reason: str) -> None: ...   # anti-recursion skip on a queued run
     def get_run(self, run_id: str) -> Optional[RunRecord]: ...
     def list_runs(self, workspace: str, *, limit: int = 50) -> List[RunRecord]: ...
     def spent_since(self, workspace: str, since_epoch: int) -> float: ...   # Σ cost_usd (ADR-004 §3.5)
@@ -222,18 +235,23 @@ class InMemoryStateStore:
     def set_conversation_state(self, workspace, subject, state):
         self._state[(workspace, subject)] = state
 
-    def start_run(self, workspace, role, subject, model=None, started_at=None):
-        run_id = _new_run_id()
-        rec = RunRecord(run_id, workspace, role, subject, model, None, None,
-                        started_at=started_at if started_at is not None else _now_epoch())
-        self._runs[run_id] = rec
+    def start_run(self, workspace, role, subject, model=None, started_at=None, run_id=None):
+        run_id = run_id or _new_run_id()
+        self._runs[run_id] = RunRecord(
+            run_id, workspace, role, subject, model, None, None,
+            started_at=started_at if started_at is not None else _now_epoch(),
+            lifecycle=LIFECYCLE_QUEUED)
         self._run_subject[run_id] = (workspace, subject)
         return run_id
+
+    def mark_running(self, run_id):
+        self._runs[run_id].lifecycle = LIFECYCLE_RUNNING
 
     def finish_run(self, run_id, state, iterations, usage=None):
         rec = self._runs[run_id]
         rec.state = state.value
         rec.iterations = iterations
+        rec.lifecycle = LIFECYCLE_DONE
         for field, value in _usage_fields(usage).items():
             setattr(rec, field, value)
 
@@ -241,6 +259,12 @@ class InMemoryStateStore:
         rec = self._runs[run_id]
         rec.state = "failed"
         rec.error = error
+        rec.lifecycle = LIFECYCLE_FAILED
+
+    def skip_run(self, run_id, reason):
+        rec = self._runs[run_id]
+        rec.lifecycle = LIFECYCLE_SKIPPED
+        rec.error = reason
 
     def get_run(self, run_id):
         return self._runs.get(run_id)
@@ -309,7 +333,7 @@ class InMemoryStateStore:
 
 _RUN_COLUMNS = "run_id, workspace, role, subject, model, state, iterations, error, " \
                "cost_usd, tokens_in, tokens_out, num_turns, duration_ms, ttft_ms, metrics_json, " \
-               "started_at"
+               "started_at, lifecycle"
 
 
 class SqliteStateStore:
@@ -330,7 +354,7 @@ class SqliteStateStore:
                 subject TEXT NOT NULL, model TEXT, state TEXT, iterations INTEGER,
                 error TEXT, cost_usd REAL, tokens_in INTEGER, tokens_out INTEGER,
                 num_turns INTEGER, duration_ms INTEGER, ttft_ms INTEGER, metrics_json TEXT,
-                started_at INTEGER, seq INTEGER
+                started_at INTEGER, lifecycle TEXT, seq INTEGER
             );
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
@@ -362,7 +386,8 @@ class SqliteStateStore:
         for col, decl in (("error", "TEXT"), ("cost_usd", "REAL"), ("tokens_in", "INTEGER"),
                           ("tokens_out", "INTEGER"), ("num_turns", "INTEGER"),
                           ("duration_ms", "INTEGER"), ("ttft_ms", "INTEGER"),
-                          ("metrics_json", "TEXT"), ("started_at", "INTEGER")):
+                          ("metrics_json", "TEXT"), ("started_at", "INTEGER"),
+                          ("lifecycle", "TEXT")):
             if col not in existing:
                 self._conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {decl}")
         tok_cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(api_tokens)")}
@@ -387,30 +412,40 @@ class SqliteStateStore:
         )
         self._conn.commit()
 
-    def start_run(self, workspace, role, subject, model=None, started_at=None):
-        run_id = _new_run_id()
+    def start_run(self, workspace, role, subject, model=None, started_at=None, run_id=None):
+        run_id = run_id or _new_run_id()
         seq = self._conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM runs").fetchone()[0]
         self._conn.execute(
-            "INSERT INTO runs (run_id, workspace, role, subject, model, started_at, seq) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO runs (run_id, workspace, role, subject, model, started_at, lifecycle, seq) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (run_id, workspace, role, subject, model,
-             started_at if started_at is not None else _now_epoch(), seq),
+             started_at if started_at is not None else _now_epoch(), LIFECYCLE_QUEUED, seq),
         )
         self._conn.commit()
         return run_id
 
+    def mark_running(self, run_id):
+        self._conn.execute("UPDATE runs SET lifecycle=? WHERE run_id=?", (LIFECYCLE_RUNNING, run_id))
+        self._conn.commit()
+
     def finish_run(self, run_id, state, iterations, usage=None):
         u = _usage_fields(usage)
         self._conn.execute(
-            "UPDATE runs SET state=?, iterations=?, cost_usd=?, tokens_in=?, tokens_out=?, "
+            "UPDATE runs SET state=?, iterations=?, lifecycle=?, cost_usd=?, tokens_in=?, tokens_out=?, "
             "num_turns=?, duration_ms=?, ttft_ms=?, metrics_json=? WHERE run_id=?",
-            (state.value, iterations, u["cost_usd"], u["tokens_in"], u["tokens_out"],
+            (state.value, iterations, LIFECYCLE_DONE, u["cost_usd"], u["tokens_in"], u["tokens_out"],
              u["num_turns"], u["duration_ms"], u["ttft_ms"], u["metrics_json"], run_id),
         )
         self._conn.commit()
 
     def fail_run(self, run_id, error):
-        self._conn.execute("UPDATE runs SET state='failed', error=? WHERE run_id=?", (error, run_id))
+        self._conn.execute("UPDATE runs SET state='failed', lifecycle=?, error=? WHERE run_id=?",
+                           (LIFECYCLE_FAILED, error, run_id))
+        self._conn.commit()
+
+    def skip_run(self, run_id, reason):
+        self._conn.execute("UPDATE runs SET lifecycle=?, error=? WHERE run_id=?",
+                           (LIFECYCLE_SKIPPED, reason, run_id))
         self._conn.commit()
 
     def get_run(self, run_id):
@@ -545,7 +580,7 @@ class PostgresStateStore:
                          "subject TEXT NOT NULL, model TEXT, state TEXT, iterations INTEGER,"
                          "error TEXT, cost_usd DOUBLE PRECISION, tokens_in INTEGER, tokens_out INTEGER,"
                          "num_turns INTEGER, duration_ms INTEGER, ttft_ms INTEGER, metrics_json TEXT,"
-                         "started_at BIGINT, seq BIGSERIAL)")
+                         "started_at BIGINT, lifecycle TEXT, seq BIGSERIAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS audit ("
                          "id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL, tool TEXT NOT NULL,"
                          "kind TEXT NOT NULL, gated BOOLEAN NOT NULL, at TEXT NOT NULL)")
@@ -569,7 +604,7 @@ class PostgresStateStore:
                               ("tokens_in", "INTEGER"), ("tokens_out", "INTEGER"),
                               ("num_turns", "INTEGER"), ("duration_ms", "INTEGER"),
                               ("ttft_ms", "INTEGER"), ("metrics_json", "TEXT"),
-                              ("started_at", "BIGINT")):
+                              ("started_at", "BIGINT"), ("lifecycle", "TEXT")):
                 conn.execute(f"ALTER TABLE runs ADD COLUMN IF NOT EXISTS {col} {decl}")
 
     def _dict_rows(self, conn):
@@ -588,26 +623,36 @@ class PostgresStateStore:
                          "ON CONFLICT (workspace, subject) DO UPDATE SET state=EXCLUDED.state",
                          (workspace, subject, state.value))
 
-    def start_run(self, workspace, role, subject, model=None, started_at=None):
-        run_id = _new_run_id()
+    def start_run(self, workspace, role, subject, model=None, started_at=None, run_id=None):
+        run_id = run_id or _new_run_id()
         with self._pool.connection() as conn:
-            conn.execute("INSERT INTO runs (run_id, workspace, role, subject, model, started_at) "
-                         "VALUES (%s,%s,%s,%s,%s,%s)",
+            conn.execute("INSERT INTO runs (run_id, workspace, role, subject, model, started_at, lifecycle) "
+                         "VALUES (%s,%s,%s,%s,%s,%s,%s)",
                          (run_id, workspace, role, subject, model,
-                          started_at if started_at is not None else _now_epoch()))
+                          started_at if started_at is not None else _now_epoch(), LIFECYCLE_QUEUED))
         return run_id
+
+    def mark_running(self, run_id):
+        with self._pool.connection() as conn:
+            conn.execute("UPDATE runs SET lifecycle=%s WHERE run_id=%s", (LIFECYCLE_RUNNING, run_id))
 
     def finish_run(self, run_id, state, iterations, usage=None):
         u = _usage_fields(usage)
         with self._pool.connection() as conn:
-            conn.execute("UPDATE runs SET state=%s, iterations=%s, cost_usd=%s, tokens_in=%s, tokens_out=%s, "
-                         "num_turns=%s, duration_ms=%s, ttft_ms=%s, metrics_json=%s WHERE run_id=%s",
-                         (state.value, iterations, u["cost_usd"], u["tokens_in"], u["tokens_out"],
+            conn.execute("UPDATE runs SET state=%s, iterations=%s, lifecycle=%s, cost_usd=%s, tokens_in=%s, "
+                         "tokens_out=%s, num_turns=%s, duration_ms=%s, ttft_ms=%s, metrics_json=%s WHERE run_id=%s",
+                         (state.value, iterations, LIFECYCLE_DONE, u["cost_usd"], u["tokens_in"], u["tokens_out"],
                           u["num_turns"], u["duration_ms"], u["ttft_ms"], u["metrics_json"], run_id))
 
     def fail_run(self, run_id, error):
         with self._pool.connection() as conn:
-            conn.execute("UPDATE runs SET state='failed', error=%s WHERE run_id=%s", (error, run_id))
+            conn.execute("UPDATE runs SET state='failed', lifecycle=%s, error=%s WHERE run_id=%s",
+                         (LIFECYCLE_FAILED, error, run_id))
+
+    def skip_run(self, run_id, reason):
+        with self._pool.connection() as conn:
+            conn.execute("UPDATE runs SET lifecycle=%s, error=%s WHERE run_id=%s",
+                         (LIFECYCLE_SKIPPED, reason, run_id))
 
     def get_run(self, run_id):
         with self._pool.connection() as conn:

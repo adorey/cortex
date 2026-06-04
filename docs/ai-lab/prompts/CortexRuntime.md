@@ -257,6 +257,50 @@
 - 252 tests verts.
 **Tags :** `adr-004`, `admin-token`, `master-token`, `token-api`, `forbidden`, `agnostic-scrub`
 
+### 2026-06-03 — ADR-005 implémenté (branche `feat/async-execution`)
+**Contexte :** après l'ADR-004 (branche sécu séparée), passage à la robustesse. Branche dédiée partant de `feat/cortex-runtime`, implémentation point par point, commit par commit.
+**Participants :** @Oolon → @Ford (exécution/infra)
+**Décisions / outputs :**
+- **#6 Lifecycle de run** : colonne `lifecycle` (`queued → running → {done | failed | skipped}`) sur les 3 backends, **distincte** de l'état de conversation. `mark_running` / `skip_run` ajoutés.
+- **#5+#3 `JobQueue`** : interface + `InProcessJobQueue` (pool de threads daemon, jobs = dicts sérialisables → **broker-ready**). Cap de concurrence (`max_workers`), **backpressure** (queue bornée → `QueueFull`), shutdown gracieux (drain), `healthy()`/`stats()`. Tests déterministes (Events, pas de sleep).
+- **#1 Async `/run`** : split `runtime.prepare` (crée le run *queued*, valide → 404/422 *fast*) / `runtime.execute` (handler worker, par `run_id`). `POST /run` → **202 {run_id, queued}**, worker exécute, `GET /runs/{id}` poll le lifecycle. **`?wait=true`** garde le sync ; sans queue = 100% sync (rétrocompat). `QueueFull` → **429 Retry-After**. Anti-récursion re-vérifiée au worker (course enqueue↔exec) → `skip_run`.
+- **#4 Readiness** : `GET /ready` (store joignable + worker vivant → `503` sinon) vs `/health` (liveness). Shutdown gracieux via lifespan FastAPI (drain). Healthcheck container sur `/ready`. Knobs `__main__` : `CORTEX_ASYNC`, `CORTEX_MAX_CONCURRENT_RUNS`, `CORTEX_MAX_PENDING_RUNS`.
+- **Reste** : backend **RabbitMQ** (`JobQueue`) + **Redis** (multi-nœud), `callback_url` (push), timeout outils MCP, uvicorn multi-workers.
+**Tags :** `adr-005`, `async`, `job-queue`, `lifecycle`, `backpressure`, `readiness`, `graceful-shutdown`
+
+### 2026-06-03 — Intégration sur `release/0.3.0` (sécu + async réconciliés)
+**Contexte :** `release/0.3.0` = base + ADR-004 (PR #9). Rebase de `feat/async-execution` sur la release → beaucoup de conflits (les deux features touchent `state_store`, `api`, `__main__`, `__init__`). Merge de la release dans la branche async, résolution.
+**Participants :** @Oolon
+**Décisions / outputs :**
+- **`state_store`** : `runs` porte **les deux** colonnes `started_at` (budget) **et** `lifecycle` (async) ; `mark_running`/`skip_run`/`spent_since` + tables sécu coexistent.
+- **`api.py`** : `create_app(runtime, *, gate=None, queue=None)` — sécu et async **orthogonales**. `/run` = chaîne sécu (`_authorize_run`) → (replay idempotent) → **enqueue (202) si queue & non-`wait`, sinon run sync** (+ `gate.remember` au sync). Toutes les routes sécu + `/ready` présentes.
+- **`__main__`** : `CORTEX_AUTH` **et** `CORTEX_ASYNC` activables ensemble (gate + queue passés à `create_app`).
+- *Limite notée (→ corrigée juste après, cf. entrée suivante)* : l'idempotence ne dédoublonnait qu'**après** complétion, pas les doublons in-flight.
+**Tags :** `integration`, `release-0.3.0`, `merge`, `gate+queue`
+
+### 2026-06-04 — Idempotence à l'enqueue (claim atomique) — `feat/async-execution`
+**Contexte :** l'humanoïde pointe le vrai danger : un même traitement « spammé » lancerait, **pendant** le 1er run, des milliers d'appels modèle en parallèle (un call IA = plusieurs secondes/minutes). Il faut dédoublonner **en amont** (avant le run) ET après (cache existant). « Ça ne touche pas que l'async. »
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Claim atomique** (`SET NX`) sur `EphemeralStore` (`claim_idempotent`) : la 1re livraison **réserve** la clé avec un `run_id` **pré-frappé**, **avant** rate/budget et **avant** toute création de run. Tout doublon (in-flight ou complété) court-circuite → renvoie le `run_id` existant (202, à poller) ou le `result` caché (200).
+- **`run_id` pré-généré** (`runtime.new_run_id`) → `start_run(run_id=…)` (3 backends) → la réservation précède le record DB. Chemin **unifié** sync/async : `prepare` (record *queued*) → `execute` | `enqueue`.
+- `gate.authorize(…, run_id=…)` fait le claim ; `gate.remember(result)` (sync) écrase le claim avec le résultat. `GateDecision.is_duplicate` / `idempotent_entry`.
+- **Couvre sync ET async** (pas que l'async) : un spam sync est aussi dédoublonné. Test clé : **8 livraisons identiques → 1 seul run** (`list_runs == 1`). 281 tests verts.
+- *Reste* : en async, le `result` n'est pas re-caché à la complétion du worker (le doublon récupère le `run_id` et poll) — suffisant ; re-cache au worker = optionnel.
+**Tags :** `idempotency`, `claim`, `set-nx`, `in-flight-dedup`, `anti-spam`, `async-idempotency`
+
+### 2026-06-04 — Webhook par tenant (`POST /webhook/{source}`) — `feat/async-execution`
+**Contexte :** la moitié « auth » (HMAC + rejeu + chaîne gate) existait déjà ; ne manquait que la réception. L'humanoïde valide qu'on le fasse maintenant. Point de design clé tranché : le mapping payload→run reste **déclaratif** (firewall).
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Route `POST /webhook/{source}`** en `async def` (lit le **corps brut** — le HMAC signe les octets), puis `run_in_threadpool` (auth+dispatch bloquants hors event-loop).
+- **Binding host-déclaré** par source (`RuntimeConfig.webhooks`, `CORTEX_WEBHOOK_CONFIG`) : `{tenant, role, workflow?, subject_path}`. `subject_path` = **lookup pointé générique** (`issue.key`) → `subject` du run ; payload entier en `input`. Zéro connaissance provider.
+- Réutilise **toute** la chaîne : HMAC (`AuthMethod.HMAC`) → rejeu nonce → **idempotence (claim)** → rate → budget → `prepare`/`enqueue` (202 par défaut). Tail de dispatch **mutualisé** avec `/run` (`_finish_dispatch`).
+- **Rejeu vs retry tranché** : resend exact (même signature) → `401 replay` (nonce) ; retry re-signé (même delivery-id, nouvelle signature) → `202 duplicate` (idempotence, pointe le run d'origine). Les deux mécanismes sont complémentaires.
+- Doc : `cortex-webhook.json.example`, section deploy README, ADR-004 follow-up #6 ✅. **289 tests verts**.
+- *Reste host-specific* : routage conditionnel par type d'événement / filtrage = config host ou adaptateur, hors moteur.
+**Tags :** `webhook`, `hmac`, `trigger`, `subject-path`, `agnostic`, `adr-004`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)

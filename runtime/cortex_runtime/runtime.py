@@ -68,10 +68,16 @@ class RuntimeConfig:
     workspaces: Mapping[str, WorkspaceConfig]
     store: StateStore
     manifest: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    # Webhook bindings (ADR-002 §3.7, ADR-004 §3.1): {source → {tenant, role, workflow?,
+    # subject_path}}. Host-declared, agnostic — `subject_path` is a generic dotted lookup into
+    # the provider payload; the engine never interprets a specific provider.
+    webhooks: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     model_backend: str = "demo"
     secrets: Optional[SecretProvider] = None
     max_iterations: int = 12
     run_timeout: int = 600          # per-call timeout (s) — kills a hung agent run
+    max_concurrent_runs: int = 4    # async worker-pool size / concurrency cap (ADR-005 §3.3)
+    max_pending_runs: int = 100     # bounded queue → backpressure (429) when full
 
 
 class Runtime:
@@ -89,9 +95,45 @@ class Runtime:
         wcfg = self._workspace(req.workspace)
         return resolve_run(req, wcfg.root, wcfg.theme)
 
+    def _subject(self, req) -> str:
+        return req.subject or req.input.get("issue") or "default"
+
+    @staticmethod
+    def new_run_id() -> str:
+        """A fresh run id, mintable BEFORE :meth:`prepare` — so the boundary can reserve it as
+        an idempotency claim before any DB record or model call exists (ADR-004 §3.3)."""
+        import uuid
+        return uuid.uuid4().hex
+
     def run(self, payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
-        """Resolve then EXECUTE the agentic loop with durable state + audit."""
+        """Resolve then EXECUTE the agentic loop synchronously (durable state + audit)."""
+        return self._execute(build_run_request(payload, alias))
+
+    def prepare(self, payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]] = None,
+                run_id: Optional[str] = None) -> Dict[str, Any]:
+        """Validate + create a **queued** run record and return its id, WITHOUT executing
+        (ADR-005). The async API returns this immediately (202); a worker then calls
+        :meth:`execute`. ``run_id`` lets the caller supply a pre-minted id (an idempotency
+        claim). Validation (unknown workspace/role) still fails fast, synchronously."""
         req = build_run_request(payload, alias)
+        self._workspace(req.workspace)        # validate now → 404 before enqueueing
+        subject = self._subject(req)
+        run_id = self.cfg.store.start_run(req.workspace, req.role, subject, req.model, run_id=run_id)
+        return {"run_id": run_id, "subject": subject}
+
+    def execute(self, job: Mapping[str, Any]) -> Dict[str, Any]:
+        """The job-queue handler: run a previously :meth:`prepare`d job by its ``run_id``."""
+        req = build_run_request(job["payload"], job.get("alias"))
+        return self._execute(req, run_id=job["run_id"])
+
+    def build_queue(self):
+        """An in-process job queue wired to :meth:`execute`, sized from the config (ADR-005).
+        A multi-node deployment swaps in a broker-backed queue with the same handler."""
+        from .job_queue import InProcessJobQueue
+        return InProcessJobQueue(self.execute, max_workers=self.cfg.max_concurrent_runs,
+                                 max_pending=self.cfg.max_pending_runs)
+
+    def _execute(self, req, run_id: Optional[str] = None) -> Dict[str, Any]:
         wcfg = self._workspace(req.workspace)
         resolved = resolve_run(req, wcfg.root, wcfg.theme)
 
@@ -101,13 +143,13 @@ class Runtime:
                                   mcp_servers=wcfg.mcp_servers, mcp_bindings=wcfg.mcp_bindings,
                                   timeout=self.cfg.run_timeout)
         loop = AgentLoop(registry, ActionPolicy.from_names(req.autonomy), self.cfg.max_iterations)
-        subject = req.subject or req.input.get("issue") or "default"
+        subject = self._subject(req)
 
         result = run_session(
             loop, model, self.cfg.store,
             workspace=req.workspace, role=req.role, subject=subject,
             system_prompt=resolved.system_prompt, initial_input=req.input, model_id=req.model,
-            handoff=req.handoff, force=req.force, at=_now(),
+            handoff=req.handoff, force=req.force, at=_now(), run_id=run_id,
         )
 
         if result.skipped:
@@ -133,17 +175,23 @@ class Runtime:
 def build_runtime(workspaces: Mapping[str, WorkspaceConfig], *,
                   store: Optional[StateStore] = None,
                   manifest: Optional[Mapping[str, Mapping[str, Any]]] = None,
+                  webhooks: Optional[Mapping[str, Mapping[str, Any]]] = None,
                   model_backend: str = "demo",
                   secrets: Optional[SecretProvider] = None,
                   max_iterations: int = 12,
-                  run_timeout: int = 600) -> Runtime:
+                  run_timeout: int = 600,
+                  max_concurrent_runs: int = 4,
+                  max_pending_runs: int = 100) -> Runtime:
     """Convenience builder. Defaults: in-memory store, demo backend, local secrets."""
     return Runtime(RuntimeConfig(
         workspaces=workspaces,
         store=store or InMemoryStateStore(),
         manifest=dict(manifest or {}),
+        webhooks=dict(webhooks or {}),
         model_backend=model_backend,
         secrets=secrets if secrets is not None else local_secret_provider(),
         max_iterations=max_iterations,
         run_timeout=run_timeout,
+        max_concurrent_runs=max_concurrent_runs,
+        max_pending_runs=max_pending_runs,
     ))

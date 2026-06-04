@@ -114,6 +114,34 @@ curl -H "Authorization: Bearer rt_live_…" "https://cortex.local.dev/runs?works
 **Monitoring hosts:** mint a token scoped to the workspaces it monitors and poll `GET /runs`,
 `GET /auth-log`, `GET /budget` with it — all Bearer-protected, all read-only.
 
+## Webhook triggers (ADR-004 §3.1)
+
+Let a provider (Jira, GitHub…) trigger a run via `POST /webhook/{source}`, authenticated by
+**HMAC over the raw body** (not a Bearer token — webhooks can't send one).
+
+```bash
+cp cortex-webhook.json.example cortex-webhook.json   # declare per-source bindings
+# then in .env:  CORTEX_WEBHOOK_CONFIG=/config/cortex-webhook.json
+```
+
+A binding maps a `source` to a run, **agnostically** — no provider parsing in the engine:
+
+```json
+{ "jira": { "tenant": "acme", "role": "support-engineer",
+            "workflow": "support-triage", "subject_path": "issue.key" } }
+```
+
+- `subject_path` is a **generic dotted lookup** into the payload (`issue.key` → the run's
+  correlation `subject`); the whole payload is passed as the run `input`.
+- The per-source **HMAC secret** lives in the `SecretProvider` as `<TENANT>_WEBHOOK_HMAC`
+  (e.g. `ACME_WEBHOOK_HMAC`) — raw, **never in the DB**. Give the *same* secret to the provider.
+- Headers: `X-Cortex-Timestamp` (unix seconds) + `X-Cortex-Signature: sha256=<hex of
+  HMAC_SHA256(secret, "ts.rawbody")>`; optional `X-Delivery-Id` (the provider's delivery id) is
+  used as the idempotency key. The runtime acks **202** (providers want a fast ack) and the run
+  executes on the worker — poll `GET /runs/{id}`.
+- **Replay vs retry**: an exact resend (same signature) is rejected `401 replay`; a re-signed
+  retry (same delivery id, fresh signature) is deduped to the original run (`202 duplicate`).
+
 ## Notes
 
 - **Backend**: the image bundles the Claude Code CLI (for `claude-cli`) **and** the `cortex_jsm`
