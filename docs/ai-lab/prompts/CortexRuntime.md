@@ -230,6 +230,33 @@
 - **Timeout par run implémenté** *(`CORTEX_RUN_TIMEOUT`, défaut 600s)* : subprocess `claude` + appel anthropic → un run qui pend est tué → `failed` propre (plus de thread zombie).
 **Tags :** `adr-005`, `resilience`, `async`, `queue-worker`, `timeout`, `readiness`, `robustness`
 
+### 2026-06-03 — ADR-005 accepté + ADR-004 implémenté (branche `feat/api-security`)
+**Contexte :** les deux ADR validés. L'humanoïde veut **monitorer dans monitoring** (routes ouvertes mais à token) et demande une **branche sécu séparée** (partant de `feat/cortex-runtime`) pour reviewer la feature à part — « elle est déjà bien costaude ». Async (ADR-005) → branche ultérieure.
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **ADR-005 accepté** : in-process = `asyncio.Queue` + pool de workers (dev/mono-nœud) ; prod = **RabbitMQ** (job queue durable, ack/nack+requeue, dead-letter) + **Redis** (état éphémère : rate-limit / idempotence / nonce — TTL natif). Routes monitoring **Bearer-accessibles** pour monitoring.
+- **ADR-004 implémenté de bout en bout**, 7 commits, pur→shell mince, +104 tests (241 passent) :
+  1. **`auth.py`** — cœur pur : HMAC sign/verify (constant-time), hash Bearer, fenêtre anti-rejeu, enum `AuthReason` ; clock-injecté, zéro I/O.
+  2. **`state_store.py`** — tables `tenants` / `api_tokens` (haché, jamais le brut) / `auth_log` (journal périmètre : chaque tentative + verdict + raison) sur les 3 backends ; + colonne `started_at` sur `runs` (fenêtrage budget).
+  3. **`auth_policy.py`** — `AuthPolicy` : résout l'identité contre le store, secrets HMAC via `SecretProvider`, **logge chaque tentative**.
+  4. **`ephemeral.py`** — primitives TTL derrière `EphemeralStore` (in-process now / Redis later) : compteur fenêtre (rate-limit), nonce (rejeu exact), idempotence.
+  5. **`budget.py`** — cap roulant 24h/30j calculé depuis `runs.cost_usd` (pas de table de spend séparée).
+  6. **`security_gate.py`** — chaîne ordonnée ADR §2 (auth → idempotence → rate → budget), **une seule ligne `auth_log`** par tentative, mapping verdict→statut HTTP.
+  7. **`api.py`** — sécurité **opt-in** (`gate=None` ⇒ ouvert, démo locale) ; Bearer sur direct + monitoring, chaîne complète sur `/run` (+ `Idempotency-Key`), **`GET /auth-log` + `GET /budget`** pour monitoring. `/health` reste ouvert.
+  - **Ops** : `build_gate()`, toggle `CORTEX_AUTH=on`, CLI `python -m cortex_runtime.admin` (register tenant / mint token — brut affiché **une fois**, hash stocké). Secrets HMAC en `<TENANT>_WEBHOOK_HMAC` via `SecretProvider`, **jamais en DB**.
+- **Reste** (host-specific / plus tard) : route `/webhook/{tenant}` (le chemin HMAC est codé+testé mais non monté), backend Redis `EphemeralStore`, puis **branche async** (ADR-005).
+**Tags :** `adr-004`, `adr-005`, `security`, `bearer`, `hmac`, `rate-limit`, `budget-cap`, `idempotency`, `auth-log`, `monitoring`, `admin-cli`
+
+### 2026-06-03 — ADR-004 : route admin de création de tokens + scrub agnostique total
+**Contexte :** revue ADR-004 OK (théorique). L'humanoïde demande : route API pour créer des tokens, réservée à un token **master/admin** (seul token fait à la mano) ; scrub **complet** des noms privés (y compris ADR-001).
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Capacité admin sur les tokens** : flag `admin` sur `api_tokens` (3 backends), propagé dans `AuthOutcome.admin`, nouveau verdict `forbidden` (403, loggé). CLI `admin token … --admin` pour forger le master.
+- **Routes admin** (gated admin-token, admin global non-scopé) : `POST /tenants`, `POST|GET /tokens`, `DELETE /tokens/{id}`. Le brut n'est montré **qu'une fois** (création) ; `GET /tokens` ne renvoie jamais le hash. **Bootstrap** : 1 master à la main (CLI) → il émet tout le reste par l'API (zéro accès shell ensuite).
+- **Scrub agnostique total** : tous les noms de projets privés → `acme` / `monitoring` / `<TENANT>_WEBHOOK_HMAC`, **y compris ADR-001** (la trace ratifiée est désormais agnostique elle aussi). `deploy/.env` (réel, gitignored) laissé tel quel.
+- 252 tests verts.
+**Tags :** `adr-004`, `admin-token`, `master-token`, `token-api`, `forbidden`, `agnostic-scrub`
+
 ### 2026-06-03 — ADR-005 implémenté (branche `feat/async-execution`)
 **Contexte :** après l'ADR-004 (branche sécu séparée), passage à la robustesse. Branche dédiée partant de `feat/cortex-runtime`, implémentation point par point, commit par commit.
 **Participants :** @Oolon → @Ford (exécution/infra)
@@ -238,8 +265,18 @@
 - **#5+#3 `JobQueue`** : interface + `InProcessJobQueue` (pool de threads daemon, jobs = dicts sérialisables → **broker-ready**). Cap de concurrence (`max_workers`), **backpressure** (queue bornée → `QueueFull`), shutdown gracieux (drain), `healthy()`/`stats()`. Tests déterministes (Events, pas de sleep).
 - **#1 Async `/run`** : split `runtime.prepare` (crée le run *queued*, valide → 404/422 *fast*) / `runtime.execute` (handler worker, par `run_id`). `POST /run` → **202 {run_id, queued}**, worker exécute, `GET /runs/{id}` poll le lifecycle. **`?wait=true`** garde le sync ; sans queue = 100% sync (rétrocompat). `QueueFull` → **429 Retry-After**. Anti-récursion re-vérifiée au worker (course enqueue↔exec) → `skip_run`.
 - **#4 Readiness** : `GET /ready` (store joignable + worker vivant → `503` sinon) vs `/health` (liveness). Shutdown gracieux via lifespan FastAPI (drain). Healthcheck container sur `/ready`. Knobs `__main__` : `CORTEX_ASYNC`, `CORTEX_MAX_CONCURRENT_RUNS`, `CORTEX_MAX_PENDING_RUNS`.
-- **Reste** : backend **RabbitMQ** (`JobQueue`) + **Redis** (multi-nœud), `callback_url` (push), timeout outils MCP, uvicorn multi-workers. 155 tests verts.
+- **Reste** : backend **RabbitMQ** (`JobQueue`) + **Redis** (multi-nœud), `callback_url` (push), timeout outils MCP, uvicorn multi-workers.
 **Tags :** `adr-005`, `async`, `job-queue`, `lifecycle`, `backpressure`, `readiness`, `graceful-shutdown`
+
+### 2026-06-03 — Intégration sur `release/0.3.0` (sécu + async réconciliés)
+**Contexte :** `release/0.3.0` = base + ADR-004 (PR #9). Rebase de `feat/async-execution` sur la release → beaucoup de conflits (les deux features touchent `state_store`, `api`, `__main__`, `__init__`). Merge de la release dans la branche async, résolution.
+**Participants :** @Oolon
+**Décisions / outputs :**
+- **`state_store`** : `runs` porte **les deux** colonnes `started_at` (budget) **et** `lifecycle` (async) ; `mark_running`/`skip_run`/`spent_since` + tables sécu coexistent.
+- **`api.py`** : `create_app(runtime, *, gate=None, queue=None)` — sécu et async **orthogonales**. `/run` = chaîne sécu (`_authorize_run`) → (replay idempotent) → **enqueue (202) si queue & non-`wait`, sinon run sync** (+ `gate.remember` au sync). Toutes les routes sécu + `/ready` présentes.
+- **`__main__`** : `CORTEX_AUTH` **et** `CORTEX_ASYNC` activables ensemble (gate + queue passés à `create_app`).
+- *Limite notée* : en async pur, l'idempotence ne dédoublonne pas deux livraisons back-to-back **avant** complétion (le `remember` est au worker, post-run) — dédup-à-l'enqueue = follow-up.
+**Tags :** `integration`, `release-0.3.0`, `merge`, `gate+queue`
 
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)

@@ -48,6 +48,72 @@ The compose file mounts your project (`CORTEX_PROJECT_PATH`) read-only at `/work
 the SQLite state store in a named volume, and passes secrets from `.env` (never baked into the
 image).
 
+## Security (ADR-004) — enabling Bearer auth
+
+By default the API is **open** (local dev). Set `CORTEX_AUTH=on` in `.env` to protect the
+direct routes (`/run`, `/resolve`, `/reply`) **and** the monitoring routes (`/runs`,
+`/runs/{id}`, `/audit`, `/auth-log`, `/budget`) with Bearer tokens, and to run the
+rate-limit / budget / idempotency chain on `/run`. `/health` stays open (liveness probe).
+
+**Bootstrap: one manual "master" token, then everything over the API.** Only the master
+token is created by hand; it then mints/revokes every other token via `POST /tokens`.
+
+```bash
+cd deploy
+
+# 1. register the tenant (idempotent — re-run to reconfigure budgets / rate limit)
+docker compose exec cortex-runtime \
+  python -m cortex_runtime.admin tenant acme --daily 20 --monthly 300 --rate 60
+
+# 2. mint the MASTER token (admin) — the only one made by hand. RAW printed ONCE.
+docker compose exec cortex-runtime \
+  python -m cortex_runtime.admin token acme --admin --label master
+#   → store the printed `rt_live_…` now; only its SHA-256 hash is kept in the DB.
+```
+
+From then on the master token issues the rest over the API (no shell access needed):
+
+```bash
+MASTER="rt_live_…"
+
+# mint a scoped, non-admin token (e.g. for a monitoring host)
+curl -X POST -H "Authorization: Bearer $MASTER" -H "Content-Type: application/json" \
+  -d '{"tenant":"acme","scopes":["acme"],"label":"monitoring-dashboard"}' \
+  https://cortex.local.dev/tokens
+#   → { "token_id": "...", "token": "rt_live_…" }   ← raw shown once
+
+# list (metadata only — never the hash) / revoke / register another tenant
+curl -H "Authorization: Bearer $MASTER" "https://cortex.local.dev/tokens?tenant=acme"
+curl -X DELETE -H "Authorization: Bearer $MASTER" https://cortex.local.dev/tokens/<token_id>
+curl -X POST -H "Authorization: Bearer $MASTER" -H "Content-Type: application/json" \
+  -d '{"tenant":"newco","budget_daily_usd":5}' https://cortex.local.dev/tenants
+
+# a minted token then calls the API
+curl -H "Authorization: Bearer rt_live_…" "https://cortex.local.dev/runs?workspace=acme"
+```
+
+> The admin routes (`POST /tenants`, `POST|GET /tokens`, `DELETE /tokens/{id}`) require an
+> **admin** token; a valid but non-admin token gets `403 forbidden` (logged in `auth_log`).
+> A normal token minted via `POST /tokens` is non-admin unless created with `"admin": true`.
+
+**What is stored, and how:**
+
+| Secret | Where | Form |
+|---|---|---|
+| **Bearer tokens** | `api_tokens` table | **SHA-256 hash** only — never the raw value. Verified by hashing the incoming token + constant-time compare. Revocable / scoped / expirable. |
+| **HMAC secrets** (webhook path) | `SecretProvider` (env / K8s Secret), key `<TENANT>_WEBHOOK_HMAC` | **raw** — HMAC must recompute the signature, so it can't be hashed; it therefore **never touches the DB**. |
+| **Tenant config** (budgets, rate limit, enabled) | `tenants` table | plain operational config — no secrets. |
+| **Every auth attempt** | `auth_log` table | who / route / verdict / reason — the perimeter log (read via `GET /auth-log`). |
+
+> Tokens are **hashed, not encrypted**: they only ever need verifying, never recovering, so a
+> one-way hash is strictly safer (no decryption key to leak). Plain SHA-256 is sufficient here
+> because the token is a 256-bit random value (not a guessable password) — salting / bcrypt guard
+> low-entropy inputs, which this isn't. Full at-rest encryption (TDE / encrypted volume) is a
+> Postgres / disk concern, orthogonal to this.
+
+**Monitoring hosts:** mint a token scoped to the workspaces it monitors and poll `GET /runs`,
+`GET /auth-log`, `GET /budget` with it — all Bearer-protected, all read-only.
+
 ## Notes
 
 - **Backend**: the image bundles the Claude Code CLI (for `claude-cli`) **and** the `cortex_jsm`

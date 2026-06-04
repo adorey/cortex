@@ -47,11 +47,14 @@ from .state_store import (
     LIFECYCLE_RUNNING,
     LIFECYCLE_SKIPPED,
     AuditEntry,
+    AuthLogEntry,
     InMemoryStateStore,
     PostgresStateStore,
     RunRecord,
     SqliteStateStore,
     StateStore,
+    TenantRecord,
+    TokenRecord,
     local_state_store,
 )
 from .safety import (
@@ -63,6 +66,27 @@ from .safety import (
 )
 from .tools import Tool, ToolRegistry
 from .job_queue import InProcessJobQueue, JobQueue, QueueFull
+from .auth import (
+    DEFAULT_REPLAY_WINDOW_S,
+    AuthMethod,
+    AuthOutcome,
+    AuthReason,
+    hash_token,
+    hmac_signature,
+    parse_bearer,
+    timestamp_in_window,
+    token_matches,
+    verify_hmac,
+)
+from .auth_policy import AuthPolicy, AuthRequest, HmacSecretLookup
+from .ephemeral import (
+    EphemeralStore,
+    InMemoryEphemeralStore,
+    RateDecision,
+    check_rate,
+)
+from .budget import BudgetDecision, BudgetWindow, check_budget
+from .security_gate import GateDecision, SecurityGate, build_gate, status_for
 
 __all__ = [
     # resolver
@@ -93,6 +117,31 @@ __all__ = [
     "JobQueue",
     "InProcessJobQueue",
     "QueueFull",
+    # api security core (ADR-004)
+    "AuthMethod",
+    "AuthReason",
+    "AuthOutcome",
+    "DEFAULT_REPLAY_WINDOW_S",
+    "hmac_signature",
+    "verify_hmac",
+    "timestamp_in_window",
+    "hash_token",
+    "token_matches",
+    "parse_bearer",
+    "AuthPolicy",
+    "AuthRequest",
+    "HmacSecretLookup",
+    "EphemeralStore",
+    "InMemoryEphemeralStore",
+    "RateDecision",
+    "check_rate",
+    "BudgetDecision",
+    "BudgetWindow",
+    "check_budget",
+    "SecurityGate",
+    "GateDecision",
+    "build_gate",
+    "status_for",
     # tools + loop
     "Tool",
     "ToolRegistry",
@@ -136,6 +185,9 @@ __all__ = [
     "LIFECYCLE_DONE",
     "LIFECYCLE_FAILED",
     "LIFECYCLE_SKIPPED",
+    "TenantRecord",
+    "TokenRecord",
+    "AuthLogEntry",
     # session orchestration (§3.3 wiring)
     "run_session",
     "mark_human_reply",
