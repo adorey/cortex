@@ -68,6 +68,26 @@ services:
       timeout: 3s
       retries: 12
 
+  # Optional database MCP (DBHub) — read-only DB investigation for the agent (e.g. support).
+  # OFF by default. Start it with:  docker compose --profile db up
+  # The agent reaches it at http://dbhub:8080 (same `backend` network — no host-gateway needed);
+  # declare + bind it in cortex-mcp.json (see README "Database MCP"). Cortex never holds the DB
+  # creds: they live in YOUR dbhub.json (mounted read-only, gitignored).
+  dbhub:
+    profiles: ["db"]
+    image: bytebase/dbhub:latest          # pin/adjust to the image you actually run
+    container_name: cortex-dbhub
+    restart: unless-stopped
+    # TODO — replace with YOUR DBHub launch (HTTP transport + how it loads dbhub.json). Flags
+    # vary by version; this is only the shape. Keep it READ-ONLY for the support use case.
+    command: ["--transport", "http", "--port", "8080", "--readonly", "--config", "/config/dbhub.json"]
+    env_file:
+      - .env                              # DBHUB_TOKEN (if you protect it) + any DSNs dbhub.json references
+    volumes:
+      - ./dbhub.json:/config/dbhub.json:ro   # YOUR endpoints — sensitive, gitignored, never committed
+    networks:
+      - backend
+
 volumes:
   cortex-pgdata:
 
