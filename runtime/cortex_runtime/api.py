@@ -7,18 +7,30 @@ and its test suite need no web framework.
 - POST /resolve      → the resolved identity bundle (resolution only)
 - POST /run          → resolve AND execute the agentic loop (durable state + audit)
 - POST /{alias}      → manifest-declared domain endpoints, alias to /run
+- GET  /auth-log     → the perimeter connection log (read-only, for monitoring hosts)
+- GET  /budget       → a tenant's remaining rolling budget (read-only, for monitoring hosts)
+- POST /tenants · POST|GET /tokens · DELETE /tokens/{id}  → admin (admin-token only)
+
+Security (ADR-004) is **opt-in**: pass a :class:`SecurityGate` to enable Bearer auth on the
+direct + monitoring routes (and the full rate/budget/idempotency chain on ``/run``). With no
+gate the API is open — the local-dev / demo default, and what the existing tests exercise.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import asdict
+import time
+from dataclasses import asdict, replace
 from typing import Any, Dict, List, Mapping, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
+from .auth import AuthMethod, AuthReason, hash_token
+from .auth_policy import AuthRequest
 from .runtime import Runtime
+from .security_gate import SecurityGate, status_for
 from .session import mark_human_reply
 
 logger = logging.getLogger("cortex_runtime.api")
@@ -42,10 +54,79 @@ class ReplyPayload(BaseModel):
     subject: str
 
 
-def create_app(runtime: Runtime) -> FastAPI:
-    """Build the API over a configured ``Runtime`` (workspaces, store, model backend, manifest)."""
-    app = FastAPI(title="cortex-runtime", version="0.1.0")
+class TokenCreatePayload(BaseModel):
+    tenant: str
+    scopes: Optional[List[str]] = None    # workspaces the token may invoke (default: its tenant)
+    label: Optional[str] = None
+    expires_at: Optional[str] = None      # unix seconds (default: never)
+    admin: bool = False                   # grant admin privilege (manage tenants/tokens)
+
+
+class TenantUpsertPayload(BaseModel):
+    tenant: str
+    enabled: bool = True
+    budget_daily_usd: Optional[float] = None
+    budget_monthly_usd: Optional[float] = None
+    rate_limit_per_min: Optional[int] = None
+
+
+def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> FastAPI:
+    """Build the API over a configured ``Runtime`` (workspaces, store, model backend, manifest).
+
+    ``gate`` enables ADR-004 security; ``None`` leaves the API open (local dev / demo)."""
+    app = FastAPI(title="cortex-runtime", version="0.0.1")
     manifest = dict(runtime.cfg.manifest)
+
+    def _client_ip(request: Request) -> Optional[str]:
+        # Honour a single proxy hop (Traefik) then fall back to the socket peer.
+        fwd = request.headers.get("x-forwarded-for")
+        return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None)
+
+    def _bearer_request(request: Request, *, workspace: Optional[str] = None) -> AuthRequest:
+        return AuthRequest(
+            method=AuthMethod.BEARER, route=request.url.path, now=int(time.time()),
+            source_ip=_client_ip(request), request_id=request.headers.get("x-request-id"),
+            authorization=request.headers.get("authorization"), workspace=workspace,
+        )
+
+    def _require_read(request: Request, workspace: Optional[str] = None):
+        """Monitoring/read routes: authenticate + authorize (Bearer + scope) — no spend guards."""
+        if gate is None:
+            return
+        outcome = gate.policy.check(_bearer_request(request, workspace=workspace))
+        if not outcome.ok:
+            raise HTTPException(status_code=status_for(outcome.reason), detail=outcome.reason.value)
+
+    def _require_admin(request: Request):
+        """Admin routes (tenant/token management): require an authenticated token carrying the
+        **admin** privilege. Admin is global, not workspace-scoped. Logs exactly one auth_log row
+        with the decisive reason (the auth failure, or ``forbidden`` for a valid-but-non-admin)."""
+        if gate is None:
+            return None
+        req = _bearer_request(request)        # workspace=None → no scope check; admin is global
+        outcome = gate.policy.check(req, record=False)
+        if not outcome.ok:
+            gate.policy.log_attempt(req, outcome)
+            raise HTTPException(status_code=status_for(outcome.reason), detail=outcome.reason.value)
+        if not outcome.admin:
+            gate.policy.log_attempt(req, replace(outcome, reason=AuthReason.FORBIDDEN))
+            raise HTTPException(status_code=403, detail=AuthReason.FORBIDDEN.value)
+        gate.policy.log_attempt(req, outcome)
+        return outcome
+
+    def _authorize_run(request: Request, workspace: str):
+        """The full spend-guarding chain for ``/run`` (auth → idempotency → rate → budget).
+        Returns ``(decision, idempotency_key)`` or raises with the verdict's status code."""
+        if gate is None:
+            return None, None
+        idem_key = request.headers.get("idempotency-key")
+        decision = gate.authorize(_bearer_request(request, workspace=workspace),
+                                  idempotency_key=idem_key)
+        if not decision.allowed:
+            headers = {"Retry-After": str(decision.retry_after_s)} if decision.retry_after_s else None
+            raise HTTPException(status_code=decision.status,
+                                detail=decision.outcome.reason.value, headers=headers)
+        return decision, idem_key
 
     def _require_role(payload: RunPayload, alias: Optional[Mapping[str, Any]]):
         if payload.role is None and not (alias and alias.get("role")):
@@ -69,36 +150,110 @@ def create_app(runtime: Runtime) -> FastAPI:
         return {"status": "ok", "backend": runtime.cfg.model_backend,
                 "workspaces": sorted(runtime.cfg.workspaces), "endpoints": sorted(manifest)}
 
-    # — monitoring (read-only): run history, run detail, audit trail —
+    # — monitoring (read-only, Bearer-protected when a gate is set): for monitoring hosts —
     @app.get("/runs")
-    def runs(workspace: str, limit: int = 50):
+    def runs(request: Request, workspace: str, limit: int = 50):
+        _require_read(request, workspace)
         return {"runs": [asdict(r) for r in store.list_runs(workspace, limit=limit)]}
 
     @app.get("/runs/{run_id}")
-    def run_detail(run_id: str):
+    def run_detail(request: Request, run_id: str):
+        _require_read(request)
         record = store.get_run(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail=f"unknown run: {run_id}")
         return asdict(record)
 
     @app.get("/audit")
-    def audit(workspace: Optional[str] = None, subject: Optional[str] = None):
+    def audit(request: Request, workspace: Optional[str] = None, subject: Optional[str] = None):
+        _require_read(request, workspace)
         return {"audit": [asdict(e) for e in store.audit_trail(workspace=workspace, subject=subject)]}
 
+    @app.get("/auth-log")
+    def auth_log(request: Request, tenant: Optional[str] = None,
+                 result: Optional[str] = None, limit: int = 100):
+        """The perimeter connection log (ADR-004 §3.7) — every auth attempt + verdict + reason."""
+        _require_read(request, tenant)
+        return {"auth_log": [asdict(e) for e in store.auth_log(tenant=tenant, result=result, limit=limit)]}
+
+    @app.get("/budget")
+    def budget(request: Request, workspace: str):
+        """A tenant's rolling spend vs ceilings (ADR-004 §3.5) — for cost dashboards."""
+        _require_read(request, workspace)
+        from .budget import check_budget
+
+        def _window(w):
+            if w is None:
+                return None
+            return {"spent_usd": w.spent_usd, "ceiling_usd": w.ceiling_usd,
+                    "remaining_usd": w.remaining_usd, "exceeded": w.exceeded}
+
+        decision = check_budget(store, store.get_tenant(workspace), now=int(time.time()))
+        return {"workspace": workspace, "allowed": decision.allowed,
+                "daily": _window(decision.daily), "monthly": _window(decision.monthly)}
+
+    # — admin (tenant/token management, ADR-004 §3.7): admin-token only. The "master" token is
+    #   minted by hand once (`admin token … --admin`); it bootstraps every other token here. —
+    @app.post("/tenants")
+    def upsert_tenant(payload: TenantUpsertPayload, request: Request):
+        _require_admin(request)
+        store.upsert_tenant(payload.tenant, enabled=payload.enabled,
+                            budget_daily_usd=payload.budget_daily_usd,
+                            budget_monthly_usd=payload.budget_monthly_usd,
+                            rate_limit_per_min=payload.rate_limit_per_min)
+        return asdict(store.get_tenant(payload.tenant))
+
+    @app.post("/tokens")
+    def create_token(payload: TokenCreatePayload, request: Request):
+        """Mint a Bearer token for a tenant. The RAW token is returned ONCE (only its hash is
+        stored). Requires an admin token — this is how the master token issues all the others."""
+        from .admin import mint_raw_token
+        _require_admin(request)
+        if store.get_tenant(payload.tenant) is None:
+            raise HTTPException(status_code=404, detail=f"unknown tenant: {payload.tenant}")
+        scopes = payload.scopes or [payload.tenant]
+        raw = mint_raw_token()
+        token_id = store.add_token(payload.tenant, hash_token(raw), scopes=scopes,
+                                   label=payload.label, expires_at=payload.expires_at,
+                                   admin=payload.admin)
+        return {"token_id": token_id, "tenant": payload.tenant, "scopes": scopes,
+                "admin": payload.admin, "token": raw}   # raw shown once — never recoverable later
+
+    @app.get("/tokens")
+    def list_tokens(request: Request, tenant: str):
+        """List a tenant's tokens — metadata only, never the hash (nor the raw, which is gone)."""
+        _require_admin(request)
+        return {"tokens": [{k: v for k, v in asdict(t).items() if k != "token_hash"}
+                           for t in store.list_tokens(tenant)]}
+
+    @app.delete("/tokens/{token_id}")
+    def revoke_token(token_id: str, request: Request):
+        _require_admin(request)
+        store.revoke_token(token_id)
+        return {"token_id": token_id, "revoked": True}
+
     @app.post("/resolve")
-    def resolve(payload: RunPayload):
+    def resolve(payload: RunPayload, request: Request):
+        _require_read(request, payload.workspace)   # resolution is read-only: auth + scope, no spend
         _require_role(payload, None)
         return _guard(lambda: asdict(runtime.resolve(payload.model_dump())))
 
     @app.post("/run")
-    def run(payload: RunPayload):
+    def run(payload: RunPayload, request: Request):
         _require_role(payload, None)
-        return _guard(lambda: runtime.run(payload.model_dump()))
+        decision, idem_key = _authorize_run(request, payload.workspace)
+        if decision is not None and decision.idempotent_replay is not None:
+            return json.loads(decision.idempotent_replay)   # duplicate delivery → cached outcome
+        result = _guard(lambda: runtime.run(payload.model_dump()))
+        if gate is not None and idem_key:
+            gate.remember(decision.outcome, idem_key, json.dumps(result), now=int(time.time()))
+        return result
 
     @app.post("/reply")
-    def reply(payload: ReplyPayload):
+    def reply(payload: ReplyPayload, request: Request):
         """Signal that a human acted on an awaiting-human subject → re-arm the agent for the
         next round-trip (anti-recursion exit)."""
+        _require_read(request, payload.workspace)
         mark_human_reply(store, payload.workspace, payload.subject)
         state = store.get_conversation_state(payload.workspace, payload.subject)
         return {"workspace": payload.workspace, "subject": payload.subject,
@@ -106,9 +261,15 @@ def create_app(runtime: Runtime) -> FastAPI:
 
     for path, alias in manifest.items():
         def _make(alias_defaults: Mapping[str, Any]):
-            def handler(payload: RunPayload):
+            def handler(payload: RunPayload, request: Request):
                 _require_role(payload, alias_defaults)
-                return _guard(lambda: runtime.run(payload.model_dump(), alias_defaults))
+                decision, idem_key = _authorize_run(request, payload.workspace)
+                if decision is not None and decision.idempotent_replay is not None:
+                    return json.loads(decision.idempotent_replay)
+                result = _guard(lambda: runtime.run(payload.model_dump(), alias_defaults))
+                if gate is not None and idem_key:
+                    gate.remember(decision.outcome, idem_key, json.dumps(result), now=int(time.time()))
+                return result
             return handler
         app.add_api_route(path, _make(alias), methods=["POST"], name=path.strip("/").replace("/", "_"))
 
