@@ -45,8 +45,12 @@ docker compose up --build
 ```
 
 The compose file mounts your project (`CORTEX_PROJECT_PATH`) read-only at `/workspace`, persists
-the SQLite state store in a named volume, and passes secrets from `.env` (never baked into the
-image).
+state in **Postgres** (the `cortex-pgdata` volume), and passes secrets from `.env` (never baked
+into the image).
+
+**Explore the API**: Swagger UI at `https://cortex.local.dev/docs`, ReDoc at `/redoc`. A
+versioned OpenAPI + a ready-to-import **Postman collection** live in [`docs/api/`](../docs/api/)
+(the collection even HMAC-signs the webhook for you).
 
 ## Security (ADR-004) — enabling Bearer auth
 
@@ -122,6 +126,8 @@ Let a provider (Jira, GitHub…) trigger a run via `POST /webhook/{source}`, aut
 ```bash
 cp cortex-webhook.json.example cortex-webhook.json   # declare per-source bindings
 # then in .env:  CORTEX_WEBHOOK_CONFIG=/config/cortex-webhook.json
+# and MOUNT it — add to the cortex-runtime service `volumes:` in compose.yaml:
+#   - ./cortex-webhook.json:/config/cortex-webhook.json:ro
 ```
 
 A binding maps a `source` to a run, **agnostically** — no provider parsing in the engine:
@@ -141,6 +147,46 @@ A binding maps a `source` to a run, **agnostically** — no provider parsing in 
   executes on the worker — poll `GET /runs/{id}`.
 - **Replay vs retry**: an exact resend (same signature) is rejected `401 replay`; a re-signed
   retry (same delivery id, fresh signature) is deduped to the original run (`202 duplicate`).
+
+## Database MCP (DBHub) — optional, read-only DB investigation
+
+Give the agent **read-only** DB access (e.g. for support triage) via [DBHub](https://github.com/bytebase/dbhub),
+a generic database MCP. It's **off by default** — an optional compose service under the `db`
+profile. Cortex connects to it over **HTTP** and **never holds the DB credentials**: those live
+in *your* `dbhub.json`, mounted read-only into the DBHub container (gitignored).
+
+```bash
+cp dbhub.json.example dbhub.json          # YOUR endpoints (read-only DSNs) — gitignored, never committed
+# ⚠️ edit the `command:` of the `dbhub` service in compose.yaml to YOUR DBHub launch (flags vary)
+docker compose --profile db up --build    # starts cortex + postgres + dbhub
+```
+
+Then **declare + bind** it in `cortex-mcp.json` (the agent reaches it by service name on the
+shared `backend` network — no host-gateway):
+
+```jsonc
+{
+  "mcp_servers": {
+    "cortex_jsm": { "command": "cortex-jsm-mcp", "env": { /* … */ } },
+    "dbhub": { "type": "http", "url": "http://dbhub:8080/mcp" }    // + "headers" if you set DBHUB_TOKEN
+  },
+  "mcp_bindings": {
+    "issue-read":       ["mcp__cortex_jsm__get_jira_issue"],
+    "internal-comment": ["mcp__cortex_jsm__add_internal_comment"],
+    "db-read":          ["mcp__dbhub__run_query", "mcp__dbhub__list_tables"]
+  }
+}
+```
+
+`db-read` is a **default-granted, least-privilege** capability, so a support role can query the
+DB read-only **without** the human granting extra autonomy. Defense in depth: keep DBHub
+`--readonly`, point it at a **read-only DB user / anonymised replica**, and bind **only read
+tools** (any write tool would go to `db-write`, which is *gated* — never granted by default).
+The exact `mcp__dbhub__…` tool names depend on your DBHub version — list them once and adjust.
+
+> Running DBHub **on the host** instead of in the stack? Use `http://host.docker.internal:<port>`
+> and add `extra_hosts: ["host.docker.internal:host-gateway"]` to the cortex service (Linux). See
+> [`mcp/README.md`](../mcp/README.md) for the remote-MCP pattern.
 
 ## Notes
 

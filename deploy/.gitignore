@@ -1,3 +1,5 @@
 # Local deploy config — never commit. The .example files are tracked.
 .env
 cortex-mcp.json
+cortex-webhook.json
+dbhub.json
