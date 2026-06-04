@@ -70,3 +70,42 @@ like any other server.
 `issue-read` + `internal-comment` are granted by default (least-privilege), so the agent reads the
 ticket and posts its analysis as a real internal note — fully headless. Posting internal comments
 requires the account to be an **agent** on the service desk.
+
+---
+
+## Remote MCP servers (HTTP/SSE) — e.g. a database MCP
+
+An MCP server doesn't have to be spawned by the runtime. If you already run one **as a local
+service** (a long-lived process exposing an MCP endpoint over HTTP/SSE), declare it by **URL**
+instead of a `command` — the runtime never starts it, it just connects. This suits a shared
+**database MCP** (e.g. [DBHub](https://github.com/bytebase/dbhub)) that you keep running with its
+own connection config.
+
+```jsonc
+{
+  "mcp_servers": {
+    "dbhub": {
+      "type": "http",                                 // or "sse", per the server
+      "url": "http://host.docker.internal:8080/mcp"   // your local service, seen from the container
+      // "headers": { "Authorization": "Bearer ${DBHUB_TOKEN}" }   // if it's protected
+    }
+  },
+  "mcp_bindings": {
+    "db-read": ["mcp__dbhub__run_query", "mcp__dbhub__list_tables", "mcp__dbhub__describe_table"]
+  }
+}
+```
+
+- **Agnostic by construction**: the engine only knows the abstract `db-read` capability (in
+  `SAFE_DEFAULT_ACTIONS`, so a support role gets read-only DB investigation by default). It never
+  learns *which* server or *which* database — that's this host-declared binding.
+- **Docker → host**: from inside the container, `localhost` is the container. Reach a host service
+  via `host.docker.internal` (on Linux add `extra_hosts: ["host.docker.internal:host-gateway"]`
+  to the compose service). If the server is also containerised, share a network and use its name.
+- **Read-only is the server's job here**: when the runtime *spawns* a DB MCP it can force a
+  `--readonly` flag; when it only *connects* to your already-running one, the read-only guarantee
+  lives in **your** server config / a read-only DB user (ideally an anonymised replica). Cortex's
+  second belt remains: bind **only read tools** to `db-read`; any write tool would go to `db-write`
+  (gated, never granted by default).
+- **Secrets** (DSN / tokens) stay in the `SecretProvider` / env (`${...}`), **never** in git or the
+  spec — exactly like the Jira creds above.
