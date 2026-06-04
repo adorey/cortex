@@ -5,15 +5,19 @@ app.py (testable without FastAPI). FastAPI is imported here only, so the rest of
 and its test suite need no web framework.
 
 - POST /resolve      → the resolved identity bundle (resolution only)
-- POST /run          → resolve AND execute the agentic loop (durable state + audit)
+- POST /run          → enqueue the agentic loop, return 202 + run_id (sync via ?wait=true)
 - POST /{alias}      → manifest-declared domain endpoints, alias to /run
+- GET  /runs/{id}    → poll a run's lifecycle + outcome
 - GET  /auth-log     → the perimeter connection log (read-only, for monitoring hosts)
 - GET  /budget       → a tenant's remaining rolling budget (read-only, for monitoring hosts)
 - POST /tenants · POST|GET /tokens · DELETE /tokens/{id}  → admin (admin-token only)
 
-Security (ADR-004) is **opt-in**: pass a :class:`SecurityGate` to enable Bearer auth on the
-direct + monitoring routes (and the full rate/budget/idempotency chain on ``/run``). With no
-gate the API is open — the local-dev / demo default, and what the existing tests exercise.
+Two orthogonal opt-ins, composable:
+  • **Security (ADR-004)** — pass a :class:`SecurityGate` to enable Bearer auth on the direct +
+    monitoring routes and the rate/budget/idempotency chain on ``/run``.
+  • **Async (ADR-005)** — pass a started :class:`JobQueue` to accept-then-process (``/run`` → 202
+    + run_id), with ``?wait=true`` preserving the synchronous path.
+With neither, the API is open and synchronous (the local-dev / demo default).
 """
 
 from __future__ import annotations
@@ -21,14 +25,17 @@ from __future__ import annotations
 import json
 import logging
 import time
+from contextlib import asynccontextmanager
 from dataclasses import asdict, replace
 from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .auth import AuthMethod, AuthReason, hash_token
 from .auth_policy import AuthRequest
+from .job_queue import JobQueue, QueueFull
 from .runtime import Runtime
 from .security_gate import SecurityGate, status_for
 from .session import mark_human_reply
@@ -70,13 +77,27 @@ class TenantUpsertPayload(BaseModel):
     rate_limit_per_min: Optional[int] = None
 
 
-def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> FastAPI:
+def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
+               queue: Optional[JobQueue] = None) -> FastAPI:
     """Build the API over a configured ``Runtime`` (workspaces, store, model backend, manifest).
 
-    ``gate`` enables ADR-004 security; ``None`` leaves the API open (local dev / demo)."""
-    app = FastAPI(title="cortex-runtime", version="0.0.1")
-    manifest = dict(runtime.cfg.manifest)
+    ``gate`` enables ADR-004 security; ``queue`` enables ADR-005 async execution. Both default
+    to ``None`` (open + synchronous)."""
+    lifespan = None
+    if queue is not None:
+        @asynccontextmanager
+        async def lifespan(app):
+            queue.start()                    # idempotent — fine if already started by the host
+            try:
+                yield
+            finally:
+                queue.shutdown(drain=True)   # graceful: finish in-flight runs on SIGTERM (§2.5)
 
+    app = FastAPI(title="cortex-runtime", version="0.1.0", lifespan=lifespan)
+    manifest = dict(runtime.cfg.manifest)
+    store = runtime.cfg.store
+
+    # ── security helpers (no-ops when gate is None) ─────────────────────────────────────────
     def _client_ip(request: Request) -> Optional[str]:
         # Honour a single proxy hop (Traefik) then fall back to the socket peer.
         fwd = request.headers.get("x-forwarded-for")
@@ -143,12 +164,55 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> Fast
             logger.exception("request failed")
             raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
-    store = runtime.cfg.store
+    def _dispatch_run(payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]],
+                      request: Request, wait: bool):
+        """The integrated /run path: security chain → (idempotent replay) → enqueue (async) or
+        run (sync). Security and async are independent — either, both, or neither may be on."""
+        decision, idem_key = _authorize_run(request, payload["workspace"])
+        if decision is not None and decision.idempotent_replay is not None:
+            return json.loads(decision.idempotent_replay)        # duplicate delivery → cached outcome
+
+        if queue is not None and not wait:                       # async: accept-then-process
+            prepared = _guard(lambda: runtime.prepare(payload, alias))   # validates → 404/422 fast
+            try:
+                queue.submit({"run_id": prepared["run_id"], "payload": dict(payload),
+                              "alias": dict(alias) if alias else None})
+            except QueueFull:
+                raise HTTPException(status_code=429, detail="queue at capacity",
+                                    headers={"Retry-After": "5"})
+            return JSONResponse(status_code=202,
+                                content={"run_id": prepared["run_id"], "subject": prepared["subject"],
+                                         "status": "queued"})
+
+        result = _guard(lambda: runtime.run(payload, alias))     # sync (no queue, or ?wait=true)
+        if gate is not None and idem_key:
+            gate.remember(decision.outcome, idem_key, json.dumps(result), now=int(time.time()))
+        return result
 
     @app.get("/health")
     def health():
+        """Liveness (ADR-005 §2.5): the process is up. Cheap, dependency-free."""
         return {"status": "ok", "backend": runtime.cfg.model_backend,
                 "workspaces": sorted(runtime.cfg.workspaces), "endpoints": sorted(manifest)}
+
+    @app.get("/ready")
+    def ready():
+        """Readiness (ADR-005 §2.5): safe to receive traffic — the store answers and (if async)
+        the worker pool is alive. K8s gates rollouts/routing on this; `503` keeps a not-ready
+        replica out of the pool."""
+        try:
+            store.get_run("__readiness_probe__")    # cheap round-trip; None is a fine answer
+            db_ok = True
+        except Exception:
+            logger.exception("readiness: store unreachable")
+            db_ok = False
+        worker_ok = queue.healthy() if queue is not None else True
+        body: Dict[str, Any] = {"ready": db_ok and worker_ok, "db": db_ok, "worker": worker_ok}
+        if queue is not None:
+            body["queue"] = queue.stats()
+        if not body["ready"]:
+            return JSONResponse(status_code=503, content=body)
+        return body
 
     # — monitoring (read-only, Bearer-protected when a gate is set): for monitoring hosts —
     @app.get("/runs")
@@ -239,15 +303,9 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> Fast
         return _guard(lambda: asdict(runtime.resolve(payload.model_dump())))
 
     @app.post("/run")
-    def run(payload: RunPayload, request: Request):
+    def run(payload: RunPayload, request: Request, wait: bool = False):
         _require_role(payload, None)
-        decision, idem_key = _authorize_run(request, payload.workspace)
-        if decision is not None and decision.idempotent_replay is not None:
-            return json.loads(decision.idempotent_replay)   # duplicate delivery → cached outcome
-        result = _guard(lambda: runtime.run(payload.model_dump()))
-        if gate is not None and idem_key:
-            gate.remember(decision.outcome, idem_key, json.dumps(result), now=int(time.time()))
-        return result
+        return _dispatch_run(payload.model_dump(), None, request, wait)
 
     @app.post("/reply")
     def reply(payload: ReplyPayload, request: Request):
@@ -261,15 +319,9 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None) -> Fast
 
     for path, alias in manifest.items():
         def _make(alias_defaults: Mapping[str, Any]):
-            def handler(payload: RunPayload, request: Request):
+            def handler(payload: RunPayload, request: Request, wait: bool = False):
                 _require_role(payload, alias_defaults)
-                decision, idem_key = _authorize_run(request, payload.workspace)
-                if decision is not None and decision.idempotent_replay is not None:
-                    return json.loads(decision.idempotent_replay)
-                result = _guard(lambda: runtime.run(payload.model_dump(), alias_defaults))
-                if gate is not None and idem_key:
-                    gate.remember(decision.outcome, idem_key, json.dumps(result), now=int(time.time()))
-                return result
+                return _dispatch_run(payload.model_dump(), alias_defaults, request, wait)
             return handler
         app.add_api_route(path, _make(alias), methods=["POST"], name=path.strip("/").replace("/", "_"))
 

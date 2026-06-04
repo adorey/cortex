@@ -41,6 +41,11 @@ from .secret_provider import (
 from .run import ResolvedRun, RunRequest, resolve_run
 from .session import SessionResult, mark_human_reply, run_session
 from .state_store import (
+    LIFECYCLE_DONE,
+    LIFECYCLE_FAILED,
+    LIFECYCLE_QUEUED,
+    LIFECYCLE_RUNNING,
+    LIFECYCLE_SKIPPED,
     AuditEntry,
     AuthLogEntry,
     InMemoryStateStore,
@@ -60,6 +65,7 @@ from .safety import (
     StateMachine,
 )
 from .tools import Tool, ToolRegistry
+from .job_queue import InProcessJobQueue, JobQueue, QueueFull
 from .auth import (
     DEFAULT_REPLAY_WINDOW_S,
     AuthMethod,
@@ -107,6 +113,10 @@ __all__ = [
     "SAFE_DEFAULT_ACTIONS",
     "ConversationState",
     "StateMachine",
+    # async execution (ADR-005)
+    "JobQueue",
+    "InProcessJobQueue",
+    "QueueFull",
     # api security core (ADR-004)
     "AuthMethod",
     "AuthReason",
@@ -170,6 +180,11 @@ __all__ = [
     "local_state_store",
     "RunRecord",
     "AuditEntry",
+    "LIFECYCLE_QUEUED",
+    "LIFECYCLE_RUNNING",
+    "LIFECYCLE_DONE",
+    "LIFECYCLE_FAILED",
+    "LIFECYCLE_SKIPPED",
     "TenantRecord",
     "TokenRecord",
     "AuthLogEntry",
