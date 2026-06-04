@@ -94,19 +94,27 @@ class Runtime:
     def _subject(self, req) -> str:
         return req.subject or req.input.get("issue") or "default"
 
+    @staticmethod
+    def new_run_id() -> str:
+        """A fresh run id, mintable BEFORE :meth:`prepare` — so the boundary can reserve it as
+        an idempotency claim before any DB record or model call exists (ADR-004 §3.3)."""
+        import uuid
+        return uuid.uuid4().hex
+
     def run(self, payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
         """Resolve then EXECUTE the agentic loop synchronously (durable state + audit)."""
         return self._execute(build_run_request(payload, alias))
 
-    def prepare(self, payload: Mapping[str, Any],
-                alias: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+    def prepare(self, payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]] = None,
+                run_id: Optional[str] = None) -> Dict[str, Any]:
         """Validate + create a **queued** run record and return its id, WITHOUT executing
         (ADR-005). The async API returns this immediately (202); a worker then calls
-        :meth:`execute`. Validation (unknown workspace/role) still fails fast, synchronously."""
+        :meth:`execute`. ``run_id`` lets the caller supply a pre-minted id (an idempotency
+        claim). Validation (unknown workspace/role) still fails fast, synchronously."""
         req = build_run_request(payload, alias)
         self._workspace(req.workspace)        # validate now → 404 before enqueueing
         subject = self._subject(req)
-        run_id = self.cfg.store.start_run(req.workspace, req.role, subject, req.model)
+        run_id = self.cfg.store.start_run(req.workspace, req.role, subject, req.model, run_id=run_id)
         return {"run_id": run_id, "subject": subject}
 
     def execute(self, job: Mapping[str, Any]) -> Dict[str, Any]:

@@ -85,26 +85,41 @@ def test_budget_passes_when_under_ceiling(store, gate):
     assert d.allowed and d.budget.daily.remaining_usd == pytest.approx(8.0)
 
 
-# ── idempotency ─────────────────────────────────────────────────────────────────────────
+# ── idempotency (atomic claim) ──────────────────────────────────────────────────────────
 
-def test_idempotent_replay_skips_run_and_charges_nothing(store, gate):
+def test_claim_dedups_in_flight_without_charging_rate(store, gate):
     _token(store, rate=1)
-    first = gate.authorize(_req(), idempotency_key="delivery-1")
-    assert first.allowed and first.idempotent_replay is None
-    gate.remember(first.outcome, "delivery-1", '{"run_id":"abc"}', now=NOW)
-    # a duplicate delivery returns the cached outcome — and does NOT consume the rate budget
-    dup = gate.authorize(_req(), idempotency_key="delivery-1")
-    assert dup.allowed and dup.idempotent_replay == '{"run_id":"abc"}'
-    # rate limit was 1/min and the first call used it; the duplicate bypassed it (still allowed)
+    # first delivery CLAIMS the key with its pre-minted run_id — not yet a duplicate
+    first = gate.authorize(_req(), idempotency_key="delivery-1", run_id="runA")
+    assert first.allowed and not first.is_duplicate
+    # a concurrent duplicate (run still in flight, no result yet) is caught BEFORE rate-limit:
+    # it points at the original run_id and carries no result.
+    dup = gate.authorize(_req(), idempotency_key="delivery-1", run_id="runB")
+    assert dup.is_duplicate
+    assert dup.idempotent_entry == {"run_id": "runA", "result": None}
+    # rate was 1/min and the first claim used it, yet the duplicate is NOT rate-limited (it
+    # short-circuited before the rate step) — proof a spammed retry can't fan out into runs.
+
+
+def test_completed_run_returns_cached_result(store, gate):
+    _token(store)
+    gate.authorize(_req(), idempotency_key="d2", run_id="runA")
+    gate.remember(idempotency_key="d2", tenant="acme", run_id="runA",
+                  result={"state": "resolved"}, now=NOW)
+    dup = gate.authorize(_req(), idempotency_key="d2", run_id="runB")
+    assert dup.is_duplicate
+    assert dup.idempotent_entry == {"run_id": "runA", "result": {"state": "resolved"}}
 
 
 def test_idempotency_key_is_scoped_per_tenant(store, gate):
+    # same delivery id, two tenants → no collision (keys are tenant-scoped)
     _token(store)
-    d = gate.authorize(_req(), idempotency_key="shared-id")
-    gate.remember(d.outcome, "shared-id", "outcome-acme", now=NOW)
-    # same key under the SAME tenant hits; the scoping guards against cross-tenant collisions
-    again = gate.authorize(_req(), idempotency_key="shared-id")
-    assert again.idempotent_replay == "outcome-acme"
+    store.upsert_tenant("other", enabled=True)
+    gate.authorize(_req(), idempotency_key="shared-id", run_id="runHost")
+    # 'acme' claimed it; an identical id is a duplicate for acme…
+    assert gate.authorize(_req(), idempotency_key="shared-id", run_id="runX").is_duplicate
+    # …but the scoping means a different tenant would not collide (verified via the key helper)
+    assert gate._idem_key_for("acme", "shared-id") != gate._idem_key_for("other", "shared-id")
 
 
 # ── status mapping ──────────────────────────────────────────────────────────────────────
