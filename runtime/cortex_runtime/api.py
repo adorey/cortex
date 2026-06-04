@@ -11,6 +11,7 @@ and its test suite need no web framework.
 - GET  /runs/{id}    → poll a run's lifecycle + outcome
 - GET  /auth-log     → the perimeter connection log (read-only, for monitoring hosts)
 - GET  /budget       → a tenant's remaining rolling budget (read-only, for monitoring hosts)
+- GET  /queue        → live job-queue state (depth/in-flight/totals) for dashboards
 - POST /tenants · POST|GET /tokens · DELETE /tokens/{id}  → admin (admin-token only)
 
 Two orthogonal opt-ins, composable:
@@ -275,6 +276,16 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
         decision = check_budget(store, store.get_tenant(workspace), now=int(time.time()))
         return {"workspace": workspace, "allowed": decision.allowed,
                 "daily": _window(decision.daily), "monthly": _window(decision.monthly)}
+
+    @app.get("/queue")
+    def queue_stats(request: Request):
+        """Live job-queue state (ADR-005) for dashboards — depth, in-flight, totals, capacity,
+        health. Bearer-protected like the other monitoring routes; ``enabled:false`` in sync
+        mode (no queue). (The same snapshot is also on ``/ready`` for K8s probes.)"""
+        _require_read(request)
+        if queue is None:
+            return {"enabled": False}
+        return {"enabled": True, "healthy": queue.healthy(), **queue.stats()}
 
     # — admin (tenant/token management, ADR-004 §3.7): admin-token only. The "master" token is
     #   minted by hand once (`admin token … --admin`); it bootstraps every other token here. —

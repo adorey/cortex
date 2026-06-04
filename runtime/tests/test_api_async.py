@@ -106,6 +106,21 @@ class AsyncApiTests(unittest.TestCase):
         self.assertFalse(r.json()["ready"])
         self.assertFalse(r.json()["worker"])
 
+    def test_queue_stats_endpoint(self):
+        with TestClient(self.app) as client:
+            r = client.get("/queue")
+            self.assertEqual(r.status_code, 200)
+            body = r.json()
+            self.assertTrue(body["enabled"] and body["healthy"])
+            self.assertEqual(body["workers"], 4)               # default worker pool
+            for k in ("pending", "active", "submitted", "processed", "failed", "max_pending"):
+                self.assertIn(k, body)
+
+    def test_queue_stats_disabled_in_sync_mode(self):
+        app = create_app(self.runtime)                         # no queue → sync
+        with TestClient(app) as client:
+            self.assertEqual(client.get("/queue").json(), {"enabled": False})
+
     def test_health_is_liveness_only(self):
         client = TestClient(self.app)   # health needs no started worker
         self.assertEqual(client.get("/health").status_code, 200)

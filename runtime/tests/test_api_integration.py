@@ -93,6 +93,13 @@ class SecuredAsyncApiTests(unittest.TestCase):
             self.assertEqual(client.get("/runs", params={"workspace": "host"}).status_code, 401)
             self.assertEqual(client.get("/ready").status_code, 200)   # /ready stays open
 
+    def test_queue_stats_requires_token(self):
+        with TestClient(self.app) as client:
+            self.assertEqual(client.get("/queue").status_code, 401)   # Bearer-protected for dashboards
+            r = client.get("/queue", headers=self._auth())
+            self.assertEqual(r.status_code, 200)
+            self.assertTrue(r.json()["enabled"])
+
     # ── idempotency: a spammed delivery must spawn exactly ONE run (the whole point) ──────
     def test_spammed_delivery_runs_once(self):
         body = {"workspace": "host", "role": "support-engineer", "subject": "SPAM", "input": {}}

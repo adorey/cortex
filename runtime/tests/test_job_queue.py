@@ -93,6 +93,36 @@ def test_handler_exception_does_not_kill_worker():
     assert q.stats() == {**q.stats(), "failed": 1, "processed": 1}
 
 
+def test_stats_exposes_depth_totals_and_capacity():
+    q = InProcessJobQueue(lambda job: None, max_workers=3, max_pending=50)
+    s = q.stats()
+    # the snapshot dashboards poll: all fields present, capacity reflects construction
+    assert set(s) == {"pending", "active", "submitted", "processed", "failed", "workers", "max_pending"}
+    assert s["max_pending"] == 50
+    q.start()
+    assert q.stats()["workers"] == 3
+    q.shutdown()
+
+
+def test_submitted_counter_increments():
+    done = threading.Event()
+    seen = []
+
+    def handler(job):
+        seen.append(job)
+        if len(seen) == 2:
+            done.set()
+
+    q = InProcessJobQueue(handler, max_workers=1)
+    q.start()
+    q.submit({"run_id": "a"})
+    q.submit({"run_id": "b"})
+    assert done.wait(timeout=5)
+    q.shutdown()
+    s = q.stats()
+    assert s["submitted"] == 2 and s["processed"] == 2
+
+
 def test_health_and_lifecycle():
     q = InProcessJobQueue(lambda job: None, max_workers=1)
     assert q.healthy() is False        # not started

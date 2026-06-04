@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from typing import Any, Callable, Dict, Protocol
 
 logger = logging.getLogger("cortex_runtime.job_queue")
@@ -57,6 +58,7 @@ class InProcessJobQueue:
         self._started = False
         self._lock = threading.Lock()
         self._active = 0
+        self._submitted = 0
         self._processed = 0
         self._failed = 0
 
@@ -75,7 +77,12 @@ class InProcessJobQueue:
         try:
             self._q.put_nowait(job)
         except queue.Full:
+            logger.warning("job rejected (queue full) run_id=%s pending=%d",
+                           job.get("run_id"), self._q.qsize())
             raise QueueFull("job queue at capacity")
+        with self._lock:
+            self._submitted += 1
+        logger.debug("job submitted run_id=%s pending=%d", job.get("run_id"), self._q.qsize())
 
     def shutdown(self, *, drain: bool = True, timeout: float = 30.0) -> None:
         if not self._started:
@@ -93,10 +100,12 @@ class InProcessJobQueue:
         return self._started and all(t.is_alive() for t in self._threads)
 
     def stats(self) -> Dict[str, int]:
+        """A live snapshot for dashboards / readiness: depth, in-flight, totals, capacity."""
         with self._lock:
             return {"pending": self._q.qsize(), "active": self._active,
-                    "processed": self._processed, "failed": self._failed,
-                    "workers": len(self._threads)}
+                    "submitted": self._submitted, "processed": self._processed,
+                    "failed": self._failed, "workers": len(self._threads),
+                    "max_pending": self._q.maxsize}
 
     # — worker loop ————————————————————————————————————————————————————————————————————
     def _worker(self) -> None:
@@ -105,16 +114,22 @@ class InProcessJobQueue:
             if job is _SENTINEL:
                 self._q.task_done()
                 return
+            run_id = job.get("run_id")
             with self._lock:
                 self._active += 1
+            logger.debug("job started run_id=%s active=%d", run_id, self._active)
+            t0 = time.monotonic()
             try:
                 self._handler(job)
                 with self._lock:
                     self._processed += 1
+                logger.info("job done run_id=%s duration_ms=%d", run_id,
+                            int((time.monotonic() - t0) * 1000))
             except Exception:               # a bad job must not kill the worker
                 with self._lock:
                     self._failed += 1
-                logger.exception("job handler failed for job=%s", job.get("run_id"))
+                logger.exception("job failed run_id=%s duration_ms=%d", run_id,
+                                 int((time.monotonic() - t0) * 1000))
             finally:
                 with self._lock:
                     self._active -= 1

@@ -301,6 +301,16 @@
 - *Reste host-specific* : routage conditionnel par type d'événement / filtrage = config host ou adaptateur, hors moteur.
 **Tags :** `webhook`, `hmac`, `trigger`, `subject-path`, `agnostic`, `adr-004`
 
+### 2026-06-04 — Observabilité de la queue (dashboards) — `feat/queue-observability`
+**Contexte :** l'humanoïde note qu'on logge les *runs* (record durable) mais pas l'**état live de la queue** — utile pour ses futurs dashboards.
+**Participants :** @Oolon → @Ford
+**Décisions / outputs :**
+- **`InProcessJobQueue.stats()`** enrichi : `pending / active / submitted / processed / failed / workers / max_pending` (profondeur + in-flight + totaux + capacité).
+- **Logs structurés** : `submit` (debug), `job done run_id=… duration_ms=…` (info), `job failed …` (exception), rejet backpressure (warning).
+- **`GET /queue`** : snapshot live, **Bearer-protégé** (comme les autres routes monitoring) → pollable par les dashboards ; `{"enabled":false}` en mode sync. Même `stats()` aussi exposé sur `/ready` (probe K8s).
+- 294 tests verts.
+**Tags :** `observability`, `job-queue`, `stats`, `dashboards`, `logging`, `adr-005`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
