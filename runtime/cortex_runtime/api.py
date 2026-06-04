@@ -7,6 +7,7 @@ and its test suite need no web framework.
 - POST /resolve      → the resolved identity bundle (resolution only)
 - POST /run          → enqueue the agentic loop, return 202 + run_id (sync via ?wait=true)
 - POST /{alias}      → manifest-declared domain endpoints, alias to /run
+- POST /webhook/{source} → HMAC-authed provider trigger → run (agnostic payload→run mapping)
 - GET  /runs/{id}    → poll a run's lifecycle + outcome
 - GET  /auth-log     → the perimeter connection log (read-only, for monitoring hosts)
 - GET  /budget       → a tenant's remaining rolling budget (read-only, for monitoring hosts)
@@ -22,6 +23,7 @@ With neither, the API is open and synchronous (the local-dev / demo default).
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -29,6 +31,7 @@ from dataclasses import asdict, replace
 from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -94,6 +97,7 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
 
     app = FastAPI(title="cortex-runtime", version="0.1.0", lifespan=lifespan)
     manifest = dict(runtime.cfg.manifest)
+    webhooks = dict(runtime.cfg.webhooks)
     store = runtime.cfg.store
 
     # ── security helpers (no-ops when gate is None) ─────────────────────────────────────────
@@ -164,15 +168,13 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
             logger.exception("request failed")
             raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
-    def _dispatch_run(payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]],
-                      request: Request, wait: bool):
-        """The integrated /run path. A ``run_id`` is **pre-minted** so the security chain can
-        atomically *claim* it as the idempotency key BEFORE any record or model call exists —
-        a duplicate (in-flight or completed) short-circuits here, never spawning a second run.
-        Then sync and async share one path (``prepare`` → ``execute`` | enqueue)."""
-        run_id = runtime.new_run_id()
-        decision, idem_key = _authorize_run(request, payload["workspace"], run_id)
-
+    def _finish_dispatch(decision, idem_key: Optional[str], run_id: str,
+                         payload: Optional[Mapping[str, Any]], alias: Optional[Mapping[str, Any]],
+                         wait: bool):
+        """Shared tail for /run and /webhook, AFTER authorization. A ``run_id`` was pre-minted and
+        (when a gate is on) atomically *claimed* as the idempotency key — so a duplicate short-
+        circuits here, never spawning a second run. Otherwise sync and async share one path
+        (``prepare`` → ``execute`` | enqueue)."""
         if decision is not None and decision.is_duplicate:
             entry = decision.idempotent_entry                   # {"run_id": ..., "result": ...}
             if entry.get("result") is not None:
@@ -181,8 +183,7 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
                                 content={"run_id": entry["run_id"], "status": "duplicate",
                                          "detail": "already accepted; poll the run"})
 
-        # We hold the claim (or there is no gate). Create the queued record with OUR run_id.
-        prepared = _guard(lambda: runtime.prepare(payload, alias, run_id=run_id))
+        prepared = _guard(lambda: runtime.prepare(payload, alias, run_id=run_id))   # queued record
         job = {"run_id": run_id, "payload": dict(payload), "alias": dict(alias) if alias else None}
 
         if queue is not None and not wait:                      # async: accept-then-process
@@ -200,6 +201,13 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
             gate.remember(idempotency_key=idem_key, tenant=decision.outcome.tenant,
                           run_id=run_id, result=result, now=int(time.time()))
         return result
+
+    def _dispatch_run(payload: Mapping[str, Any], alias: Optional[Mapping[str, Any]],
+                      request: Request, wait: bool):
+        """Direct path (`/run`): Bearer authorize (with idempotency claim) → shared dispatch."""
+        run_id = runtime.new_run_id()
+        decision, idem_key = _authorize_run(request, payload["workspace"], run_id)
+        return _finish_dispatch(decision, idem_key, run_id, payload, alias, wait)
 
     @app.get("/health")
     def health():
@@ -336,5 +344,63 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
                 return _dispatch_run(payload.model_dump(), alias_defaults, request, wait)
             return handler
         app.add_api_route(path, _make(alias), methods=["POST"], name=path.strip("/").replace("/", "_"))
+
+    # ── webhook trigger (ADR-002 §3.7, ADR-004 §3.1): HMAC-authed, agnostic payload→run map ──
+    def _dotted_get(obj: Any, path: str):
+        """Generic dotted lookup into a parsed JSON payload (e.g. ``issue.key``). No provider
+        knowledge — the engine just walks declared keys, keeping the firewall intact."""
+        cur = obj
+        for part in path.split("."):
+            if isinstance(cur, dict) and part in cur:
+                cur = cur[part]
+            else:
+                return None
+        return cur
+
+    def _handle_webhook(source: str, raw: bytes, ts: Optional[str], sig: Optional[str],
+                        delivery_id: Optional[str], source_ip: Optional[str], route: str, wait: bool):
+        binding = webhooks.get(source)
+        if binding is None:
+            raise HTTPException(status_code=404, detail=f"unknown webhook source: {source}")
+        body_text = raw.decode("utf-8", "replace")
+        run_id = runtime.new_run_id()
+        idem_key = delivery_id or sig                 # the delivery id dedups retries; sig is a fallback
+        decision = None
+        if gate is not None:
+            authreq = AuthRequest(method=AuthMethod.HMAC, route=route, now=int(time.time()),
+                                  source_ip=source_ip, request_id=delivery_id,
+                                  tenant=binding["tenant"], timestamp=ts, signature=sig, body=body_text)
+            decision = gate.authorize(authreq, idempotency_key=idem_key, run_id=run_id)
+            if not decision.is_duplicate and not decision.allowed:
+                raise HTTPException(status_code=decision.status, detail=decision.outcome.reason.value)
+            if decision.is_duplicate:                 # short-circuit before parsing the body
+                return _finish_dispatch(decision, idem_key, run_id, None, None, wait)
+        else:
+            idem_key = None
+        try:
+            payload_json = json.loads(body_text or "{}")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid JSON body")
+        subject = _dotted_get(payload_json, binding["subject_path"])
+        if subject is None:
+            raise HTTPException(status_code=422,
+                                detail=f"subject_path '{binding['subject_path']}' did not resolve in payload")
+        run_payload = {"workspace": binding["tenant"], "role": binding.get("role"),
+                       "workflow": binding.get("workflow"), "subject": str(subject),
+                       "input": payload_json}
+        return _finish_dispatch(decision, idem_key, run_id, run_payload, None, wait)
+
+    @app.post("/webhook/{source}")
+    async def webhook(source: str, request: Request, wait: bool = False):
+        """Inbound provider trigger. HMAC over the **raw body** (read here, before any parsing),
+        then the same gate chain + dispatch as ``/run`` (202 by default — providers want a fast
+        ack). The payload→run mapping is the host-declared binding for ``source``."""
+        raw = await request.body()                    # raw bytes — what the HMAC signed
+        ts = request.headers.get("x-cortex-timestamp")
+        sig = request.headers.get("x-cortex-signature")
+        delivery_id = request.headers.get("x-delivery-id") or request.headers.get("x-cortex-delivery")
+        # the auth + dispatch are blocking; run them off the event loop
+        return await run_in_threadpool(_handle_webhook, source, raw, ts, sig, delivery_id,
+                                       _client_ip(request), request.url.path, wait)
 
     return app

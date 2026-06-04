@@ -289,6 +289,18 @@
 - *Reste* : en async, le `result` n'est pas re-caché à la complétion du worker (le doublon récupère le `run_id` et poll) — suffisant ; re-cache au worker = optionnel.
 **Tags :** `idempotency`, `claim`, `set-nx`, `in-flight-dedup`, `anti-spam`, `async-idempotency`
 
+### 2026-06-04 — Webhook par tenant (`POST /webhook/{source}`) — `feat/async-execution`
+**Contexte :** la moitié « auth » (HMAC + rejeu + chaîne gate) existait déjà ; ne manquait que la réception. L'humanoïde valide qu'on le fasse maintenant. Point de design clé tranché : le mapping payload→run reste **déclaratif** (firewall).
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Route `POST /webhook/{source}`** en `async def` (lit le **corps brut** — le HMAC signe les octets), puis `run_in_threadpool` (auth+dispatch bloquants hors event-loop).
+- **Binding host-déclaré** par source (`RuntimeConfig.webhooks`, `CORTEX_WEBHOOK_CONFIG`) : `{tenant, role, workflow?, subject_path}`. `subject_path` = **lookup pointé générique** (`issue.key`) → `subject` du run ; payload entier en `input`. Zéro connaissance provider.
+- Réutilise **toute** la chaîne : HMAC (`AuthMethod.HMAC`) → rejeu nonce → **idempotence (claim)** → rate → budget → `prepare`/`enqueue` (202 par défaut). Tail de dispatch **mutualisé** avec `/run` (`_finish_dispatch`).
+- **Rejeu vs retry tranché** : resend exact (même signature) → `401 replay` (nonce) ; retry re-signé (même delivery-id, nouvelle signature) → `202 duplicate` (idempotence, pointe le run d'origine). Les deux mécanismes sont complémentaires.
+- Doc : `cortex-webhook.json.example`, section deploy README, ADR-004 follow-up #6 ✅. **289 tests verts**.
+- *Reste host-specific* : routage conditionnel par type d'événement / filtrage = config host ou adaptateur, hors moteur.
+**Tags :** `webhook`, `hmac`, `trigger`, `subject-path`, `agnostic`, `adr-004`
+
 ## 📚 Documents liés
 - [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
 - [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)

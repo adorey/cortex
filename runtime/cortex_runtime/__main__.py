@@ -17,6 +17,8 @@ Serves a single-workspace runtime configured from environment variables — enou
     CORTEX_MAX_PENDING_RUNS     bounded queue → 429 when full             (default: 100)
     CORTEX_MCP_CONFIG  path to a JSON file: {"mcp_servers": {...}, "mcp_bindings": {...}}
                        — MCP servers for the CLI (e.g. Jira) + ActionKind→MCP-tool bindings
+    CORTEX_WEBHOOK_CONFIG  path to a JSON file: {"<source>": {"tenant","role","workflow"?,
+                       "subject_path"}} — HMAC-authed POST /webhook/{source} → run bindings
     CORTEX_HOST/PORT   bind address             (default: 127.0.0.1:8000)
 
 `demo` runs the whole wire with no key or CLI. Switch to `claude-cli` (Pro/Max via the Claude
@@ -52,10 +54,18 @@ def main():
         cfg = json.loads(Path(mcp_cfg).read_text(encoding="utf-8"))
         mcp_servers, mcp_bindings = cfg.get("mcp_servers"), cfg.get("mcp_bindings")
 
+    # Webhook bindings (ADR-004 §3.1): {source → {tenant, role, workflow?, subject_path}}.
+    webhooks = None
+    webhook_cfg = os.environ.get("CORTEX_WEBHOOK_CONFIG")
+    if webhook_cfg:
+        import json
+        webhooks = json.loads(Path(webhook_cfg).read_text(encoding="utf-8"))
+
     runtime = build_runtime(
         {workspace: WorkspaceConfig(root=root, theme=theme,
                                     mcp_servers=mcp_servers, mcp_bindings=mcp_bindings)},
         store=store,
+        webhooks=webhooks,
         model_backend=backend,
         run_timeout=int(os.environ.get("CORTEX_RUN_TIMEOUT", "600")),
         max_concurrent_runs=int(os.environ.get("CORTEX_MAX_CONCURRENT_RUNS", "4")),
