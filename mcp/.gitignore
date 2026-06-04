@@ -1,0 +1,6 @@
+# Python build artifacts (from pip/pipx install)
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]

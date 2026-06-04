@@ -1,0 +1,161 @@
+{
+  "info": {
+    "name": "cortex-runtime",
+    "description": "cortex-runtime API (ADR-002/004/005). Set the collection variables first: base_url, token (a Bearer token), master_token (an admin token), hmac_secret (a tenant's webhook HMAC secret). Bearer auth is applied at the collection level; the Admin folder overrides with master_token; Webhook signs each request with HMAC via a pre-request script.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://cortex.local.dev" },
+    { "key": "token", "value": "" },
+    { "key": "master_token", "value": "" },
+    { "key": "hmac_secret", "value": "" },
+    { "key": "tenant", "value": "acme" },
+    { "key": "webhook_source", "value": "jira" },
+    { "key": "run_id", "value": "" },
+    { "key": "token_id", "value": "" },
+    { "key": "idempotency_key", "value": "postman-001" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health (liveness)",
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/health" }
+        },
+        {
+          "name": "GET /ready (readiness)",
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/ready" }
+        }
+      ]
+    },
+    {
+      "name": "Run",
+      "item": [
+        {
+          "name": "POST /run (async → 202 + run_id)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "try { const j = pm.response.json(); if (j.run_id) pm.collectionVariables.set('run_id', j.run_id); } catch (e) {}"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"workspace\": \"{{tenant}}\",\n  \"role\": \"support-engineer\",\n  \"subject\": \"ACME-1\",\n  \"input\": {}\n}" },
+            "url": "{{base_url}}/run"
+          }
+        },
+        {
+          "name": "POST /run?wait=true (sync → 200)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"workspace\": \"{{tenant}}\",\n  \"role\": \"support-engineer\",\n  \"subject\": \"ACME-1\",\n  \"input\": {}\n}" },
+            "url": "{{base_url}}/run?wait=true"
+          }
+        },
+        {
+          "name": "GET /runs/{run_id} (poll)",
+          "request": { "method": "GET", "url": "{{base_url}}/runs/{{run_id}}" }
+        },
+        {
+          "name": "GET /runs?workspace (history)",
+          "request": { "method": "GET", "url": "{{base_url}}/runs?workspace={{tenant}}&limit=50" }
+        },
+        {
+          "name": "POST /resolve (identity bundle, no run)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"workspace\": \"{{tenant}}\",\n  \"role\": \"support-engineer\"\n}" },
+            "url": "{{base_url}}/resolve"
+          }
+        },
+        {
+          "name": "POST /reply (re-arm after awaiting-human)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"workspace\": \"{{tenant}}\",\n  \"subject\": \"ACME-1\"\n}" },
+            "url": "{{base_url}}/reply"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Monitoring (read-only)",
+      "item": [
+        { "name": "GET /audit", "request": { "method": "GET", "url": "{{base_url}}/audit?workspace={{tenant}}" } },
+        { "name": "GET /auth-log", "request": { "method": "GET", "url": "{{base_url}}/auth-log?tenant={{tenant}}&limit=100" } },
+        { "name": "GET /budget", "request": { "method": "GET", "url": "{{base_url}}/budget?workspace={{tenant}}" } }
+      ]
+    },
+    {
+      "name": "Admin (admin token)",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{master_token}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "POST /tenants (register/configure)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tenant\": \"{{tenant}}\",\n  \"budget_daily_usd\": 20,\n  \"budget_monthly_usd\": 300,\n  \"rate_limit_per_min\": 60\n}" },
+            "url": "{{base_url}}/tenants"
+          }
+        },
+        {
+          "name": "POST /tokens (mint — raw shown once)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "try { const j = pm.response.json(); if (j.token_id) pm.collectionVariables.set('token_id', j.token_id); } catch (e) {}"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tenant\": \"{{tenant}}\",\n  \"scopes\": [\"{{tenant}}\"],\n  \"label\": \"postman\",\n  \"admin\": false\n}" },
+            "url": "{{base_url}}/tokens"
+          }
+        },
+        { "name": "GET /tokens (list, no hash)", "request": { "method": "GET", "url": "{{base_url}}/tokens?tenant={{tenant}}" } },
+        { "name": "DELETE /tokens/{token_id} (revoke)", "request": { "method": "DELETE", "url": "{{base_url}}/tokens/{{token_id}}" } }
+      ]
+    },
+    {
+      "name": "Webhook (HMAC)",
+      "item": [
+        {
+          "name": "POST /webhook/{source} (HMAC-signed)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// Sign the RAW body with the tenant's HMAC secret (ADR-004 §3.1).",
+              "// Body must be static (no {{vars}}) so the signed bytes == the sent bytes.",
+              "const ts = Math.floor(Date.now() / 1000).toString();",
+              "const body = (pm.request.body && pm.request.body.raw) ? pm.request.body.raw : '';",
+              "const secret = pm.variables.get('hmac_secret') || '';",
+              "const sig = CryptoJS.HmacSHA256(ts + '.' + body, secret).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: 'X-Cortex-Timestamp', value: ts });",
+              "pm.request.headers.upsert({ key: 'X-Cortex-Signature', value: 'sha256=' + sig });",
+              "pm.request.headers.upsert({ key: 'X-Delivery-Id', value: 'postman-' + ts });"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"webhookEvent\":\"jira:issue_updated\",\"issue\":{\"key\":\"ACME-1\"}}" },
+            "url": "{{base_url}}/webhook/{{webhook_source}}"
+          }
+        }
+      ]
+    }
+  ]
+}

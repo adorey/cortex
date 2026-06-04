@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cortex-runtime"
+version = "0.1.0"
+description = "Deployable engine that compiles the Cortex cascade (ADR-001) into an executable resolver + agnostic API (ADR-002)."
+requires-python = ">=3.11"
+readme = "README.md"
+# Kept intentionally lean — the runtime ASSEMBLES mature components (ADR-002 Build vs Buy).
+dependencies = [
+    "fastapi>=0.110",       # agnostic API surface (POST /run) — ADR-002 §3.2
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "httpx>=0.27",          # fastapi TestClient needs it → the API tests run (not skipped)
+]
+serve = [
+    "uvicorn>=0.27",        # ASGI server for `python -m cortex_runtime`
+]
+anthropic = [
+    "anthropic>=0.40",      # API-key model backend (the deployed service)
+]
+postgres = [
+    "psycopg[binary]>=3.1", # PostgreSQL StateStore backend (prod / local-iso-prod)
+    "psycopg-pool>=3.2",
+]
+# The Pro/Max path uses the Claude Code CLI (a subprocess), not a Python package:
+#   npm i -g @anthropic-ai/claude-code  &&  claude setup-token
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cortex_runtime*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

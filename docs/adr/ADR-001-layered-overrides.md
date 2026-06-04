@@ -23,7 +23,7 @@ A host project that wants to teach `@Hactar` (Lead Backend) a project-specific c
 2. Bury it in `project-context.md` and hope the LLM connects the dots (works partially)
 3. Fork `cortex/` itself (loses upstream updates, regardless of whether you mounted it as submodule or standalone clone)
 
-The need is real and recurring. Bluspark, the first non-trivial workspace using Cortex, hit it within weeks of adoption.
+The need is real and recurring. Acme, the first non-trivial workspace using Cortex, hit it within weeks of adoption.
 
 ## 2. Decision
 
@@ -158,7 +158,7 @@ Overlays are validated by `cortex/bin/validate-overlays.sh` (script to ship with
 | Alternative | Rejected because |
 |---|---|
 | **Frontmatter YAML `extends:`** instead of HTML comment header | Cortex already uses HTML comments for system prompts (`<!-- SYSTEM PROMPT -->`); HTML comments stay invisible in rendered Markdown. Stylistic consistency matters. |
-| **Single override level** (workspace OR service, not both) | Doesn't cover cross-service rules in workspaces (e.g. *"all Bluspark services require @Marvin review pre-merge"* is workspace-shared, not per-service). |
+| **Single override level** (workspace OR service, not both) | Doesn't cover cross-service rules in workspaces (e.g. *"all Acme services require @Marvin review pre-merge"* is workspace-shared, not per-service). |
 | **Filename suffix** (`lead-backend.overlay.md`) | Breaks symmetry with `workflows/`, makes glob patterns less predictable. |
 | **Templating engine** (Jinja-style `{{include}}`) | Over-engineering. We're orchestrating LLM prompts, not generating config. Adds a dependency. |
 | **Replace cortex base files at install time** (rendered files copied into the project) | Loses the ability to receive upstream updates; effectively forks cortex regardless of mount mode. |

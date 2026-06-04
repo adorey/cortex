@@ -1,0 +1,16 @@
+{
+  "mcp_servers": {
+    "cortex_jsm": {
+      "command": "cortex-jsm-mcp",
+      "env": {
+        "JIRA_URL": "${JIRA_URL}",
+        "JIRA_EMAIL": "${JIRA_EMAIL}",
+        "JIRA_API_TOKEN": "${JIRA_BEARER_TOKEN}"
+      }
+    }
+  },
+  "mcp_bindings": {
+    "issue-read":       ["mcp__cortex_jsm__get_jira_issue"],
+    "internal-comment": ["mcp__cortex_jsm__add_internal_comment"]
+  }
+}

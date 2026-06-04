@@ -1,0 +1,99 @@
+# cortex-runtime — local deploy behind a GLOBAL, host-side Traefik (not shipped here).
+# See README.md for the Traefik prerequisite (shared `traefik` network + TLS for *.local.dev).
+#
+#   cp .env.example .env   # fill in secrets + the project path
+#   docker compose up --build
+#   → https://cortex.local.dev
+
+services:
+  cortex-runtime:
+    build:
+      context: ..                     # repo root (the image needs runtime/ and mcp/)
+      dockerfile: deploy/Dockerfile
+    image: cortex-runtime
+    container_name: cortex-runtime
+    restart: unless-stopped
+    # .env is injected directly into the container (authoritative — a stale shell var can't
+    # shadow it, unlike ${VAR} interpolation). Holds CORTEX_*, CLAUDE_CODE_OAUTH_TOKEN, JIRA_*…
+    env_file:
+      - .env
+    environment:
+      # container-specific values (these win over env_file)
+      CORTEX_ROOT: /workspace                 # the mounted project (contains its cortex/ submodule)
+      CORTEX_DATABASE_URL: postgresql://cortex:${POSTGRES_PASSWORD:-cortex}@postgres:5432/cortex
+      CORTEX_MCP_CONFIG: /config/cortex-mcp.json
+    volumes:
+      - ${CORTEX_PROJECT_PATH}:/workspace:ro          # the project the agent investigates
+      - ./cortex-mcp.json:/config/cortex-mcp.json:ro  # the mcp_bindings
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # readiness (ADR-005): store reachable + worker pool alive. `python` is always in the
+      # image; urlopen raises on a 503 → the container is marked unhealthy.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    networks:
+      - traefik
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cortex.rule=Host(`cortex.local.dev`)"
+      - "traefik.http.routers.cortex.entrypoints=websecure"
+      - "traefik.http.routers.cortex.tls=true"
+      - "traefik.http.services.cortex.loadbalancer.server.port=8000"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cortex-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cortex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex}
+      POSTGRES_DB: cortex
+    volumes:
+      - cortex-pgdata:/var/lib/postgresql/data
+    ports:
+      # publish to the HOST on a configurable port (avoids clashing with other local Postgres);
+      # connect your DB editor to localhost:${POSTGRES_PORT}. The container port stays 5432.
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cortex -d cortex"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Optional database MCP (DBHub) — read-only DB investigation for the agent (e.g. support).
+  # OFF by default. Start it with:  docker compose --profile db up
+  # The agent reaches it at http://dbhub:8080 (same `backend` network — no host-gateway needed);
+  # declare + bind it in cortex-mcp.json (see README "Database MCP"). Cortex never holds the DB
+  # creds: they live in YOUR dbhub.json (mounted read-only, gitignored).
+  dbhub:
+    profiles: ["db"]
+    image: bytebase/dbhub:latest          # pin/adjust to the image you actually run
+    container_name: cortex-dbhub
+    restart: unless-stopped
+    # TODO — replace with YOUR DBHub launch (HTTP transport + how it loads dbhub.json). Flags
+    # vary by version; this is only the shape. Keep it READ-ONLY for the support use case.
+    command: ["--transport", "http", "--port", "8080", "--readonly", "--config", "/config/dbhub.json"]
+    env_file:
+      - .env                              # DBHUB_TOKEN (if you protect it) + any DSNs dbhub.json references
+    volumes:
+      - ./dbhub.json:/config/dbhub.json:ro   # YOUR endpoints — sensitive, gitignored, never committed
+    networks:
+      - backend
+
+volumes:
+  cortex-pgdata:
+
+networks:
+  # The Traefik network is GLOBAL / host-side — created once, outside this project.
+  traefik:
+    external: true
+  # Private network between the runtime and its database.
+  backend: {}

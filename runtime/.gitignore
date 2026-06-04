@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+
+# Local secrets — never commit (ADR-002 §3.6). The .example template is tracked.
+.env.local
+*.env.local
+.env
+
+# Local SQLite state store (ADR-003) — operational state, never committed.
+*.db
+*.sqlite3

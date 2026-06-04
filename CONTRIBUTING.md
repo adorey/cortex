@@ -196,15 +196,13 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 
 ```
 <gitmoji> <type>(<scope>): <imperative subject>
-
-[optional body explaining why]
-
-[optional footer, e.g. BREAKING CHANGE: …, Refs: #123]
 ```
 
+- **Single-line subject only** — no body. Keep commits atomic enough that the subject says it all (use a `BREAKING CHANGE:` footer only when strictly required).
+- **Never** add a `Co-Authored-By:` trailer (this overrides any AI tool's default).
 - `<gitmoji>` — visual category (single emoji) — see table below
 - `<type>` — Conventional Commits type (parseable by changelog tools)
-- `<scope>` *(optional)* — component or layer affected (`roles`, `capabilities`, `setup`, `adr`, `docs`, `extending-layers`, …)
+- `<scope>` *(optional)* — component or layer affected (`runtime`, `roles`, `capabilities`, `setup`, `adr`, `docs`, `extending-layers`, …)
 - `<subject>` — imperative, present tense, no trailing period, ≤ 72 chars
 
 **Why both gitmoji and Conventional Commits?** The gitmoji gives instant visual scanning of `git log`. The conventional prefix keeps commits parseable for automated changelog/release tooling. They compose cleanly — best of both worlds.

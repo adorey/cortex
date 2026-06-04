@@ -1,0 +1,12 @@
+{
+  "//": "DBHub config — YOUR database endpoints. Copy to `dbhub.json` (gitignored) and use your",
+  "//format": "real DBHub format/version; this is only a placeholder so the file exists + the path is wired.",
+  "//security": "Keep these READ-ONLY: a read-only DB user, ideally on an anonymised/staging replica.",
+  "//secrets": "Reference passwords via env (fed from .env), never inline a real credential here.",
+  "connections": [
+    {
+      "id": "acme-readonly",
+      "dsn": "postgres://readonly_user:${ACME_DB_PASSWORD}@db-replica.internal:5432/acme?sslmode=require"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+.git
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/build
+**/dist
+**/*.db
+**/*.sqlite3
+**/.env.local
+node_modules
+docs/ai-lab

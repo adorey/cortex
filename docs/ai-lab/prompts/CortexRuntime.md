@@ -1,0 +1,313 @@
+# Cortex Runtime — Conception & décisions
+
+> 🧵 Thread d'archivage continu — append-only.
+> Convention : une nouvelle session = une nouvelle entrée timeline, jamais un nouveau fichier.
+
+## 📌 Synthèse vivante
+
+**Quoi :** implémentation du `cortex-runtime` décidé par [ADR-002](../../adr/ADR-002-cortex-runtime.md) — le moteur déployable qui rend la cascade [ADR-001](../../adr/ADR-001-layered-overrides.md) **exécutable**.
+
+**Topologie retenue :** monorepo. Le moteur vit dans [`runtime/`](../../../runtime/) (Python), à côté de la spec markdown. Le **firewall** (le runtime consomme la spec, jamais l'inverse) est garanti **par un test** ([`runtime/tests/test_firewall.py`](../../../runtime/tests/test_firewall.py)), pas par une frontière de repo.
+
+**Décisions structurantes (gravées) :**
+1. **Pré-résolution déterministe (Option A).** Le runtime exécute `resolve_layer` et **injecte** le prompt système assemblé dans le contexte initial du modèle. On ne laisse pas le LLM bootstrapper sa propre identité par lecture de prose. *« On résout et on intègre au contexte initial. »*
+2. **Identité résolue vs travail investigué** — distinction clé : le résolveur fabrique l'**identité** (rôle + perso + capabilities) ; la boucle agentique lit le **code du projet** en live pour faire le travail. Deux lectures distinctes, jamais confondues.
+3. **Le moteur ne transporte aucune spec.** `root` pointe sur le mirror du projet ; `root/cortex` = le cortex du projet (submodule). Une seule cascade en jeu (celle du projet) → **zéro collision** de spec.
+4. **Validation des overlays → Python.** À terme, `validate-overlays.sh` se réduit à une coquille appelant le résolveur Python (source unique de vérité), remplaçant le test de parité bash↔Python.
+
+**Avancement :** Phase 0 ✅ · 1 (résolveur) ✅ · 2 (API + `derive_capabilities` + alias) ✅ · 3 (boucle + garde-fous, autonomie par requête) ✅ · 3b (adaptateur SDK + secrets §3.6) ✅ · ADR-003 + StateStore (persistance, anti-récursion durable) ✅ · **5 (vertical slice exécutable — le MVP tourne, backend demo sans clé)** ✅ — **109 tests (102 verts, 7 API skipped)**. Reste : binding mirrors/worktree (Phase 4, prod), vrais outils MCP, sémantique handoff, et le test réel avec un vrai modèle (côté humanoïde).
+
+## 🗓️ Timeline
+
+### 2026-06-02 — Récapitulatif ADR-002 & démarrage du développement
+**Contexte :** l'humanoïde demande un récap de l'ADR-002, puis lance la phase de développement.
+**Initial prompt :**
+> « peux tu regarder l'adr 2 et me faire une rapide récapitulatif » → « je suis ready pour qu'on passe à la phase de développement de l'ADR-2. Tu me fait une branche de feat et tu me propose un plan d'attaque ? »
+
+**Optimised prompt :** récap ADR-002 + branche `feat/cortex-runtime` + plan d'attaque incrémental par phases.
+**Participants :** @Oolon → @Slartibartfast (architecture) → @Hactar (build Python)
+**Décisions / outputs :**
+- Branche `feat/cortex-runtime` créée.
+- Plan en 7 phases (0→6), MVP = follow-up #2 de l'ADR.
+- Décisions verrouillées : **`runtime/` dans ce repo** + **résolveur d'abord**.
+- Phase 0+1 livrées : [`resolver.py`](../../../runtime/cortex_runtime/resolver.py), fixtures 3-niveaux, 31 tests unitaires + test de parité vs `validate-overlays.sh` + test firewall.
+**Tags :** `adr-002`, `runtime`, `resolver`, `phase-0`, `phase-1`
+
+### 2026-06-02 — Clarification architecturale : pré-résolution déterministe
+**Contexte :** l'humanoïde interroge la nature du résolveur (vérifie vs résout), l'injection de contexte, et le risque de collision avec les submodules.
+**Initial prompt :**
+> « le resolver vérifie ce que fait déjà le script shell ? » · « détaille les deux nuances » · « exemple de call à build_system_prompt » · « il ne risque pas d'avoir de collisions avec les submodules ? »
+
+**Optimised prompt :** clarifier validate vs resolve ; détailler la dette (capabilities explicites, parité bash↔Python) ; trancher pré-résolution (A) vs auto-bootstrap (B).
+**Participants :** @Oolon
+**Décisions / outputs :**
+- **validate ≠ resolve** : le `.sh` vérifie la *bonne formation* des overlays ; le résolveur lit et **fusionne** le contenu pour produire le prompt. Logique de cascade commune, métiers distincts.
+- **Nuance A (capabilities)** : le résolveur les reçoit en paramètre explicite ; le mapping *stack → capability* (parsing `project-context.md`) appartient à la couche API (Phase 2).
+- **Nuance B (parité)** : bash et Python ne partagent pas de lib → deux implémentations + test de parité ⇒ dérive **détectable**, pas **impossible**. Chemin retenu : validation en Python à terme.
+- **Tranché → Option A (déterministe)** confirmée par l'humanoïde : on résout et on intègre au contexte initial.
+- **Submodules** : pas de collision de spec (le moteur ne transporte aucun markdown). Vraie nuance = mécanique git (`git submodule update` après fetch, worktree + submodules) → à traiter en Phase 4.
+- Confirmé : pour les projets hôtes, cortex intégré au workspace via `root` (submodule), indépendamment du choix A/B.
+**Tags :** `architecture`, `decision`, `pre-resolution`, `submodule`, `firewall`
+
+### 2026-06-02 — Phase 2 : API agnostique + dérivation des capabilities
+**Contexte :** implémentation de la couche API (ADR-002 §3.2) après validation de la fondation.
+**Participants :** @Oolon → @Hactar
+**Décisions / outputs :**
+- **`derive_capabilities()`** ([context.py](../../../runtime/cortex_runtime/context.py)) solde la Nuance A : intersection du catalogue de capabilities de la cascade avec les technos citées dans `project-context.md`. Dette assumée : match par *stem* (« postgresql » oui, « Postgres » non) → table d'alias = raffinement ultérieur.
+- **`resolve_run()`** ([run.py](../../../runtime/cortex_runtime/run.py)) : cœur déterministe framework-agnostique → bundle {system_prompt, capabilities, workflow advisory, layers, model}.
+- **Shell FastAPI mince** ([api.py](../../../runtime/cortex_runtime/api.py)) : `POST /run`, `/health`, endpoints alias déclarés par **manifeste** (le projet déclare, il n'écrit pas de code moteur).
+- **Firewall préservé** : `import cortex_runtime` ne tire pas FastAPI (import paresseux dans api.py) → suite de tests sans dépendance.
+- Pré-résolution respectée : `/run` retourne le bundle résolu ; le branchement de la boucle agentique est **Phase 3**.
+**Tags :** `phase-2`, `api`, `derive-capabilities`, `manifest`, `fastapi`
+
+### 2026-06-02 — Phase 3 : boucle agentique + garde-fous en code
+**Contexte :** implémentation du §3.3 — la boucle décide via le LLM, les garde-fous sont déterministes.
+**Participants :** @Oolon → @Ford (infra boucle) → @Hactar (rails)
+**Décisions / outputs :**
+- **Honnêteté d'archi** : le mécanisme `tool_use→result→loop` appartient à l'Agent SDK (EMBED). Non installable/appelable ici → on livre la **part uniquement nôtre** : les garde-fous + un driver minimal avec frontière modèle injectable (`ModelClient`).
+- **`safety.py`** : `ActionPolicy` (phase-1 : read + internal-comment seulement, le reste gated), `StateMachine` (awaiting-agent → awaiting-human → resolved, **anti-récursion** : l'agent ne réagit jamais à sa propre sortie), cap d'itérations → `ESCALATED`.
+- **`tools.py`** : `Tool` (callable + `ActionKind`) + `ToolRegistry` → le gating est déterministe sans connaître ce que fait l'outil.
+- **`loop.py`** : `AgentLoop` enrobe le `ModelClient` des rails ; action gated → halt + `AWAITING_HUMAN` ; testé avec un faux modèle scripté.
+- **Point d'intégration documenté** : l'adaptateur Agent SDK réel implémente `ModelClient.propose` (Phase 3b, requiert SDK + clé, non exécutable ici).
+**Tags :** `phase-3`, `agentic-loop`, `safety-rails`, `gating`, `anti-recursion`, `state-machine`
+
+### 2026-06-02 — Revue humanoïde Phase 3 : autonomie par requête + taxonomie d'actions enrichie
+**Contexte :** revue pré-commit de la Phase 3. L'humanoïde demande deux changements.
+**Initial prompt :**
+> « il ne faut pas synchroniser l'autonomie laissée aux agents en parlant de "phase" ou même en dur dans le code. Il faudrait que ça puisse être en paramètre d'entrée, directement dans la request. »
+> « quitte à mettre des garde-fous, j'irais beaucoup plus loin dans les rôles disponibles : Access DB, git, push/pull, Jira edit, add comment, create code, read code, deletion action… »
+
+**Décisions / outputs :**
+- **Autonomie = allowlist par requête** : suppression de l'enum `Phase` hardcodé. `ActionPolicy(allowed=…)` ; nouveau champ `RunRequest.autonomy` / payload API (liste d'action-kinds). Omis → `SAFE_DEFAULT_ACTIONS` (least-privilege : reads + internal-comment). `ResolvedRun.allowed_actions` reflète l'autonomie effective ; nom d'action inconnu → `ValueError` → 422.
+- **Taxonomie `ActionKind` granularisée** : `code-read/code-write`, `db-read/db-write`, `git-read/git-push`, `issue-read/issue-edit/issue-create`, `internal-comment`, `customer-reply`, `delete`. Permet de trancher finement (ex. autoriser `git-read` mais pas `git-push`).
+- La notion ADR « phase 1 / phase X » devient une **convention de déploiement** exprimée par l'autonomie accordée, plus un enum en dur.
+- 75 tests (68 verts, 7 API skipped).
+**Tags :** `phase-3`, `review`, `autonomy`, `per-request`, `action-kind`, `least-privilege`
+
+### 2026-06-02 — Phase 3b : adaptateur Agent SDK + secrets locaux
+**Contexte :** l'humanoïde valide la review Phase 3 et suggère de prévoir les secrets en local via un fichier `.env.local`.
+**Initial prompt :**
+> « ok pour la review et le passage à la phase 3b, pour un fonctionnement en local on peut peut-être prévoir le coup pour les secrets dans un fichier type .env.local ou un truc dans le genre »
+
+**Participants :** @Oolon → @Marvin (secrets/sécurité) → @Hactar (adaptateur)
+**Décisions / outputs :**
+- **`SecretProvider`** ([secret_provider.py](../../../runtime/cortex_runtime/secret_provider.py)) : interface stable `get(name)` (§3.6). Backends : `DotenvSecretProvider` (`.env.local`, dev), `EnvSecretProvider` (env / K8s Secret, prod), `ChainSecretProvider` (file→env), factory `local_secret_provider`. **Per-tenant** via préfixe de namespace (`ACME_LLM_KEY`). Jamais commité : `.env.local` gitignoré + template `.env.local.example`.
+- **`AnthropicAgentClient`** ([agent_client.py](../../../runtime/cortex_runtime/agent_client.py)) : implémente `ModelClient`, clé tirée du `SecretProvider`, **import `anthropic` paresseux** → package + tests restent install-free. Mapping `_to_messages` volontairement simple (référence ; le bookkeeping tool_use/tool_result revient à l'Agent SDK en prod).
+- **Surface pure testée** : `interpret_response` (blocs réponse → `ModelTurn`) et `tool_schemas` (registry → défs d'outils Anthropic).
+- 87 tests (80 verts, 7 API skipped). `import cortex_runtime` ne tire ni `anthropic` ni `fastapi`.
+**Tags :** `phase-3b`, `secrets`, `secret-provider`, `dotenv`, `agent-sdk`, `model-client`, `least-privilege`
+
+### 2026-06-02 — Décision : couche de persistance (ADR-003) + multi-provider différé
+**Contexte :** revue du code Phase 3b. L'humanoïde soulève le nommage des clés multi-provider et propose d'introduire une base de données interne dès maintenant.
+**Initial prompt :**
+> « demain je veux pouvoir switcher entre modèle anthropic et openai, le modèle de nommage des clés va être un frein » · « est-ce qu'on ne ferait pas mieux dès maintenant de partir sur une base de données interne à cortex (config à chaud, GUI future, log pour le monitoring) ? »
+
+**Participants :** @Oolon → @Slartibartfast (frontière archi) → @Marvin (secrets)
+**Décisions / outputs :**
+- **Multi-provider : laissé tel quel** pour l'instant (`llm_key` conservé, Anthropic-only). La vraie réponse = **model gateway LiteLLM** (§3.5) : une clé virtuelle par tenant, routing provider dans le gateway → le nommage cesse d'être un frein. Différé.
+- **Persistance : OUI, mais opérationnel uniquement**, derrière une interface `StateStore` swappable (SQLite dev / Postgres prod), même discipline que `SecretProvider`. **Frontière git↔DB validée** par l'humanoïde : git = ce qui *définit* l'agent (spec) ; DB = ce que l'agent *produit/vit* (état de conversation pour l'anti-récursion, audit §3.6, run history). La spec n'est **jamais** déplacée en base (firewall ADR-002 §5).
+- **Trou identifié** : la `StateMachine` anti-récursion est aujourd'hui en mémoire → non-fonctionnelle entre deux webhooks. La persistance la rend durable.
+- **[ADR-003](../../adr/ADR-003-persistence-state-layer.md) rédigé et accepté** — après revue humanoïde : `ticket` → `subject` (agnostique), et scrub des noms de projets privés (monitoring/Acme → `acme`) dans les fichiers de session + le guide `extending-layers.md` (ADR-001 laissé tel quel comme trace ratifiée).
+**Tags :** `adr-003`, `persistence`, `state-store`, `audit`, `git-vs-db`, `litellm`, `multi-provider`
+
+### 2026-06-02 — ADR-003 follow-up #1 : StateStore + session orchestration
+**Contexte :** implémentation de la couche de persistance actée par l'ADR-003.
+**Participants :** @Oolon → @Vogon (schéma/persistance) → @Hactar (wiring)
+**Décisions / outputs :**
+- **`state_store.py`** ([lien](../../../runtime/cortex_runtime/state_store.py)) : interface `StateStore` (keyed by `subject`, agnostique) + dataclasses `RunRecord`/`AuditEntry`. Backends swappables : `InMemoryStateStore` (tests), `SqliteStateStore` (fichier ou `:memory:`). Postgres = backend ultérieur, même interface.
+- **`session.py`** : `run_session()` = orchestration de référence §3.3 (load state → guard anti-récursion → run loop → record actions → persist). `mark_human_reply()` ré-arme l'agent.
+- **Anti-récursion durable démontrée** : invocation 1 → action gated → `AWAITING_HUMAN` persisté ; invocation 2 sur le même `subject` → **skipped** (l'agent ne réagit pas à sa propre sortie) ; après `mark_human_reply` → l'agent re-tourne et résout.
+- Audit log append-only branché ; `.db`/`.sqlite3` gitignorés.
+- 101 tests (94 verts, 7 API skipped).
+- **Sémantique à raffiner (noté)** : « agent poste un commentaire interne puis attend l'humain » ≠ `RESOLVED`. Aujourd'hui seul un *gated action* mène à `AWAITING_HUMAN`. Un futur signal `handoff`/`await_human` (ou un mapping phase-1) reste à définir côté boucle.
+**Tags :** `adr-003`, `state-store`, `sqlite`, `session`, `anti-recursion`, `audit`
+
+### 2026-06-02 — Phase 5 : vertical slice exécutable (MVP qui tourne)
+**Contexte :** relier les briques en un fil exécutable + prévoir l'auth abonnement Max pour les tests locaux (coût marginal nul), clé API pour le déploiement.
+**Participants :** @Oolon → @Ford (assemblage) → @Hactar
+**Décisions / outputs :**
+- **`runtime.py`** : `Runtime` + `build_runtime` assemblent resolve → outils → ModelClient → `AgentLoop` → `run_session`. `make_model_client(backend)` swappable : `demo` (no-dep), `claude-cli` (Max via CLI), `anthropic-api` (clé).
+- **`local_tools.py`** : `read_file` / `list_files` / `post_internal_comment` (sandboxés sous `root`) → run observable sans MCP.
+- **`demo_model.py`** : `DemoModelClient` (canned, zéro dépendance) → **smoke-test du fil complet sans clé ni SDK** ; `ScriptedModelClient` (double de test).
+- **`agent_client.py`** : adaptateur Pro/Max ajouté à côté de `AnthropicAgentClient`. **Correction (vérifiée via claude-code-guide)** : le Claude *Agent SDK* (lib) **n'autorise pas** l'auth abonnement — clé API obligatoire. Seule la **CLI Claude Code** peut utiliser l'abonnement (`claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`). → l'adaptateur Max est donc `ClaudeCodeCliClient` (sous-process CLI), pas un client SDK. Backend renommé `claude-agent-sdk` → `claude-cli`.
+- **API** : `POST /resolve` (résout) + `POST /run` (exécute) + alias manifeste (exécutent) ; `create_app(runtime)`. Entrypoint `python -m cortex_runtime` (config par env).
+- **`subject`** ajouté à `RunRequest`/payload (fallback `input.issue` → `default`).
+- **Smoke test live (backend demo)** : resolve → `list_files` → `post_internal_comment` → `resolved`, état persisté, re-trigger même `subject` → **skipped** (anti-récursion). 109 tests (102 verts, 7 API skipped).
+- **Auth** : Max/Agent-SDK pour tests locaux (décidé), clé API Console pour le service déployé. Frontière = `ModelClient`, zéro revert.
+**Tags :** `phase-5`, `vertical-slice`, `runtime`, `demo-backend`, `local-tools`, `claude-cli`, `mvp`
+
+### 2026-06-02 — Phase 5b : ClaudeCodeCliClient finalisé (chemin Max) + guide setup
+**Contexte :** finir le client abonnement Max ; l'humanoïde testera via clé API en fin de semaine, mais veut le chemin Max + un pas-à-pas.
+**Participants :** @Oolon → @Ford (CLI/infra) → @Hactar
+**Décisions / outputs :**
+- **Détails CLI vérifiés** (claude-code-guide) : `claude -p` lance sa **propre boucle agentique** et rend le texte final (one-shot). Flags exacts : `--append-system-prompt`, `--model`, `--output-format json` (`.result` + `usage`/`total_cost_usd`), `--allowedTools` (CSV), cwd via subprocess, auth `CLAUDE_CODE_OAUTH_TOKEN` (⚠️ `ANTHROPIC_API_KEY` prend le dessus → retiré de l'env du subprocess).
+- **`ClaudeCodeCliClient`** implémenté : one-shot via subprocess → `ModelTurn(final_text)`. Notre **autonomie (`ActionKind`) → `--allowedTools`** (read-only par défaut : `Read,Grep,Glob`). `last_usage` capturé (tokens/coût) pour monitoring futur.
+- Helpers purs **testés** : `cli_allowed_tools`, `build_cli_argv`, `parse_cli_result`. La méthode `propose` (subprocess) non testée ici (besoin CLI + login).
+- **`root` + autonomie** câblés du `Runtime` jusqu'au client.
+- **Guide pas-à-pas** : [runtime/docs/claude-cli-setup.md](../../../runtime/docs/claude-cli-setup.md) (install CLI → `setup-token` → env → run → curl).
+- 115 tests (108 verts, 7 API skipped).
+**Tags :** `phase-5b`, `claude-cli`, `subscription`, `subprocess`, `allowed-tools`, `setup-guide`
+
+### 2026-06-02 — Itération : robustesse runs + audit du backend Max
+**Contexte :** premier vrai run sur le projet hôte de l'humanoïde. La BDD a révélé deux trous : un run « fantôme » (path foireux → 500, run démarré jamais terminé) et un audit vide (le backend `claude-cli` fait tout en un tour, aucun outil *à nous* appelé).
+**Participants :** @Oolon → @Vogon (schéma/persistance) → @Marvin (robustesse/erreurs)
+**Décisions / outputs :**
+- **Sécurisation (max info en base)** : `run_session` enveloppe `loop.run` dans un try/except → `fail_run(run_id, error)` + `logger.exception` ; plus de run orphelin. `SessionResult.error` ; `Runtime.run` renvoie une erreur **structurée** (`{failed, error, run_id}`) au lieu d'un 500 brut ; API logue l'inattendu. `StateStore` enrichi : colonnes `error`, `cost_usd`, `tokens_in/out`, `num_turns` + `fail_run` + `finish_run(usage)`. **Migration douce** (`ALTER TABLE`) → l'ancienne base de dev est mise à niveau sans perte.
+- **Audit backend `claude-cli`** : passage à `--output-format stream-json` (`+ --verbose`) ; `parse_cli_stream` extrait les `tool_use` de la boucle interne de la CLI → `last_actions` (outil CLI → `ActionKind` via map inverse) + `last_usage` (coût/tokens/num_turns). `run_session` enregistre `model.last_actions` dans l'audit et `model.last_usage` dans le run. → le mandat §3.6 est désormais satisfaisable pour le backend Max.
+- Timestamps réels (UTC ISO) sur l'audit. Helpers purs testés (`parse_cli_stream`). 124 tests (117 verts, 7 API skipped).
+**Tags :** `iteration`, `robustness`, `fail-run`, `audit`, `stream-json`, `cost-tracking`, `observability`
+
+### 2026-06-02 — Itération : métriques de monitoring riches (vraie sortie CLI confirmée)
+**Contexte :** l'humanoïde a fourni la vraie sortie `stream-json` (events `tool_use` + `result`). Le parser tapait juste sur `result`/`total_cost_usd`/`num_turns`/`usage`. Diagnostic du seq-4 vide : serveur uvicorn pas redémarré (l'édition `.py` ne recharge pas un process en cours). Demande : loguer **tout** ce qui est monitorables (tokens, durée…) pour ressortir vers monitoring par API (next step).
+**Participants :** @Oolon → @Deep-Thought (métriques) → @Vogon (schéma)
+**Décisions / outputs :**
+- **`parse_cli_stream` enrichi** : capte `total_cost_usd`, `num_turns`, `duration_ms`, `duration_api_ms`, `ttft_ms`, `subtype`, `is_error`, tokens (in/out/cache) et `modelUsage`. Les **`permission_denials`** (outils refusés car hors `--allowedTools`, ex. `Bash`) deviennent des actions d'audit `gated=True` → l'audit montre ce qui a tourné **ET** ce qui a été bloqué.
+- **`StateStore` enrichi** : colonnes promues `duration_ms`, `ttft_ms` (+ `cost_usd`/tokens/`num_turns` existantes) **plus `metrics_json`** (blob complet → rien de perdu : cache tokens, coût par modèle…). Migration douce.
+- **Unification backends** : `AnthropicAgentClient` expose désormais `last_usage` (tokens natifs) → monitoring identique CLI/API (coût calculé côté API depuis un barème, durée chronométrée par nous).
+- Actions `gated` propagées (3-tuples tolérés). Simulation bout-en-bout validée sur les vraies valeurs (coût 0.25 $, 8 turns, 36s, Bash gated). 124 tests.
+- **Cause du seq-4 vide = serveur non redémarré** → relancer uvicorn charge le nouveau code.
+**Tags :** `iteration`, `monitoring`, `metrics`, `stream-json`, `permission-denials`, `gated`, `metrics-json`
+
+### 2026-06-02 — Routes de monitoring (exposition vers monitoring)
+**Contexte :** maintenant que les métriques sont stockées, les exposer en lecture pour qu'un hôte (monitoring) les consomme.
+**Participants :** @Oolon → @Hactar
+**Décisions / outputs :**
+- `StateStore.get_run(run_id)` ajouté (manquait pour le détail).
+- 3 routes read-only : `GET /runs?workspace=` (historique), `GET /runs/{run_id}` (détail + `metrics_json`), `GET /audit?workspace=&subject=` (trace d'actions avec flag `gated`). 404 sur run inconnu.
+- 129 tests (119 verts, 10 API skipped).
+**Tags :** `monitoring`, `api`, `get-runs`, `audit`, `observability`
+
+### 2026-06-02 — Spec métier : rôle `support-engineer` (N2) + workflow (ADR-002 follow-up #1)
+**Contexte :** première vraie spec que le runtime consommera — un Support Engineer N2 qui pré-analyse et décide d'escalader, sans jamais orchestrer.
+**Initial prompt :**
+> « l'objectif de ce rôle c'est de jouer un N2 : proposer une analyse technique complète suite à la demande d'un client, cibler lui-même les symptômes, faire appel aux N3 pour affiner, puis demander au tech-writer de rédiger la réponse. Il ne pilote pas les devs (c'est le prompt-manager), il ne parle pas en direct aux autres (il passe par Oolon). Il fait une pré-analyse et décide d'escalader ou non. »
+
+**Participants :** @Oolon → @Wonko (nouveau)
+**Décisions / outputs :**
+- **Principe central** = le dispatch protocol de Cortex : *le support-engineer analyse, le prompt-manager orchestre*. Le rôle n'émet que des **demandes structurées** adressées au prompt-manager (escalade / rédaction / délégation correctif / clarification). Aucun @-mention direct.
+- **Agnosticisme strict** (retour humanoïde) : le rôle et le workflow référencent les **rôles par chemin** (`roles/engineering/lead-backend.md`…), jamais les personnages. Vérifié (grep vide).
+- 4 fichiers : [`roles/engineering/support-engineer.md`](../../../agents/roles/engineering/support-engineer.md) (matrice de triage, livrable structuré, 2 phases, anti-patterns), [`workflows/engineering/support-triage.md`](../../../agents/workflows/engineering/support-triage.md), [`personalities/h2g2/Wonko-the-Sane.md`](../../../agents/personalities/h2g2/Wonko-the-Sane.md) (diagnosticien calme), + ligne dans `characters.md`.
+- **v1 human-gated** ; futurs notés en commentaire : overlay catalogue de symptômes (+ auto-feedback sur tickets clos), N3 proposant un fix sur branche + ticket dev.
+- **Lien dette runtime** : l'état final naturel du rôle = `AWAITING_HUMAN` (handoff) → motive l'implémentation du signal `handoff`/`escalate` côté boucle (noté).
+**Tags :** `adr-002-followup`, `support-engineer`, `role`, `workflow`, `wonko`, `agnostic`, `n2-n3`
+
+### 2026-06-02 — Signal handoff + endpoint /reply (le cycle support de bout en bout)
+**Contexte :** la dette notée depuis la Phase 3 — « commenter puis attendre l'humain » ≠ `RESOLVED`. Nécessaire pour tester les allers-retours support sur un vrai ticket.
+**Participants :** @Oolon → @Hactar
+**Décisions / outputs :**
+- **`handoff`** : `AgentLoop.run(handoff_on_complete=True)` → une fin normale se termine en `AWAITING_HUMAN` (pas `RESOLVED`). Propagé : `RunRequest.handoff` → payload → `build_run_request` → `Runtime.run` → `run_session` → boucle. L'analyse (`final_text`) est conservée.
+- **`POST /reply {workspace, subject}`** : `mark_human_reply` exposé → ré-arme l'agent (`awaiting-human → awaiting-agent`) pour le tour suivant.
+- **Round-trip validé live** (backend demo) : run handoff → `awaiting-human` → re-trigger **skipped** (anti-récursion) → `/reply` → `awaiting-agent` → nouveau run. C'est le cycle support exact.
+- 132 tests (121 verts, 11 API skipped).
+**Tags :** `handoff`, `awaiting-human`, `reply`, `anti-recursion`, `round-trip`, `support`
+
+### 2026-06-02 — MCP (plomberie) : outils réels pour le backend CLI
+**Contexte :** finalité du test = l'agent écrit son analyse dans un **commentaire privé** du ticket via un vrai MCP. (L'async 200-puis-traitement = trigger/worker §3.7, noté, pas encore fait.)
+**Participants :** @Oolon → @Ford (MCP/infra)
+**Décisions / outputs :**
+- **Pas de client MCP maison** : sur le backend `claude-cli`, la CLI a le MCP nativement. Le runtime déclare les serveurs MCP du workspace via `--mcp-config` et autorise les outils MCP dans `--allowedTools`.
+- `WorkspaceConfig.mcp_servers` (config `--mcp-config`) + `mcp_bindings` (ActionKind → noms d'outils MCP concrets, ex. `{"internal-comment": ["mcp__jira__add_comment"]}`). `cli_allowed_tools` combine built-in + MCP par action accordée ; `ClaudeCodeCliClient` écrit un fichier temp `--mcp-config`. `__main__` lit `CORTEX_MCP_CONFIG`.
+- **Rôle ajusté (agnostique)** : le support-engineer livre son analyse **as an internal comment on the ticket** (≠ réponse client du tech-writer).
+- 134 tests. Reste côté humanoïde : fournir le **serveur Jira MCP** + le **nom exact de l'outil** « add internal comment ».
+**Tags :** `mcp`, `jira`, `internal-comment`, `claude-cli`, `mcp-config`, `tool-bindings`
+
+### 2026-06-03 — Productionisation : CI, Docker/Traefik, Postgres, ADR-004 sécurité
+**Contexte :** valider le MVP en local dockerisé, puis sécuriser avant ouverture autonome.
+**Participants :** @Oolon → @Ford (infra) → @Marvin (sécu)
+**Décisions / outputs :**
+- **CI GitHub Actions** : tests runtime sur push/PR (3.11/3.12), `fastapi`+`httpx` → 0 skip, **service Postgres** qui exécute le contrat `PostgresStateStore`.
+- **Docker + Traefik** : image (runtime + CLI Claude + `cortex-jsm-mcp`), `deploy/compose.yaml` derrière un **Traefik GLOBAL hors-projet** (réseau externe `traefik`, TLS mkcert, `cortex.local.dev`), doc dédiée.
+- **PostgreSQL StateStore** (ADR-003 follow-up #2) : backend `PostgresStateStore` (psycopg + pool), sélection par `CORTEX_DATABASE_URL`, service postgres dans le compose → **local iso-prod**. Port interne fixe `5432`, port hôte publié `${POSTGRES_PORT}` (anti-collision + éditeur DB).
+- **[ADR-004](../../adr/ADR-004-api-security.md) rédigé (Proposed)** : modèle de sécu en couches — **HMAC** (webhook) + **Bearer** (direct) + **anti-rejeu** + **idempotence** + **rate-limit** + **budget cap par tenant** (branché sur le `cost_usd` déjà persisté). Insight clé : *l'auth arrête les inconnus, mais ce qui protège les crédits = rate-limit + budget cap*. Toutes les vérifs **avant** le moindre appel IA.
+**Tags :** `ci`, `docker`, `traefik`, `postgres`, `adr-004`, `security`, `hmac`, `budget-cap`
+
+### 2026-06-03 — Pré-ouverture : ADR-005 (robustesse) + timeout par run
+**Contexte :** MVP dockerisé validé bout-en-bout. L'humanoïde demande si la « mini » API suffit. Distinction posée : **robustesse ≠ sécurité**.
+**Participants :** @Oolon → @Ford (exécution/infra) → @Marvin (résilience)
+**Décisions / outputs :**
+- **Verdict** : framework FastAPI = production-grade (le « mini » = notre shell mince, *par design*) ; sécurité = ADR-004 ; **mais** vrai trou robustesse = le **modèle d'exécution synchrone** (`/run` bloque tout le run → saturation threadpool, hung runs) — c'est le §3.7 async qu'on avait noté.
+- **[ADR-005](../../adr/ADR-005-execution-model-resilience.md) rédigé (Proposed)** : passage **sync → async accept-then-process** (`202` + queue + worker + `GET /runs/{id}` / callback ; mode sync gardé pour le dev), **timeouts** partout, **cap de concurrence**/backpressure, **readiness probe** + shutdown gracieux + multi-workers, `JobQueue` swappable (in-process / broker). Lifecycle de run (`queued/running/…`) distinct de l'état de conversation.
+- **Timeout par run implémenté** *(`CORTEX_RUN_TIMEOUT`, défaut 600s)* : subprocess `claude` + appel anthropic → un run qui pend est tué → `failed` propre (plus de thread zombie).
+**Tags :** `adr-005`, `resilience`, `async`, `queue-worker`, `timeout`, `readiness`, `robustness`
+
+### 2026-06-03 — ADR-005 accepté + ADR-004 implémenté (branche `feat/api-security`)
+**Contexte :** les deux ADR validés. L'humanoïde veut **monitorer dans monitoring** (routes ouvertes mais à token) et demande une **branche sécu séparée** (partant de `feat/cortex-runtime`) pour reviewer la feature à part — « elle est déjà bien costaude ». Async (ADR-005) → branche ultérieure.
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **ADR-005 accepté** : in-process = `asyncio.Queue` + pool de workers (dev/mono-nœud) ; prod = **RabbitMQ** (job queue durable, ack/nack+requeue, dead-letter) + **Redis** (état éphémère : rate-limit / idempotence / nonce — TTL natif). Routes monitoring **Bearer-accessibles** pour monitoring.
+- **ADR-004 implémenté de bout en bout**, 7 commits, pur→shell mince, +104 tests (241 passent) :
+  1. **`auth.py`** — cœur pur : HMAC sign/verify (constant-time), hash Bearer, fenêtre anti-rejeu, enum `AuthReason` ; clock-injecté, zéro I/O.
+  2. **`state_store.py`** — tables `tenants` / `api_tokens` (haché, jamais le brut) / `auth_log` (journal périmètre : chaque tentative + verdict + raison) sur les 3 backends ; + colonne `started_at` sur `runs` (fenêtrage budget).
+  3. **`auth_policy.py`** — `AuthPolicy` : résout l'identité contre le store, secrets HMAC via `SecretProvider`, **logge chaque tentative**.
+  4. **`ephemeral.py`** — primitives TTL derrière `EphemeralStore` (in-process now / Redis later) : compteur fenêtre (rate-limit), nonce (rejeu exact), idempotence.
+  5. **`budget.py`** — cap roulant 24h/30j calculé depuis `runs.cost_usd` (pas de table de spend séparée).
+  6. **`security_gate.py`** — chaîne ordonnée ADR §2 (auth → idempotence → rate → budget), **une seule ligne `auth_log`** par tentative, mapping verdict→statut HTTP.
+  7. **`api.py`** — sécurité **opt-in** (`gate=None` ⇒ ouvert, démo locale) ; Bearer sur direct + monitoring, chaîne complète sur `/run` (+ `Idempotency-Key`), **`GET /auth-log` + `GET /budget`** pour monitoring. `/health` reste ouvert.
+  - **Ops** : `build_gate()`, toggle `CORTEX_AUTH=on`, CLI `python -m cortex_runtime.admin` (register tenant / mint token — brut affiché **une fois**, hash stocké). Secrets HMAC en `<TENANT>_WEBHOOK_HMAC` via `SecretProvider`, **jamais en DB**.
+- **Reste** (host-specific / plus tard) : route `/webhook/{tenant}` (le chemin HMAC est codé+testé mais non monté), backend Redis `EphemeralStore`, puis **branche async** (ADR-005).
+**Tags :** `adr-004`, `adr-005`, `security`, `bearer`, `hmac`, `rate-limit`, `budget-cap`, `idempotency`, `auth-log`, `monitoring`, `admin-cli`
+
+### 2026-06-03 — ADR-004 : route admin de création de tokens + scrub agnostique total
+**Contexte :** revue ADR-004 OK (théorique). L'humanoïde demande : route API pour créer des tokens, réservée à un token **master/admin** (seul token fait à la mano) ; scrub **complet** des noms privés (y compris ADR-001).
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Capacité admin sur les tokens** : flag `admin` sur `api_tokens` (3 backends), propagé dans `AuthOutcome.admin`, nouveau verdict `forbidden` (403, loggé). CLI `admin token … --admin` pour forger le master.
+- **Routes admin** (gated admin-token, admin global non-scopé) : `POST /tenants`, `POST|GET /tokens`, `DELETE /tokens/{id}`. Le brut n'est montré **qu'une fois** (création) ; `GET /tokens` ne renvoie jamais le hash. **Bootstrap** : 1 master à la main (CLI) → il émet tout le reste par l'API (zéro accès shell ensuite).
+- **Scrub agnostique total** : tous les noms de projets privés → `acme` / `monitoring` / `<TENANT>_WEBHOOK_HMAC`, **y compris ADR-001** (la trace ratifiée est désormais agnostique elle aussi). `deploy/.env` (réel, gitignored) laissé tel quel.
+- 252 tests verts.
+**Tags :** `adr-004`, `admin-token`, `master-token`, `token-api`, `forbidden`, `agnostic-scrub`
+
+### 2026-06-03 — ADR-005 implémenté (branche `feat/async-execution`)
+**Contexte :** après l'ADR-004 (branche sécu séparée), passage à la robustesse. Branche dédiée partant de `feat/cortex-runtime`, implémentation point par point, commit par commit.
+**Participants :** @Oolon → @Ford (exécution/infra)
+**Décisions / outputs :**
+- **#6 Lifecycle de run** : colonne `lifecycle` (`queued → running → {done | failed | skipped}`) sur les 3 backends, **distincte** de l'état de conversation. `mark_running` / `skip_run` ajoutés.
+- **#5+#3 `JobQueue`** : interface + `InProcessJobQueue` (pool de threads daemon, jobs = dicts sérialisables → **broker-ready**). Cap de concurrence (`max_workers`), **backpressure** (queue bornée → `QueueFull`), shutdown gracieux (drain), `healthy()`/`stats()`. Tests déterministes (Events, pas de sleep).
+- **#1 Async `/run`** : split `runtime.prepare` (crée le run *queued*, valide → 404/422 *fast*) / `runtime.execute` (handler worker, par `run_id`). `POST /run` → **202 {run_id, queued}**, worker exécute, `GET /runs/{id}` poll le lifecycle. **`?wait=true`** garde le sync ; sans queue = 100% sync (rétrocompat). `QueueFull` → **429 Retry-After**. Anti-récursion re-vérifiée au worker (course enqueue↔exec) → `skip_run`.
+- **#4 Readiness** : `GET /ready` (store joignable + worker vivant → `503` sinon) vs `/health` (liveness). Shutdown gracieux via lifespan FastAPI (drain). Healthcheck container sur `/ready`. Knobs `__main__` : `CORTEX_ASYNC`, `CORTEX_MAX_CONCURRENT_RUNS`, `CORTEX_MAX_PENDING_RUNS`.
+- **Reste** : backend **RabbitMQ** (`JobQueue`) + **Redis** (multi-nœud), `callback_url` (push), timeout outils MCP, uvicorn multi-workers.
+**Tags :** `adr-005`, `async`, `job-queue`, `lifecycle`, `backpressure`, `readiness`, `graceful-shutdown`
+
+### 2026-06-03 — Intégration sur `release/0.3.0` (sécu + async réconciliés)
+**Contexte :** `release/0.3.0` = base + ADR-004 (PR #9). Rebase de `feat/async-execution` sur la release → beaucoup de conflits (les deux features touchent `state_store`, `api`, `__main__`, `__init__`). Merge de la release dans la branche async, résolution.
+**Participants :** @Oolon
+**Décisions / outputs :**
+- **`state_store`** : `runs` porte **les deux** colonnes `started_at` (budget) **et** `lifecycle` (async) ; `mark_running`/`skip_run`/`spent_since` + tables sécu coexistent.
+- **`api.py`** : `create_app(runtime, *, gate=None, queue=None)` — sécu et async **orthogonales**. `/run` = chaîne sécu (`_authorize_run`) → (replay idempotent) → **enqueue (202) si queue & non-`wait`, sinon run sync** (+ `gate.remember` au sync). Toutes les routes sécu + `/ready` présentes.
+- **`__main__`** : `CORTEX_AUTH` **et** `CORTEX_ASYNC` activables ensemble (gate + queue passés à `create_app`).
+- *Limite notée (→ corrigée juste après, cf. entrée suivante)* : l'idempotence ne dédoublonnait qu'**après** complétion, pas les doublons in-flight.
+**Tags :** `integration`, `release-0.3.0`, `merge`, `gate+queue`
+
+### 2026-06-04 — Idempotence à l'enqueue (claim atomique) — `feat/async-execution`
+**Contexte :** l'humanoïde pointe le vrai danger : un même traitement « spammé » lancerait, **pendant** le 1er run, des milliers d'appels modèle en parallèle (un call IA = plusieurs secondes/minutes). Il faut dédoublonner **en amont** (avant le run) ET après (cache existant). « Ça ne touche pas que l'async. »
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Claim atomique** (`SET NX`) sur `EphemeralStore` (`claim_idempotent`) : la 1re livraison **réserve** la clé avec un `run_id` **pré-frappé**, **avant** rate/budget et **avant** toute création de run. Tout doublon (in-flight ou complété) court-circuite → renvoie le `run_id` existant (202, à poller) ou le `result` caché (200).
+- **`run_id` pré-généré** (`runtime.new_run_id`) → `start_run(run_id=…)` (3 backends) → la réservation précède le record DB. Chemin **unifié** sync/async : `prepare` (record *queued*) → `execute` | `enqueue`.
+- `gate.authorize(…, run_id=…)` fait le claim ; `gate.remember(result)` (sync) écrase le claim avec le résultat. `GateDecision.is_duplicate` / `idempotent_entry`.
+- **Couvre sync ET async** (pas que l'async) : un spam sync est aussi dédoublonné. Test clé : **8 livraisons identiques → 1 seul run** (`list_runs == 1`). 281 tests verts.
+- *Reste* : en async, le `result` n'est pas re-caché à la complétion du worker (le doublon récupère le `run_id` et poll) — suffisant ; re-cache au worker = optionnel.
+**Tags :** `idempotency`, `claim`, `set-nx`, `in-flight-dedup`, `anti-spam`, `async-idempotency`
+
+### 2026-06-04 — Webhook par tenant (`POST /webhook/{source}`) — `feat/async-execution`
+**Contexte :** la moitié « auth » (HMAC + rejeu + chaîne gate) existait déjà ; ne manquait que la réception. L'humanoïde valide qu'on le fasse maintenant. Point de design clé tranché : le mapping payload→run reste **déclaratif** (firewall).
+**Participants :** @Oolon → @Marvin (sécu)
+**Décisions / outputs :**
+- **Route `POST /webhook/{source}`** en `async def` (lit le **corps brut** — le HMAC signe les octets), puis `run_in_threadpool` (auth+dispatch bloquants hors event-loop).
+- **Binding host-déclaré** par source (`RuntimeConfig.webhooks`, `CORTEX_WEBHOOK_CONFIG`) : `{tenant, role, workflow?, subject_path}`. `subject_path` = **lookup pointé générique** (`issue.key`) → `subject` du run ; payload entier en `input`. Zéro connaissance provider.
+- Réutilise **toute** la chaîne : HMAC (`AuthMethod.HMAC`) → rejeu nonce → **idempotence (claim)** → rate → budget → `prepare`/`enqueue` (202 par défaut). Tail de dispatch **mutualisé** avec `/run` (`_finish_dispatch`).
+- **Rejeu vs retry tranché** : resend exact (même signature) → `401 replay` (nonce) ; retry re-signé (même delivery-id, nouvelle signature) → `202 duplicate` (idempotence, pointe le run d'origine). Les deux mécanismes sont complémentaires.
+- Doc : `cortex-webhook.json.example`, section deploy README, ADR-004 follow-up #6 ✅. **289 tests verts**.
+- *Reste host-specific* : routage conditionnel par type d'événement / filtrage = config host ou adaptateur, hors moteur.
+**Tags :** `webhook`, `hmac`, `trigger`, `subject-path`, `agnostic`, `adr-004`
+
+## 📚 Documents liés
+- [ADR-002 — Cortex Runtime](../../adr/ADR-002-cortex-runtime.md) (+ addendum « Identité résolue vs travail investigué »)
+- [ADR-003 — Persistence & operational state layer](../../adr/ADR-003-persistence-state-layer.md) (Accepted)
+- [ADR-001 — Layered overrides](../../adr/ADR-001-layered-overrides.md)
+- [`runtime/README.md`](../../../runtime/README.md) — statut des phases
+
+## 🔮 Next steps connus
+- **Phase 2** (@Hactar) : API `POST /run` + endpoints alias par manifeste + `derive_caps()` (parsing `project-context.md`) — solde la Nuance A.
+- **Phase 4** (@Ford) : binding — warm mirrors + `git worktree` + synchro submodules.
+- **Dette** : migrer la validation des overlays vers le résolveur Python (retirer le test de parité bash).

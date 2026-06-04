@@ -269,7 +269,57 @@ Dependent on this ADR, tracked separately:
 ## 7. References
 
 - [ADR-001 — Layered overrides](ADR-001-layered-overrides.md) — the cascade contract this ADR makes executable
+- [ADR-003 — Persistence & operational state layer](ADR-003-persistence-state-layer.md) — adds the runtime's operational state (conversation state §3.3, audit §3.6) without breaching this ADR's firewall
+- [ADR-004 — API security & trust model](ADR-004-api-security.md) — secures the API boundary (HMAC webhook + Bearer + rate-limit + budget cap), realising the §3.6 HMAC-secret / API-token controls
+- [ADR-005 — Execution model & resilience](ADR-005-execution-model-resilience.md) — makes the runtime's side of §3.7 concrete (async accept-then-process, timeouts, concurrency cap, readiness)
 - [cortex/agents/roles/prompt-manager.md](../../agents/roles/prompt-manager.md) — dispatch protocol
 - [cortex/agents/workflows/README.md](../../agents/workflows/README.md) — workflow cascade
 - [cortex/bin/validate-overlays.sh](../../bin/validate-overlays.sh) — existing partial resolver (validation)
 - [cortex/docs/extending-layers.md](../extending-layers.md) — cascade user reference
+
+---
+
+## 8. Addendum — 2026-06-02 (implementation clarifications)
+
+Added during the first implementation pass (`feat/cortex-runtime`, phases 0–1). These
+points refine §3 without changing the decision; they capture what surfaced once the
+resolver met real code.
+
+### 8.1 Resolved identity vs investigated work
+
+The resolver (§3.1) and the agentic loop (§3.3) perform **two distinct reads** that must
+never be conflated:
+
+| Read | What | By whom | When |
+|---|---|---|---|
+| **Resolved identity** | role + personality + capabilities (the cascade spec) | the **resolver**, deterministically | once, up front — assembled into the system prompt |
+| **Investigated work** | the project's actual code, DB, issues | the **agentic loop** via tools | live, throughout the run |
+
+**Decision (deterministic pre-resolution):** the runtime resolves the cascade and
+**injects** the assembled system prompt into the model's initial context. The LLM does
+**not** bootstrap its own identity by reading the prose bootstrap instructions — that is
+the unreliable, non-deterministic form (Alternative §5, *"Full agent-SDK headless"*),
+explicitly rejected. The identity is *given*; only the work is *improvised*. This is the
+operational reading of §3.3's *"safety rails stay in code, not in the prompt."*
+
+### 8.2 The engine carries no spec — no submodule collision
+
+`root` (§3.4) points at the **project's** mirror; `root/cortex/agents` is the project's
+own cortex (typically a git submodule), `root/agents` its workspace overlays. The runtime
+package ships **only code, never spec Markdown** — so there is exactly one cascade per run
+(the project's), and no collision between an "engine cortex" and a "project cortex". This
+firewall is enforced mechanically by `runtime/tests/test_firewall.py` (the monorepo choice
+means no repo boundary guarantees it).
+
+> **Real submodule nuance (operational, Phase X/§3.4.4):** a `git fetch` on the mirror does
+> not update submodules — the binding must run `git submodule update --init --recursive`,
+> and `git worktree` + submodules requires re-checking-out the submodule inside the worktree.
+
+### 8.3 Overlay validation migrates to the resolver
+
+§3.4 / §3.1 call for a shared resolution library to avoid drift. Since `validate-overlays.sh`
+(bash) and the resolver (Python) cannot share a library, drift is currently caught by a
+**parity test** on a fixture cascade (`runtime/tests/test_parity.py`) — drift becomes
+*detectable*, not *impossible*. **Planned:** make `validate-overlays.sh` a thin shell that
+delegates resolution to the Python resolver, making Python the single source of truth and
+retiring the parity test.
