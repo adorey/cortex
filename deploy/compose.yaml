@@ -70,23 +70,26 @@ services:
 
   # Optional database MCP (DBHub) — read-only DB investigation for the agent (e.g. support).
   # OFF by default. Start it with:  docker compose --profile db up
-  # The agent reaches it at http://dbhub:8080 (same `backend` network — no host-gateway needed);
+  # The agent reaches it at http://dbhub:8080/mcp (same `backend` network — no host-gateway);
   # declare + bind it in cortex-mcp.json (see README "Database MCP"). Cortex never holds the DB
-  # creds: they live in YOUR dbhub.json (mounted read-only, gitignored).
+  # creds: they live in YOUR config/dbhub/ (.env + .toml), mounted read-only, gitignored.
   dbhub:
-    profiles: ["db"]
-    image: bytebase/dbhub:latest          # pin/adjust to the image you actually run
-    container_name: cortex-dbhub
+    profiles: ["db"]                      # off by default → `docker compose --profile db up`
+    image: bytebase/dbhub:latest          # pin a version in real use (e.g. :0.21.2)
+    container_name: dbhub
     restart: unless-stopped
-    # TODO — replace with YOUR DBHub launch (HTTP transport + how it loads dbhub.json). Flags
-    # vary by version; this is only the shape. Keep it READ-ONLY for the support use case.
-    command: ["--transport", "http", "--port", "8080", "--readonly", "--config", "/config/dbhub.json"]
+    # HTTP MCP server reading config/dbhub/dbhub.toml; ${VARS} resolved from config/dbhub/.env.
+    command: ["--transport", "http", "--port", "8080", "--config", "/etc/dbhub/dbhub.toml"]
     env_file:
-      - .env                              # DBHUB_TOKEN (if you protect it) + any DSNs dbhub.json references
+      - ./config/dbhub/.env               # <PREFIX>_DB_* secrets the .toml references (gitignored)
     volumes:
-      - ./dbhub.json:/config/dbhub.json:ro   # YOUR endpoints — sensitive, gitignored, never committed
+      - ./config/dbhub:/etc/dbhub:ro      # the WHOLE config dir (.env + .toml) — gitignored, never committed
     networks:
-      - backend
+      - backend                           # same net as cortex → reachable at http://dbhub:8080/mcp
+    # No host port published on purpose (cortex reaches it internally; avoids clashing with a
+    # central host-side dbhub on 127.0.0.1:8089). Uncomment to debug from your host:
+    # ports: ["127.0.0.1:8089:8080"]
+    # Read-only is enforced in YOUR dbhub.toml / per a read-only DB user (ideally a replica).
 
 volumes:
   cortex-pgdata:

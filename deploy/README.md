@@ -151,24 +151,38 @@ A binding maps a `source` to a run, **agnostically** — no provider parsing in 
 ## Database MCP (DBHub) — optional, read-only DB investigation
 
 Give the agent **read-only** DB access (e.g. for support triage) via [DBHub](https://github.com/bytebase/dbhub),
-a generic database MCP. It's **off by default** — an optional compose service under the `db`
-profile. Cortex connects to it over **HTTP** and **never holds the DB credentials**: those live
-in *your* `dbhub.json`, mounted read-only into the DBHub container (gitignored).
+a generic database MCP. Cortex connects to it over **HTTP** (endpoint `…/mcp`) and **never holds
+the DB credentials** — those live in *your* `config/dbhub/` (`.env` + `dbhub.toml`), gitignored.
+The **reachability rule**: DBHub must be on the **same Docker network** as cortex (`backend`) —
+a host-published loopback port (`127.0.0.1:8089`) is **not** reachable from the cortex container.
 
+Two ways to run it:
+
+**A. Bundled in this stack (simplest)** — an optional `db`-profile service:
 ```bash
-cp dbhub.json.example dbhub.json          # YOUR endpoints (read-only DSNs) — gitignored, never committed
-# ⚠️ edit the `command:` of the `dbhub` service in compose.yaml to YOUR DBHub launch (flags vary)
-docker compose --profile db up --build    # starts cortex + postgres + dbhub
+cp config/dbhub/.env.example      config/dbhub/.env        # YOUR <PREFIX>_DB_* secrets (gitignored)
+cp config/dbhub/dbhub.toml.example config/dbhub/dbhub.toml  # YOUR [[sources]] (gitignored)
+docker compose --profile db up -d                          # cortex + postgres + dbhub, all on `backend`
 ```
+The `dbhub` service mounts the whole `config/dbhub/` dir and runs
+`--transport http --port 8080 --config /etc/dbhub/dbhub.toml`. Cortex reaches it at
+`http://dbhub:8080/mcp`.
 
-Then **declare + bind** it in `cortex-mcp.json` (the agent reaches it by service name on the
-shared `backend` network — no host-gateway):
+**B. A central, host-side DBHub (shared across projects, à la Traefik)** — keep your standalone
+container and just attach it to cortex's network:
+```bash
+docker network connect deploy_backend dbhub   # your running dbhub joins cortex's `backend` net
+docker compose restart cortex-runtime         # reload cortex-mcp.json
+```
+(Permanently: add `--network deploy_backend` — or a shared net — to your `docker run`.) Cortex
+then reaches the same `http://dbhub:8080/mcp` by container name.
 
+Either way, **declare + bind** it in `cortex-mcp.json`:
 ```jsonc
 {
   "mcp_servers": {
     "cortex_jsm": { "command": "cortex-jsm-mcp", "env": { /* … */ } },
-    "dbhub": { "type": "http", "url": "http://dbhub:8080/mcp" }    // + "headers" if you set DBHUB_TOKEN
+    "dbhub": { "type": "http", "url": "http://dbhub:8080/mcp" }    // + "headers" if you protect it
   },
   "mcp_bindings": {
     "issue-read":       ["mcp__cortex_jsm__get_jira_issue"],
@@ -180,13 +194,10 @@ shared `backend` network — no host-gateway):
 
 `db-read` is a **default-granted, least-privilege** capability, so a support role can query the
 DB read-only **without** the human granting extra autonomy. Defense in depth: keep DBHub
-`--readonly`, point it at a **read-only DB user / anonymised replica**, and bind **only read
-tools** (any write tool would go to `db-write`, which is *gated* — never granted by default).
-The exact `mcp__dbhub__…` tool names depend on your DBHub version — list them once and adjust.
-
-> Running DBHub **on the host** instead of in the stack? Use `http://host.docker.internal:<port>`
-> and add `extra_hosts: ["host.docker.internal:host-gateway"]` to the cortex service (Linux). See
-> [`mcp/README.md`](../mcp/README.md) for the remote-MCP pattern.
+read-only (in your `.toml` / a read-only DB user, ideally an anonymised replica), and bind
+**only read tools** (any write tool would go to `db-write`, which is *gated* — never granted by
+default). The exact `mcp__dbhub__…` tool names depend on your DBHub version — list them once and
+adjust. (`mcp/README.md` has the generic remote-MCP pattern.)
 
 ## Notes
 

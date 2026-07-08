@@ -1,0 +1,3 @@
+# Per-dev secrets — never commit.
+.env
+dbhub.toml
