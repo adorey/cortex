@@ -2,7 +2,9 @@
 
 > *"Don't Panic. And read this guide before doing anything else."* — Arthur Dent
 
-This step-by-step guide covers both installation modes: **single project** and **multi-service workspace**.
+This step-by-step guide covers installing the **design-time spec** in both modes: **single project** and **multi-service workspace**.
+
+> Looking to run the engine instead? The deployable runtime (API, agentic loop, deployment) has its own guides: [runtime/README.md](../runtime/README.md) and [deploy/README.md](../deploy/README.md).
 
 ---
 
