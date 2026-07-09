@@ -1,0 +1,53 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  DBHub sources — read-only DB access for the agent (deploy profile `db`).
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  Secrets policy:
+#  - This file is a SHAREABLE template (no secrets in clear).
+#  - Real secrets live in `.env` (same directory), gitignored, per-dev.
+#  - `${VAR}` placeholders are resolved from the dbhub container env,
+#    populated from `config/dbhub/.env` (compose `env_file:`).
+#  - Unresolved variables stay as the literal `${VAR}` string — dbhub
+#    surfaces the error only on first query of the affected source.
+#
+#  Naming convention:
+#  - Each source uses its OWN env var prefix. `.env` cannot have sections,
+#    so reusing the same VAR across sources = last definition wins.
+#    e.g. ACME_LOCAL_*, ACME_PROD_*, MYPRJ_LOCAL_* — one prefix per source.
+#    Keep prefixes in sync with `.env` / `.env.example`.
+#
+#  Adding a new source:
+#  1. Copy a [[sources]] block, rename id, choose a UNIQUE env prefix.
+#  2. Add `<PREFIX>_DB_*` entries to `.env` AND `.env.example`.
+#  3. Reload dbhub so it re-reads its config:
+#     - editing THIS .toml alone hot-reloads (no restart needed);
+#     - changing `.env` requires recreating the container (env_file is
+#       read once at startup):
+#         docker compose --profile db up -d --force-recreate dbhub
+# ═══════════════════════════════════════════════════════════════════════
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ACME — local dev
+# ──────────────────────────────────────────────────────────────────────
+[[sources]]
+id = "acme-local"
+description = "ACME — local dev MySQL"
+type = "mysql"
+dsn = "mysql://${ACME_LOCAL_DB_USER}:${ACME_LOCAL_DB_PASSWORD}@${ACME_LOCAL_DB_HOST}:${ACME_LOCAL_DB_PORT}/${ACME_LOCAL_DB_NAME}"
+lazy = true
+
+# ──────────────────────────────────────────────────────────────────────
+# Tools — readonly guards (defense in depth).
+#
+# Declare a readonly tool block for every source the agent may reach, as a
+# layer on top of a dedicated read-only DB user (ideally an anonymised
+# replica). Leave it off ONLY for a throwaway local DB where devs need
+# writes for migration testing. Example — guard acme-local, cap rows:
+#
+[[tools]]
+name = "execute_sql"
+source = "acme-local"
+readonly = true
+max_rows = 1000
+# ──────────────────────────────────────────────────────────────────────

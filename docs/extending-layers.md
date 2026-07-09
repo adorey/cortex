@@ -114,7 +114,7 @@ This explicit tagging serves two purposes:
 
 You want `@Hactar` (lead-backend) to know that in your `@backend` service, all migrations require feature flags.
 
-**File:** `core/bluspark-backend/agents/roles/engineering/lead-backend.md`
+**File:** `core/acme-backend/agents/roles/engineering/lead-backend.md`
 
 ```markdown
 <!-- OVERLAY
@@ -137,7 +137,7 @@ You want `@Hactar` (lead-backend) to know that in your `@backend` service, all m
 
 ### Example 2 — Workspace-level capability overlay
 
-You want all PHP work across all your services to follow Bluspark's strict typing convention, plus its specific PHPStan baseline.
+You want all PHP work across all your services to follow Acme's strict typing convention, plus its specific PHPStan baseline.
 
 **File:** `agents/capabilities/languages/php.md` (at workspace root)
 
@@ -148,7 +148,7 @@ You want all PHP work across all your services to follow Bluspark's strict typin
      Semantic: additive
 -->
 
-# PHP — Overlay Bluspark workspace
+# PHP — Overlay Acme workspace
 
 ## 📏 Workspace conventions (additive)
 
@@ -164,9 +164,9 @@ You want all PHP work across all your services to follow Bluspark's strict typin
 
 ### Example 3 — Service-level personality character overlay
 
-You want `@Hactar` to use Bluspark-flavored quotes and metaphors.
+You want `@Hactar` to use Acme-flavored quotes and metaphors.
 
-**File:** `core/bluspark-backend/agents/personalities/h2g2/Hactar.md`
+**File:** `core/acme-backend/agents/personalities/h2g2/Hactar.md`
 
 ```markdown
 <!-- OVERLAY
@@ -175,7 +175,7 @@ You want `@Hactar` to use Bluspark-flavored quotes and metaphors.
      Semantic: additive
 -->
 
-# Hactar — Overlay @backend (Bluspark)
+# Hactar — Overlay @backend (Acme)
 
 ## 💬 Project-flavored quotes (additive)
 
@@ -184,13 +184,13 @@ You want `@Hactar` to use Bluspark-flavored quotes and metaphors.
 
 ## 📏 Project-flavored behavior (additive)
 
-- Always reference Bluspark's `bin/linters` workflow when discussing PHP commits
-- When proposing a refactor, cross-check the conventions in `core/bluspark-backend/project-context.md`
+- Always reference Acme's `bin/linters` workflow when discussing PHP commits
+- When proposing a refactor, cross-check the conventions in `core/acme-backend/project-context.md`
 ```
 
 ### Example 4 — Workspace workflow override (replacement)
 
-You have a Bluspark-specific feature-development flow that requires @Marvin's security review at step 2.5.
+You have a Acme-specific feature-development flow that requires @Marvin's security review at step 2.5.
 
 **File:** `agents/workflows/engineering/feature-development.md` (at workspace root)
 
@@ -201,7 +201,7 @@ You have a Bluspark-specific feature-development flow that requires @Marvin's se
      Semantic: replacement
 -->
 
-# Workflow: Feature development — Bluspark
+# Workflow: Feature development — Acme
 
 ## 🎯 Triggers
 [same as base, see cortex/agents/workflows/engineering/feature-development.md]
@@ -214,7 +214,7 @@ You have a Bluspark-specific feature-development flow that requires @Marvin's se
 ### Step 2 — Implementation
 [...]
 
-### Step 2.5 — Pre-merge security checkpoint (Bluspark-specific)
+### Step 2.5 — Pre-merge security checkpoint (Acme-specific)
 **Agent:** `security-engineer`
 **Objective:** Mandatory @Marvin review before any PR merges to master.
 [...]
@@ -229,7 +229,7 @@ Before committing overlays, run:
 
 ```bash
 ./cortex/bin/validate-overlays.sh                                     # check everything
-./cortex/bin/validate-overlays.sh --service core/bluspark-backend     # check one service
+./cortex/bin/validate-overlays.sh --service core/acme-backend     # check one service
 ./cortex/bin/validate-overlays.sh --strict                            # warnings → errors
 ```
 

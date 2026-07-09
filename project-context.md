@@ -48,6 +48,7 @@ cortex/
   - Role cards → mission et protocole technique uniquement
   - Capabilities → compétences techniques chargées à la demande
 - **Longueur :** fichiers < 200 lignes pour ne pas saturer la fenêtre de contexte
+- **Commits :** gitmoji + Conventional Commits, **sujet sur une seule ligne (≤72), sans body, jamais de trailer `Co-Authored-By`** (voir [CONTRIBUTING.md](CONTRIBUTING.md))
 
 ## ⚡ Technical constraints
 
