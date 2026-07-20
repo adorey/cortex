@@ -64,6 +64,8 @@ Examples of custom additions:
 - A new role unique to your domain (e.g. `roles/data/ml-engineer.md`)
 - A project-specific capability not worth PR'ing upstream
 
+**A third thing you'll find in `agents/`, that is neither of the above:** `agents/project-overview.md` and `agents/project-context.md` are the **team-shared context** tier introduced by [ADR-006](adr/ADR-006-workspace-shareable-repo.md). They don't carry an `<!-- OVERLAY -->` header (there's no base file at `cortex/agents/project-*.md` to extend) and they're not part of the roles/capabilities/personalities/workflows cascade — they're read *additively* alongside the workspace-root context files (the **developer** tier), not cascaded through base → workspace → service. `validate-overlays.sh` doesn't check them; there's nothing overlay-shaped about them.
+
 ## 📜 Anatomy of an overlay file
 
 Every overlay must start with this header:

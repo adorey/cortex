@@ -181,9 +181,11 @@ The script creates for each service:
 - `{service}/project-overview.md` — with `@alias: {service}` pre-filled
 - `{service}/project-context.md` — with `@alias: {service}` pre-filled
 
-And at the workspace root (optional):
-- `project-overview.md` — global vision (shared stakeholders, common constraints)
-- `project-context.md` — shared conventions (linting, CI/CD, versioning)
+And at the workspace root (optional) — this is your **developer** tier, not shared by default:
+- `project-overview.md` — your own notes on the global vision (shared stakeholders, common constraints)
+- `project-context.md` — your own notes on shared conventions (linting, CI/CD, versioning)
+
+If your team wants to formalize and version this instead of leaving it per-developer, turn `agents/` into its own git repo (clone or submodule) and add the same two files there. `agents/project-overview.md` / `agents/project-context.md` become the **team** tier — read in *addition to* the developer tier above, not instead of it (both are optional, both get read if present). If `agents/` is already a git working tree when you run `setup.sh --workspace`, it scaffolds the team pair there automatically. See [ADR-006](adr/ADR-006-workspace-shareable-repo.md).
 
 ### Step 3 — Copy the workspace bootstrap
 
@@ -318,10 +320,10 @@ See [`docs/creating-a-theme.md`](creating-a-theme.md) for the full guide.
 | **Roles** | `cortex/agents/roles/{cat}/` | `{workspace_root}/agents/roles/`, `{service}/agents/roles/` | *WHAT* to do |
 | **Capabilities** | `cortex/agents/capabilities/{cat}/` | `{workspace_root}/agents/capabilities/`, `{service}/agents/capabilities/` | *WHAT I KNOW HOW TO DO* |
 | **Personalities** | `cortex/agents/personalities/{theme}/` | Same paths under `{workspace_root}/` and `{service}/` (except `characters.md`) | *WHO* you are |
-| **Context** | `project-overview.md` + `project-context.md` (workspace and per-service) | n/a — these are **already** per-service | *WHERE / WHY* you work |
+| **Context** | `project-overview.md` + `project-context.md`, per-service, and at the workspace root as the **developer** tier | `{workspace_root}/agents/project-overview.md` + `project-context.md` — the **team** tier ([ADR-006](adr/ADR-006-workspace-shareable-repo.md)) | *WHERE / WHY* you work |
 | **Workflows** | `cortex/agents/workflows/{cat}/` | `{workspace_root}/agents/workflows/`, `{service}/agents/workflows/` | *HOW and WITH WHOM* to orchestrate |
 
-Override semantic: **additive** for roles/capabilities/personalities, **replacement** for workflows. See [extending-layers.md](extending-layers.md).
+Override semantic: **additive** for roles/capabilities/personalities, **replacement** for workflows. Context is different again: **pure aggregation** — team and developer are different owners, not different specificities of one rule, so both are read and neither overrides the other (see ADR-006). See [extending-layers.md](extending-layers.md) for the roles/capabilities/personalities/workflows cascade.
 
 ---
 

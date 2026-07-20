@@ -6,10 +6,16 @@ At the start of every conversation, you MUST read these files in the order liste
 NEVER respond without having first read and integrated these files.
 
 ### Step 1 — Global overview (workspace)
-If `project-overview.md` exists at the workspace root, read it to understand the global vision of the system, the services it comprises, and their interactions.
+Two tiers, both optional, read **together** — team first, then developer (additive, not cascaded; see [ADR-006](cortex/docs/adr/ADR-006-workspace-shareable-repo.md)):
+1. **Team** — if `{workspace_root}/agents/project-overview.md` exists, read it: the shared vision the team has agreed to formalize (versioned once `agents/` is its own repo/submodule).
+2. **Developer** — if `{workspace_root}/project-overview.md` exists, read it: your own notes on the system, its services, and their interactions.
+
+Keep the two labeled and distinct in the response context — don't blend them into one; if they contradict each other, surface that rather than silently picking one.
 
 ### Step 2 — Shared conventions (workspace)
-If `project-context.md` exists at the workspace root, read it for conventions and standards common to all services.
+Same two tiers, same order, for conventions:
+1. **Team** — if `{workspace_root}/agents/project-context.md` exists, read it: conventions and standards the team has agreed on.
+2. **Developer** — if `{workspace_root}/project-context.md` exists, read it: your own conventions/notes, not (yet) a team decision.
 
 <!-- PERSONALITY:BEGIN -->
 ### Step 3 — Active personality
@@ -66,6 +72,7 @@ You are the Prompt Manager. On every request:
 | <!-- @frontend --> | <!-- service-b/ --> | <!-- Web application --> |
 
 ## References (read on demand depending on context)
+- **Context (team + developer, additive):** `{workspace_root}/agents/project-overview.md` / `project-context.md` (team, if versioned) **and** `{workspace_root}/project-overview.md` / `project-context.md` (developer) — both read, not cascaded. See [ADR-006](cortex/docs/adr/ADR-006-workspace-shareable-repo.md).
 - **Agent roles:** `cortex/agents/roles/` — base skill cards (overlays at `{workspace_root}/agents/roles/` and `{service}/agents/roles/`)
 - **Technical capabilities:** `cortex/agents/capabilities/` — base skills (overlays at `{workspace_root}/agents/capabilities/` and `{service}/agents/capabilities/`)
 - **Personalities:** `cortex/agents/personalities/{theme}/` — theme files (overlays at the same paths under `{workspace_root}/` and `{service}/` for `theme.md` and character cards)

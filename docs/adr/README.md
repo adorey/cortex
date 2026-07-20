@@ -40,6 +40,10 @@ Every ADR must contain:
 |---|---|---|---|
 | [ADR-001](ADR-001-layered-overrides.md) | Layered overrides — cascade resolution for all agent layers | Accepted | 2026-04-28 |
 | [ADR-002](ADR-002-cortex-runtime.md) | Cortex Runtime — deployable engine + runtime project binding | Accepted | 2026-06-02 |
+| [ADR-003](ADR-003-persistence-state-layer.md) | Persistence & operational state layer | Accepted | 2026-06-03 |
+| [ADR-004](ADR-004-api-security.md) | API security & trust model | Accepted | 2026-06-03 |
+| [ADR-005](ADR-005-execution-model-resilience.md) | Execution model & resilience | Accepted | 2026-06-03 |
+| [ADR-006](ADR-006-workspace-shareable-repo.md) | Team context in `agents/`, developer context at the workspace root | Accepted | 2026-07-20 |
 
 ## Authoring an ADR
 

@@ -262,6 +262,29 @@ if [ "$WORKSPACE_MODE" = true ]; then
             echo -e "${GREEN}  ✅${NC} $SERVICE_NAME/project-context.md"
         fi
     done
+
+    # Team-shared context (ADR-006) — only if agents/ is already its own git working
+    # tree. Detection-based, not a flag: a git-backed agents/ is the signal a team
+    # wants a shared home; the root files stay the (unchanged) per-developer tier.
+    AGENTS_DIR="$TARGET_DIR/agents"
+    if git -C "$AGENTS_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+        echo ""
+        echo -e "${BLUE}ℹ️  agents/ is its own git repo — scaffolding team-shared context (ADR-006)${NC}"
+        TEAM_OVERVIEW_FILE="$AGENTS_DIR/project-overview.md"
+        TEAM_CONTEXT_FILE="$AGENTS_DIR/project-context.md"
+        if [ -f "$TEAM_OVERVIEW_FILE" ]; then
+            echo -e "${GREEN}✅${NC} agents/project-overview.md (team) already exists"
+        elif [ -f "$OVERVIEW_TEMPLATE" ]; then
+            cp "$OVERVIEW_TEMPLATE" "$TEAM_OVERVIEW_FILE"
+            echo -e "${GREEN}✅${NC} agents/project-overview.md (team) created"
+        fi
+        if [ -f "$TEAM_CONTEXT_FILE" ]; then
+            echo -e "${GREEN}✅${NC} agents/project-context.md (team) already exists"
+        elif [ -f "$CONTEXT_TEMPLATE" ]; then
+            cp "$CONTEXT_TEMPLATE" "$TEAM_CONTEXT_FILE"
+            echo -e "${GREEN}✅${NC} agents/project-context.md (team) created"
+        fi
+    fi
 fi
 
 # --- 4. Summary ---
@@ -278,8 +301,12 @@ if [ "$NO_PERSONALITY" = false ]; then
 fi
 
 if [ "$WORKSPACE_MODE" = true ]; then
-    echo "   ├── project-overview.md            ← Global workspace vision (optional)"
-    echo "   ├── project-context.md             ← Shared conventions (optional)"
+    echo "   ├── project-overview.md            ← Developer context, workspace-level (optional)"
+    echo "   ├── project-context.md             ← Developer context, workspace-level (optional)"
+    if git -C "$TARGET_DIR/agents" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "   ├── agents/project-overview.md     ← Team-shared vision (agents/ is a repo — ADR-006)"
+        echo "   ├── agents/project-context.md      ← Team-shared conventions (agents/ is a repo — ADR-006)"
+    fi
     echo "   ├── {service}/project-overview.md  ← Service vision (TO FILL IN)"
     echo "   ├── {service}/project-context.md   ← Service stack (TO FILL IN)"
 else
