@@ -145,7 +145,7 @@ cortex/
 │   ├── adr/                           # Architecture Decision Records (ADR-001 … ADR-005)
 │   └── api/                           # OpenAPI spec + Postman collection
 │
-└── changelog/                         # Release notes (0.1.0 → 0.3.1)
+└── changelog/                         # Release notes (0.1.0 → 0.4.1)
 ```
 
 > **Note on overlays:** the `agents/{roles,capabilities,personalities,workflows}/` trees also exist (mirrored) in host projects under `{workspace}/agents/...` and `{service}/agents/...` — those are the override locations, not part of cortex itself.
@@ -239,9 +239,9 @@ If no alias is mentioned, Cortex infers the service from the active file context
 
 ## 📋 Changelog
 
-> Latest release: **[v0.3.1](changelog/0.3.1.md)** — Documentation refresh: the README now covers the runtime, an accurate structure tree, and a complete docs index.
+> Latest release: **[v0.4.1](changelog/0.4.1.md)** — Reuse before create: a dispatch-protocol step that checks whether an existing script, playbook or job already covers the case by configuration, before writing a new one.
 >
-> Previous: **[v0.3.0](changelog/0.3.0.md)** — The runtime comes alive: deployable engine, persistence (ADR-003), API security (ADR-004), async execution (ADR-005), webhooks, and a Docker/Traefik deploy.
+> Previous: **[v0.4.0](changelog/0.4.0.md)** — Team context in `agents/`, developer context at the root (ADR-006): two aggregated tiers, zero change to the existing root files.
 
 All releases are documented in the [`changelog/`](changelog/) directory.
 
