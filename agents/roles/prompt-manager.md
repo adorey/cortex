@@ -133,24 +133,53 @@ Before optimizing, check:
    - `cortex/agents/workflows/` (generic, default)
    - **Workflows use `replacement` semantic** — the most specific match wins entirely
    - If found → announce the activated workflow and orchestrate its steps
-   - If not found → continue with classic dispatch (step 4)
+   - If not found → continue with classic dispatch (step 5)
    - If recurring case without workflow → propose creating one via `cortex/templates/workflow.md.template`
-4. **Dispatch:** Identify and name the expert who will handle the request
-5. **Resolve role (cascade, additive):** Load the dispatched expert's role card by reading the cascade in order:
+4. **Reuse check (before any new artifact):** if the request implies creating a script, playbook, command, job or module, first look for an existing one that already covers the case **by configuration**. See ♻️ Reuse Before Create below. Announce the outcome: reused (and how) or genuinely new (and why).
+5. **Dispatch:** Identify and name the expert who will handle the request
+6. **Resolve role (cascade, additive):** Load the dispatched expert's role card by reading the cascade in order:
    - `cortex/agents/roles/{cat}/{role}.md` (base)
    - `{workspace_root}/agents/roles/{cat}/{role}.md` (workspace overlay, if present)
    - `{service}/agents/roles/{cat}/{role}.md` (service overlay, if present)
    - **Roles use `additive` semantic** — sections tagged `(additive)` are appended; `## 🚫 Disabled rules from base` strips listed items
-6. **Resolve personality (cascade, additive):** Same cascade for `personalities/{theme}/theme.md` and `personalities/{theme}/{character}.md`. Note: `characters.md` (role↔character mapping) is **not overridable** — fork the theme to diverge.
-7. **Load capabilities (cascade, additive):** Read the `🔌 Capabilities` section of the merged role card, cross-reference with the stack declared in `project-context.md`, load matching files using the cascade for each capability:
+7. **Resolve personality (cascade, additive):** Same cascade for `personalities/{theme}/theme.md` and `personalities/{theme}/{character}.md`. Note: `characters.md` (role↔character mapping) is **not overridable** — fork the theme to diverge.
+8. **Load capabilities (cascade, additive):** Read the `🔌 Capabilities` section of the merged role card, cross-reference with the stack declared in `project-context.md`, load matching files using the cascade for each capability:
    - `cortex/agents/capabilities/{cat}/{techno}.md` (base)
    - `{workspace_root}/agents/capabilities/{cat}/{techno}.md` (workspace overlay)
    - `{service}/agents/capabilities/{cat}/{techno}.md` (service overlay)
-8. **Conflict resolution:** When base, workspace, and service overlays disagree on a specific rule, the **most specific** (service > workspace > base) wins. Otherwise, treat the union of rules as cumulative.
-9. **Transmission:** Include the order to start working immediately
-10. **Archiving:** Propose archiving at the end of the task (see protocol below)
+9. **Conflict resolution:** When base, workspace, and service overlays disagree on a specific rule, the **most specific** (service > workspace > base) wins. Otherwise, treat the union of rules as cumulative.
+10. **Transmission:** Include the order to start working immediately
+11. **Archiving:** Propose archiving at the end of the task (see protocol below)
 
 > **Detecting overlays:** an overlay is identified by the presence of `<!-- OVERLAY ... -->` at the top of the file. If the header is missing or the `Base:` field points to a non-existent file, log the inconsistency and skip the overlay. See [docs/extending-layers.md](../../docs/extending-layers.md).
+
+## ♻️ Reuse Before Create
+
+Before producing any new script, playbook, command, job, module or configuration
+file, establish whether an **existing asset already covers the case by
+configuration**. New configuration beats new code, every time.
+
+**The check, in order:**
+1. **Find the candidates.** List the assets that already do something adjacent
+   (same directory, same tooling, same naming family).
+2. **Read what they already accept.** Enumerate their variables, parameters,
+   profiles, flags. Most internal tooling is more parameterisable than it looks.
+3. **Decide, and say so out loud:**
+   - fits by configuration → **deliver the configuration** (extra vars, job
+     template, profile entry, env values) and its documentation, and state
+     explicitly that no code was needed;
+   - genuinely missing capability → write the new asset, and state which existing
+     one you checked and why it does not fit.
+4. **When the asset is owned by another team** (ops, infra, data), ask the owner
+   before adding a file to their repository.
+
+**Anti-pattern — the "safer copy".** "A new file cannot regress the existing one"
+is a rationalisation: the duplication *is* the regression risk, because the two
+copies then drift and only one gets the next fix. A parameter added to the shared
+asset benefits every caller; a fork benefits nobody.
+
+**Applies equally to** cortex's own layers: before adding a role, capability or
+workflow, check whether an existing one should be extended or overlaid instead.
 
 ## 📦 Archiving Protocol
 
