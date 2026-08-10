@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-03 (proposed) · 2026-06-03 (accepted)
-- **Authors:** Cortex maintainers (initiated by l'humanoïde, dispatched by @Oolon)
+- **Authors:** Cortex maintainers (initiated by the maintainer, dispatched by @Oolon)
 - **Affects:** `cortex-runtime` API boundary (`/run`, `/resolve`, monitoring routes, future `/webhook`), the `SecretProvider` (ADR-002 §3.6), the cost metrics in the `StateStore` (ADR-003)
 - **Relates to:** [ADR-002](ADR-002-cortex-runtime.md) §3.6 (secrets inventory: HMAC secret + Runtime API token) and §3.3 (per-run cost guards); [ADR-003](ADR-003-persistence-state-layer.md) (cost/usage persisted per run → budget enforcement)
 

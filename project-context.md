@@ -5,23 +5,23 @@
 ## 🏗️ Tech stack
 
 ### Stack principale
-- **Format source :** Markdown (`.md`) — lisible nativement par tout agent IA sans parsing spécial
-- **Configuration :** YAML front-matter pour les métadonnées (si nécessaire)
+- **Source format:** Markdown (`.md`) — natively readable by any AI agent, with no special parsing
+- **Configuration:** YAML front matter for metadata (where needed)
 - **Scripting :** Bash (`setup.sh`)
-- **Aucune dépendance runtime** — 100% fichiers statiques
+- **No runtime dependency** — static files only
 
-### Intégration avec les outils IA
-Cortex est **agnostique de l'outil IA**. Le fichier d'instructions d'entrée dépend du contexte d'utilisation :
+### Integration with AI tools
+Cortex is **agnostic of the AI tool**. The entry instruction file depends on where it is used:
 
-| Outil | Fichier d'entrée typique |
+| Tool | Typical entry file |
 |---|---|
 | GitHub Copilot (VS Code) | `.github/copilot-instructions.md` |
 | Cursor | `.cursorrules` ou `.cursor/rules/` |
-| Claude Projects | Instructions système du projet |
-| ChatGPT Custom Instructions | Instructions personnalisées |
-| Autre | Tout fichier d'instructions supporté par l'outil |
+| Claude Projects | The project's system instructions |
+| ChatGPT Custom Instructions | Custom instructions |
+| Other | Any instruction file the tool supports |
 
-Le contenu de ce fichier d'entrée est fourni dans `cortex/templates/`.
+The content of that entry file is provided under `cortex/templates/`.
 
 ## 📁 Project structure
 
@@ -29,33 +29,33 @@ Le contenu de ce fichier d'entrée est fourni dans `cortex/templates/`.
 cortex/
 ├── agents/
 │   ├── personalities/
-│   │   └── h2g2/         ← Thème par défaut (configurable — créer d'autres dossiers ici)
-│   ├── roles/            ← Fiches de mission par spécialité (prompt-manager, architect…)
-│   ├── capabilities/     ← Compétences techniques chargeables (php, symfony, docker…)
-│   └── workflows/        ← Templates d'orchestration multi-agents (génériques)
+│   │   └── h2g2/         ← Default theme (configurable — add other folders here)
+│   ├── roles/            ← Mission cards per specialty (prompt-manager, architect…)
+│   ├── capabilities/     ← Loadable technical skills (php, symfony, docker…)
+│   └── workflows/        ← Multi-agent orchestration templates (generic)
 ├── assets/               ← Ressources statiques
 ├── docs/                 ← Documentation du framework
-├── templates/            ← Templates projet (instructions d'entrée, project-context…)
+├── templates/            ← Project templates (entry instructions, project-context…)
 └── setup.sh              ← Script d'initialisation
 ```
 
 ## 📝 Code conventions
 
-- **Format :** Markdown strict, une idée par section, titres concis
-- **Naming :** kebab-case pour les fichiers, PascalCase pour les noms de personnages
-- **Séparation des responsabilités :**
-  - Fiches personnalité → ton et style uniquement
+- **Format:** strict Markdown, one idea per section, concise headings
+- **Naming:** kebab-case for files, PascalCase for character names
+- **Separation of concerns:**
+  - Personality cards → tone and style only
   - Role cards → mission et protocole technique uniquement
-  - Capabilities → compétences techniques chargées à la demande
-- **Longueur :** fichiers < 200 lignes pour ne pas saturer la fenêtre de contexte
-- **Commits :** gitmoji + Conventional Commits, **sujet sur une seule ligne (≤72), sans body, jamais de trailer `Co-Authored-By`** (voir [CONTRIBUTING.md](CONTRIBUTING.md))
+  - Capabilities → technical skills loaded on demand
+- **Length:** files under 200 lines, so the context window is not saturated
+- **Commits:** gitmoji + Conventional Commits, **single-line subject (≤72 chars), no body, never a `Co-Authored-By` trailer** (see [CONTRIBUTING.md](CONTRIBUTING.md))
 
 ## ⚡ Technical constraints
 
 ### Performance
-- Fichiers courts et ciblés — chaque fichier doit tenir dans un seul appel de lecture
-- Ne charger que les capabilities effectivement nécessaires selon la stack du projet hôte
+- Short, focused files — each one must fit in a single read
+- Load only the capabilities the host project's stack actually needs
 
 ### Security
-- **Aucun secret, credential ou donnée projet** dans le repo Cortex
-- Cortex est un repo public générique — tout ce qu'il contient doit être réutilisable sans modification par n'importe quel projet
+- **No secret, credential or project data** in the Cortex repository
+- Cortex is a generic public repository — everything in it must be reusable, unmodified, by any project

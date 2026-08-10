@@ -2,3 +2,7 @@
 # (they are per-project / per-developer choices, not framework-level state)
 agents/project-context.md
 agents/personalities/.active-theme
+
+# AI-assisted design log — a local working journal, not product documentation:
+# verbatim prompts and session chronology. The decisions that matter live in docs/adr/.
+/docs/ai-lab/

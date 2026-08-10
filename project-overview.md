@@ -5,48 +5,48 @@
 ## 📋 General information
 
 **Name:** Cortex
-**Description:** Framework d'orchestration d'agents IA agnostique — fournit les rôles, personnalités, workflows et capabilities pour qu'un agent IA opère comme une équipe experte pluridisciplinaire sur n'importe quel projet.
+**Description:** A tool-agnostic AI agent orchestration framework — it provides the roles, personalities, workflows and capabilities that let an AI agent operate as a multidisciplinary expert team on any project.
 **Business domain:** Developer Tooling / AI-assisted development
-**Status:** Actif — framework public réutilisable
+**Status:** Active — public, reusable framework
 
 ## 🎯 Main actors
 
 | Actor | Description |
 |-------|-------------|
-| Utilisateur | Toute personne interagissant avec un agent IA via des prompts |
-| Agent IA | Lit les fichiers de contexte Cortex et adopte le rôle/personnalité approprié |
+| User | Anyone interacting with an AI agent through prompts |
+| AI agent | Reads the Cortex context files and adopts the matching role/personality |
 
 ## 🔄 Key business processes
 
 ### Bootstrap de conversation
-- L'agent lit le fichier d'instructions du workspace (ex: copilot-instructions.md, .cursorrules, AGENTS.md, ou tout autre fichier supporté par l'outil IA utilisé)
-- Il charge project-overview.md et project-context.md du projet hôte
-- Il identifie le thème de personnalité actif (H2G2 par défaut, mais configurable) et adopte le rôle prompt-manager
+- The agent reads the workspace instruction file (e.g. copilot-instructions.md, .cursorrules, AGENTS.md, or any other file the AI tool supports)
+- It loads the host project's project-overview.md and project-context.md
+- It identifies the active personality theme (H2G2 by default, but configurable) and adopts the prompt-manager role
 
 ### Reformulation & dispatch — le coeur du Prompt Manager
-C'est l'étape **la plus critique** du framework :
-1. **Analyser** le prompt reçu : clarté, complétude, ambiguïtés potentielles
-2. **Reformuler** la demande pour la rendre précise, complète et sans ambiguïté
-3. **Identifier** le rôle expert le mieux placé pour répondre (via characters.md)
-4. **Charger** la role card + la fiche personnalité + les capabilities pertinentes
-5. **Dispatcher** vers l'expert et produire la réponse
+This is the framework's **most critical** step:
+1. **Analyse** the incoming prompt: clarity, completeness, potential ambiguities
+2. **Reframe** the request to make it precise, complete and unambiguous
+3. **Identify** the expert role best placed to answer (through characters.md)
+4. **Load** the role card + the personality card + the relevant capabilities
+5. **Dispatch** to that expert and produce the answer
 
-Sans cette étape de reformulation, tous les échanges suivants sont construits sur des fondations instables.
+Without that reframing step, every following exchange is built on unstable foundations.
 
 ### Activation d'un workflow
-- Recherche d'abord dans agents/workflows/ du projet hôte (priorité haute)
-- Puis dans cortex/agents/workflows/ (workflows génériques)
-- Orchestre les étapes et les agents concernés
+- Looks first in the host project's agents/workflows/ (higher priority)
+- Then in cortex/agents/workflows/ (generic workflows)
+- Orchestrates the steps and the agents involved
 
 ## 📏 Important business rules
 
-- **Agnosticisme outil IA :** Cortex est indépendant de tout outil ou IDE. Le fichier d'instructions d'entrée est propre à chaque intégration (GitHub Copilot, Cursor, Claude, ChatGPT custom instructions...)
-- **Thème configurable :** H2G2 est le thème de personnalité livré par défaut. Tout autre thème peut être créé dans personalities/ et activé
-- **Capabilities à la demande :** chargées uniquement selon la stack du projet hôte définie dans project-context.md
-- **Workflows projet > workflows génériques :** toujours priorité au contexte projet
-- **Repo public générique :** aucun nom de projet, aucune donnée métier ne doit figurer dans Cortex lui-même
+- **Tool agnosticism:** Cortex is independent of any tool or IDE. The entry instruction file is specific to each integration (GitHub Copilot, Cursor, Claude, ChatGPT custom instructions…)
+- **Configurable theme:** H2G2 is the personality theme shipped by default. Any other theme can be created under personalities/ and activated
+- **Capabilities on demand:** loaded only according to the host project's stack, as declared in project-context.md
+- **Project workflows over generic ones:** the project context always wins
+- **Generic public repository:** no project name and no business data may appear in Cortex itself
 
 ## 📚 Resources & documentation
 
 - **Documentation :** cortex/docs/ (getting-started.md, creating-a-theme.md)
-- **Templates :** cortex/templates/ (instructions d'entrée, project-context, project-overview...)
+- **Templates:** cortex/templates/ (entry instructions, project-context, project-overview…)

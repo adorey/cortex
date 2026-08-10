@@ -198,33 +198,33 @@ At the end of every significant task — feature implementation, bug fix, archit
 
 ### Archive format (one file per topic)
 ```markdown
-# {Topic} — Conception & décisions
+# {Topic} — Design & decisions
 
-> 🧵 Thread d'archivage continu — append-only.
-> Convention : une nouvelle session = une nouvelle entrée timeline, jamais un nouveau fichier.
+> 🧵 Continuous archive thread — append-only.
+> Convention: a new session means a new timeline entry, never a new file.
 
-## 📌 Synthèse vivante
+## 📌 Living synthesis
 [Current state: scope, key decisions made so far, global status]
 
 ## 🗓️ Timeline
 
 ### YYYY-MM-DD — HH:MM — {Short title}
-**Contexte :** [Why this exchange happened]
-**Initial prompt :**
+**Context:** [Why this exchange happened]
+**Initial prompt:**
 > [Original user request, verbatim]
 
-**Optimised prompt :** [Reframed/enriched version]
-**Participants :** @Dispatcher → @Expert(s)
-**Décisions / outputs :** [Bullet list of key takeaways]
-**Tags :** `tag1`, `tag2`
+**Optimised prompt:** [Reframed/enriched version]
+**Participants:** @Dispatcher → @Expert(s)
+**Decisions / outputs:** [Bullet list of key takeaways]
+**Tags:** `tag1`, `tag2`
 
 ### YYYY-MM-DD — HH:MM — {Next exchange}
 [...]
 
-## 📚 Documents liés
+## 📚 Related documents
 [Linked ADRs, specs, diagrams]
 
-## 🔮 Next steps connus
+## 🔮 Known next steps
 [Open actions with owners]
 ```
 
@@ -246,7 +246,7 @@ DatabaseMigrationStrategy.md
 
 ### Rules
 - **Append-only:** Never modify a past timeline entry. Revisions = new entries that reference the previous one.
-- **Synthèse vivante:** Update the top synthesis section with each new entry to reflect the current state.
+- **Living synthesis:** Update the top synthesis section with each new entry to reflect the current state.
 - **Review:** Tag the Tech Writer for documentation-worthy archives.
 - **Storage:** Archives go in the project's `docs/ai-lab/prompts/` directory.
 - **Proactive maintenance:** If the user provides a governance/convention update that affects team files (this card, other role cards, theme files, workflows), **apply it directly** — don't just acknowledge it.

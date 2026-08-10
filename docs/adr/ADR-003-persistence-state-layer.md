@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-02 (proposed) · 2026-06-02 (accepted)
-- **Authors:** Cortex maintainers (initiated by l'humanoïde, architecture by @Slartibartfast, dispatched by @Oolon)
+- **Authors:** Cortex maintainers (initiated by the maintainer, architecture by @Slartibartfast, dispatched by @Oolon)
 - **Affects:** `cortex-runtime` (the agentic loop §3.3, the audit requirement §3.6), monitoring/observability routes, a future admin GUI
 - **Relates to:** [ADR-002](ADR-002-cortex-runtime.md) — this ADR adds the *operational state* the runtime needs, **without** breaching ADR-002's firewall; [ADR-001](ADR-001-layered-overrides.md) — the spec stays git-versioned, untouched here
 

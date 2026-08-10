@@ -168,7 +168,7 @@ The `dbhub` service mounts the whole `config/dbhub/` dir and runs
 `--transport http --port 8080 --config /etc/dbhub/dbhub.toml`. Cortex reaches it at
 `http://dbhub:8080/mcp`.
 
-**B. A central, host-side DBHub (shared across projects, à la Traefik)** — keep your standalone
+**B. A central, host-side DBHub (shared across projects, in the style of Traefik)** — keep your standalone
 container and just attach it to cortex's network:
 ```bash
 docker network connect deploy_backend dbhub   # your running dbhub joins cortex's `backend` net

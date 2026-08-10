@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-03 (proposed) · 2026-06-03 (accepted)
-- **Authors:** Cortex maintainers (initiated by l'humanoïde, dispatched by @Oolon)
+- **Authors:** Cortex maintainers (initiated by the maintainer, dispatched by @Oolon)
 - **Affects:** `cortex-runtime` API + execution path (`/run`, the agentic loop, the model clients), deployment (K8s probes, serving), the `StateStore` (run lifecycle)
 - **Relates to:** [ADR-002](ADR-002-cortex-runtime.md) §3.7 (trigger/queue/worker — host-specific; this ADR pins the runtime's side) and §3.3 (iteration cap / `max_tokens` — per-run cost guards); [ADR-003](ADR-003-persistence-state-layer.md) (run records persist lifecycle → durable async results); [ADR-004](ADR-004-api-security.md) (security — its idempotency key dedups at the queue)
 

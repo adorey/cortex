@@ -82,13 +82,13 @@ Every overlay must start with this header:
 ## 🔌 Project rules (additive)
 
 - Namespace strict : `Waste\` (pas `App\Waste\`) — cf. project-context.md
-- `bin/linters fix && bin/linters lint` OBLIGATOIRE avant chaque commit
+- `bin/linters fix && bin/linters lint` is MANDATORY before every commit
 - Migrations : feature flag obligatoire
 
 ## 📏 Project anti-patterns (additive)
 
-- ❌ `exit()` dans le code applicatif
-- ❌ Queries dans les constructeurs
+- ❌ `exit()` in application code
+- ❌ Queries in constructors
 ```
 
 ### Header fields
