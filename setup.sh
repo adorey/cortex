@@ -113,7 +113,13 @@ if [ "$NO_PERSONALITY" = false ]; then
     if [ ! -d "$THEME_DIR" ]; then
         echo -e "${RED}❌ Theme '$THEME' not found in $CORTEX_DIR/agents/personalities/${NC}"
         echo "   Available themes:"
-        ls -1 "$CORTEX_DIR/agents/personalities/" | grep -v README.md | sed 's/^/     - /'
+        # A glob rather than `ls | grep`: a theme directory may carry any character, and
+        # only directories are themes (README.md sits alongside them).
+        for theme_dir in "$CORTEX_DIR/agents/personalities/"*/; do
+            [ -d "$theme_dir" ] || continue
+            theme_name=$(basename "$theme_dir")
+            echo "     - $theme_name"
+        done
         exit 1
     fi
     echo -e "${GREEN}✅${NC} Personality theme: ${BLUE}$THEME${NC}"
