@@ -253,7 +253,13 @@ if [ "$WORKSPACE_MODE" = true ]; then
     echo -e "${BLUE}ℹ️  Workspace mode — initialising services${NC}"
     echo "   Enter the names of the services to create (empty entry to stop):"
     while true; do
-        read -p "   Service name (e.g. api-backend, front-web): " SERVICE_NAME
+        # `read` returns non-zero on EOF, which under `set -e` used to kill the whole run:
+        # `--workspace` could not be executed unattended at all (CI, provisioning script,
+        # Dockerfile). EOF means the same thing as an empty entry — no more services.
+        if ! read -rp "   Service name (e.g. api-backend, front-web): " SERVICE_NAME; then
+            echo
+            break
+        fi
         if [ -z "$SERVICE_NAME" ]; then
             break
         fi

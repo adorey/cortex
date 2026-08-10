@@ -84,7 +84,9 @@ jobs:
             git clone -q "$GITHUB_WORKSPACE/cortex-src" cortex
           fi
 
-          ./cortex/setup.sh --tool claude ${{ matrix.workspace_flag }}
+          # No stdin on purpose: setup.sh must be runnable unattended, and this is the
+          # regression guard for it.
+          ./cortex/setup.sh --tool claude ${{ matrix.workspace_flag }} < /dev/null
 
       - name: The bootstrap file must exist and point at cortex
         run: |
