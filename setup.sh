@@ -113,7 +113,13 @@ if [ "$NO_PERSONALITY" = false ]; then
     if [ ! -d "$THEME_DIR" ]; then
         echo -e "${RED}❌ Theme '$THEME' not found in $CORTEX_DIR/agents/personalities/${NC}"
         echo "   Available themes:"
-        ls -1 "$CORTEX_DIR/agents/personalities/" | grep -v README.md | sed 's/^/     - /'
+        # A glob rather than `ls | grep`: a theme directory may carry any character, and
+        # only directories are themes (README.md sits alongside them).
+        for theme_dir in "$CORTEX_DIR/agents/personalities/"*/; do
+            [ -d "$theme_dir" ] || continue
+            theme_name=$(basename "$theme_dir")
+            echo "     - $theme_name"
+        done
         exit 1
     fi
     echo -e "${GREEN}✅${NC} Personality theme: ${BLUE}$THEME${NC}"
@@ -247,7 +253,13 @@ if [ "$WORKSPACE_MODE" = true ]; then
     echo -e "${BLUE}ℹ️  Workspace mode — initialising services${NC}"
     echo "   Enter the names of the services to create (empty entry to stop):"
     while true; do
-        read -p "   Service name (e.g. api-backend, front-web): " SERVICE_NAME
+        # `read` returns non-zero on EOF, which under `set -e` used to kill the whole run:
+        # `--workspace` could not be executed unattended at all (CI, provisioning script,
+        # Dockerfile). EOF means the same thing as an empty entry — no more services.
+        if ! read -rp "   Service name (e.g. api-backend, front-web): " SERVICE_NAME; then
+            echo
+            break
+        fi
         if [ -z "$SERVICE_NAME" ]; then
             break
         fi

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-20 (proposed) · 2026-07-20 (accepted)
-- **Authors:** Cortex maintainers (initiated by Aurélien Dorey, drafted by @Oolon)
+- **Authors:** Cortex maintainers (initiated by the maintainer, drafted by @Oolon)
 - **Affects:** One new, optional file pair under `{workspace_root}/agents/` (`project-overview.md` / `project-context.md`, team-shared), [`agents/roles/prompt-manager.md`](../../agents/roles/prompt-manager.md) (context aggregation), `templates/bootstrap-instructions-workspace.md`, `setup.sh` (`--workspace` scaffolding), `docs/getting-started.md`, `docs/extending-layers.md`
 - **Relates to:** [ADR-001](ADR-001-layered-overrides.md) — this ADR deliberately does **not** reuse its cascade merge semantic (most-specific-tier-wins). See §2 for why.
 

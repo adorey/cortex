@@ -1,0 +1,19 @@
+# Line endings are normalised to LF in the repository, whatever the contributor's OS.
+#
+# Cortex is mostly Markdown that an LLM reads and shell that a host project runs. A file
+# that flips to CRLF on someone's editor produces whole-file diffs on lines nobody touched,
+# and `setup.sh` copying a CRLF template into a host project is a real failure mode.
+* text=auto eol=lf
+
+# Shell must keep LF endings even when checked out on Windows: CRLF breaks the shebang.
+*.sh text eol=lf
+
+# Binary assets must never be touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary

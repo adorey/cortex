@@ -66,7 +66,7 @@ Starlight provides native i18n with a routing-based approach — no third-party 
 starlight({
   defaultLocale: 'fr',
   locales: {
-    fr: { label: 'Français', lang: 'fr' },
+    fr: { label: 'Français', lang: 'fr' }, // english-check:ignore: language label in an i18n example
     en: { label: 'English', lang: 'en' },
   },
 })
