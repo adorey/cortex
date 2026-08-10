@@ -1,0 +1,105 @@
+name: repo checks
+
+# The runtime has its own workflow. This one guards the framework layer — the Markdown an
+# LLM reads and the shell a host project runs — which had no automated check at all.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: repo-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  language:
+    name: English-only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Invoked through `bash` on purpose: a lost executable bit is silent on a filesystem
+      # where core.fileMode is false, and would only fail here.
+      - name: Check that tracked content is in English
+        run: bash bin/check-english.sh
+
+      - name: Shell scripts must be executable in git
+        run: |
+          not_executable=$(git ls-files -s -- '*.sh' | awk '$1 != "100755" { print $4 }')
+          if [ -n "$not_executable" ]; then
+            echo "Missing the executable bit in the index (git update-index --chmod=+x <file>):"
+            echo "$not_executable"
+            exit 1
+          fi
+          echo "✓ every tracked shell script is executable"
+
+  shell:
+    name: Shell lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # setup.sh writes files into someone else's project. A quoting mistake there is not a
+      # style issue.
+      - name: shellcheck
+        run: shellcheck --severity=warning setup.sh bin/*.sh
+
+  scaffold:
+    name: Scaffold a host project (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: submodule
+            workspace_flag: ''
+          - mode: workspace
+            workspace_flag: '--workspace'
+
+    # This is the test loop CONTRIBUTING.md asks contributors to run by hand, automated.
+    # The two modes exercise different code paths in setup.sh — submodule + single project
+    # versus standalone clone + workspace — and a change that works in one has already
+    # broken the other.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cortex-src
+
+      - name: Scaffold a throwaway host project
+        run: |
+          set -euo pipefail
+          git config --global user.email ci@example.com
+          git config --global user.name "CI"
+          git config --global protocol.file.allow always
+
+          mkdir -p /tmp/host && cd /tmp/host
+
+          if [ "${{ matrix.mode }}" = "submodule" ]; then
+            git init -q .
+            git submodule add -q "$GITHUB_WORKSPACE/cortex-src" cortex
+          else
+            git clone -q "$GITHUB_WORKSPACE/cortex-src" cortex
+          fi
+
+          ./cortex/setup.sh --tool claude ${{ matrix.workspace_flag }}
+
+      - name: The bootstrap file must exist and point at cortex
+        run: |
+          set -euo pipefail
+          cd /tmp/host
+          test -f CLAUDE.md || { echo "CLAUDE.md was not generated"; exit 1; }
+          grep -q "cortex/agents" CLAUDE.md || {
+            echo "CLAUDE.md does not reference cortex/agents — the cascade would resolve nowhere:"
+            cat CLAUDE.md
+            exit 1
+          }
+          echo "✓ bootstrap generated"
+
+      - name: Overlay integrity in the scaffolded project
+        run: |
+          set -euo pipefail
+          cd /tmp/host
+          ./cortex/bin/validate-overlays.sh --strict
