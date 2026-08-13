@@ -357,6 +357,65 @@ single-entity proxy N+1, because it scales with the parent's whole history.
   cannot be parallelised safely and strands rows on failure — use
   `FOR UPDATE SKIP LOCKED` / an atomic claiming `UPDATE`, with a TTL reclaim.
 
+## 🔐 Security traps that pass every gate
+
+Five that are invisible to PHPStan, to a green test suite, and to review — each cost real time on a real
+project before being understood.
+
+### `QueryBuilder::where()` **replaces** the whole WHERE clause
+
+```php
+// ❌ the bound is silently discarded by the next call
+$qb = $this->createQueryBuilder('m');
+$this->applyTenantBound($qb, $scope);          // andWhere(...)
+$qb->where('m.date BETWEEN :from AND :to');    // ← wipes it
+
+// ✅ apply the bound last
+$qb = $this->createQueryBuilder('m')->where('m.date BETWEEN :from AND :to');
+$this->applyTenantBound($qb, $scope);
+```
+
+Every caller then sees every row while the code reads as if it were filtering. **A row-level test cannot
+catch it**: with the bound wiped, the rows returned are exactly what the unbounded query returns — which
+is what the pre-existing tests expected. Assert on `$qb->getDQL()`, and keep a case that reproduces the
+broken order deliberately.
+
+### `InvalidCsrfTokenException` extends `AuthenticationException`
+
+So a failed CSRF check answers **302 to the login entry point**, not 403. For a `fetch()` that is the worst
+possible answer: the browser follows the redirect, receives HTML with status 200, and the calling code
+reports success for an action that never happened. Convert it in a `kernel.exception` listener at a
+priority above the firewall's (which is 1), and `stopPropagation()`.
+
+### `#[Autowire(env: 'FOO')]` ignores the PHP default
+
+```php
+public function __construct(
+    #[Autowire(env: 'FEATURE_ENABLED')]
+    private bool $enabled = false,   // ← never used
+) {}
+```
+
+An undeclared variable is a 500 at runtime, not a fallback to `false`. Declare every variable, including
+those whose feature is off.
+
+### A password hash reaches the session unless you stop it
+
+A stateful firewall serializes the user into the session. If sessions live in Redis, so does the hash —
+crackable offline by anyone who reaches the cache. `__serialize()` may substitute a **crc32c** checksum,
+which is the only form `ContextListener::hasUserChanged()` accepts in place of a hash.
+
+⚠️ Implementing `EquatableInterface` **replaces** that built-in comparison. `isEqualTo()` must then
+re-implement the checksum tolerance, or every request logs the user straight back out. It is also the only
+hook that makes a revoked role or a disabled account take effect on the **next request** rather than at the
+next sign-in — `UserCheckerInterface` only runs when an authenticator authenticates.
+
+### Resolving credential fallbacks in a fixed order
+
+Trying `PRIMARY_TOKEN` then `SECONDARY_TOKEN` breaks the moment both hold the same value — which committed
+`.env` placeholders routinely do. The first match wins and grants the wrong role, and the symptom appears
+far from the cause. Resolve such fallbacks **per channel or per purpose**, never by sequence.
+
 ## 🚫 Symfony anti-patterns
 
 ```php
@@ -400,4 +459,7 @@ private string $password; // DANGER
 - [ ] Bulk loops: set the owning side, never `parent->addChild()` (collection `contains()` hydrates the whole association)
 - [ ] `getReference()` fed the typed identifier (not the raw DB form `find()` tolerates)
 - [ ] Perf profiling done on a base rebased on prod/master (stale base ⇒ false bottlenecks)
+- [ ] Query bounds applied **after** the builder's own `where()`, and asserted on the generated DQL
+- [ ] CSRF failures converted to 403 rather than left to redirect to the login page
+- [ ] Every `#[Autowire(env:)]` variable declared, including the ones whose feature is disabled
 ```
