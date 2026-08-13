@@ -104,6 +104,29 @@ Assert  → Verify the expected result
 - [ ] Edge case tests (empty, error, edge cases)
 - [ ] Accessibility tests (if frontend)
 
+## 🪤 A test can pass for the wrong reason
+
+The failure mode that makes a suite worse than no suite: green assertions that never exercised the thing
+they name. Three ways it happens, all observed on real work:
+
+- **The guard refused for a different reason.** A CSRF token below the framework's minimum length made
+  every "the guard refuses this" case pass while the guard itself never ran. Caught only because one case
+  expected a *success* and failed.
+- **The fix was never needed.** A test written for a suspected hole passed before the fix, because a
+  distant function already filtered the input. The suspicion was wrong, and the test proved nothing about
+  the code that was then written anyway.
+- **A filter that removes everything looks like a filter that works.** "The other tenant's row is absent"
+  is satisfied by a query that returns nothing at all.
+
+Three habits that close them:
+
+1. **Run a new test against the unfixed code and watch it fail.** A test that cannot fail proves nothing.
+   If it cannot be made to fail, the premise is wrong — say so rather than keeping the test as reassurance.
+2. **Pair every negative assertion with a positive control.** Assert the other tenant is absent *and* that
+   the caller's own data is present, and strictly smaller than the unrestricted view.
+3. **Assert on the mechanism when the output is identical either way.** Where a broken filter and a working
+   one return the same rows, assert on the generated query rather than on the rows.
+
 ## � Anti-patterns
 
 ```
