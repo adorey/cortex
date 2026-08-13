@@ -217,6 +217,43 @@ final class OrderVoter extends Voter
 }
 ```
 
+### Translated error responses — never hardcoded, never a raw throw
+
+A front-facing API route returns a **translated error response** — not a hardcoded string, not a bare throw. Make the exception message a **translation key** and let a central `kernel.exception` listener resolve it (the throwing code never injects the translator), so every error has **one consistent, translated, correctly-statused** response shape.
+
+```php
+// ❌ hardcoded + untranslatable — leaks a raw sentence, English-only
+throw new NotFoundHttpException('Document not found.');
+return new JsonResponse(['error' => 'Forbidden'], 403);
+
+// ✅ throw a *translatable* HTTP exception (message = translation key, status carried)
+//    → the central listener swaps it for an HttpException with the translated message.
+if (!$this->isGranted(SomeVoter::READ, $subject)) {
+    throw new TranslatableAccessDeniedHttpException('exception.document.forbidden', [], 'billing');
+}
+$document = $repository->find($id)
+    ?? throw new TranslatableNotFoundHttpException('exception.document.not_found', [], 'billing');
+```
+
+```php
+// The reusable translatable HTTP exception (403/404/…): status-carrying + key-carrying.
+final class TranslatableNotFoundHttpException extends NotFoundHttpException implements TranslatableExceptionInterface
+{
+    public function __construct(
+        private readonly string $translationKey,
+        private readonly array $translationParameters = [],
+        private readonly string $translationDomain = 'messages',
+    ) {
+        parent::__construct($translationKey);
+    }
+    public function getTranslationKey(): string { return $this->translationKey; }
+    public function getTranslationParameters(): array { return $this->translationParameters; }
+    public function getTranslationDomain(): string { return $this->translationDomain; }
+}
+```
+
+Prefer `isGranted(...)` + a translatable 403 over `denyAccessUnlessGranted(...)` (whose message isn't translated). Keys live in the i18n backend (never inline in a translation file edited by hand).
+
 ### Messenger for async processing
 
 ```php
