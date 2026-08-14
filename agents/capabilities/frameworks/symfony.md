@@ -278,6 +278,65 @@ final class SendNotificationHandler
 
 ---
 
+## 🧪 End-to-end & functional testing
+
+The framework-agnostic principles live in `testing/e2e-testing.md`; this is how they land in Symfony.
+
+### Drive the real dispatch in-process
+
+Boot the real container with `KernelTestCase` / `WebTestCase`, then run the actual pipeline — don't mock
+the seam under test. Two ways to run a message-driven flow inline, inside the test transaction:
+
+```yaml
+# config/packages/test/messenger.yaml — run the whole chain synchronously in the test
+framework:
+  messenger:
+    transports:
+      my_bus: 'sync://'
+```
+
+```php
+// …or invoke the handler directly and assert on what it persisted / produced
+($container->get(EmitFlowsHandler::class))(new EmitFlows($batchId));
+```
+
+### Isolate with a transactional rollback, parallelise per worker
+
+`DAMADoctrineTestBundle` wraps each test in a transaction rolled back at the end — no teardown, no drift:
+
+```yaml
+# config/packages/test/dama_doctrine_test_bundle.yaml
+dama_doctrine_test_bundle:
+  enable_static_connection: true
+```
+
+For `paratest`, give **each worker its own database** so they never contend:
+
+```yaml
+# config/packages/test/doctrine.yaml
+doctrine:
+  dbal:
+    dbname_suffix: '_test%env(default::TEST_TOKEN)%'   # paratest sets TEST_TOKEN per worker
+```
+
+Prefer **on-demand / factory fixtures** (`doctrine/data-fixtures` + `liip/test-fixtures`, or a project
+fixture facade) over one giant global fixture set: build only the graph the test needs, parameterised.
+
+### Symfony-specific traps an E2E is the first to hit
+
+- **A real env var overrides `.env.*` *and* the secrets vault.** Symfony's Dotenv never overrides an
+  already-set real variable, and real variables outrank the secrets vault. An empty exported `MY_KEY`
+  silently defeats both `.env.test` and `bin/console secrets:set`. Pin the deterministic test value **in
+  the test target** (`docker compose exec -e MY_KEY=… ` / the Make target), where it beats the ambient env.
+- **Entities outside a mapped namespace are invisible until runtime.** A class under a namespace not
+  covered by `doctrine.orm.mappings` has *no* entity manager — `getRepository()` throws only when that
+  path executes. PHPStan and a green unit suite won't see it; the E2E will. Register every entity
+  namespace explicitly, and treat the fix as production config, not test scaffolding.
+- **Snappy/wkhtmltopdf and other external binaries** must exist in the test image, or a PDF/asset stage
+  throws mid-pipeline. Assert the artifact is produced, not just that no exception surfaced.
+
+---
+
 ## 🚀 Doctrine & batch-ingestion performance
 
 Lessons that scale (framework-agnostic in spirit, Doctrine-flavoured here):
@@ -462,4 +521,7 @@ private string $password; // DANGER
 - [ ] Query bounds applied **after** the builder's own `where()`, and asserted on the generated DQL
 - [ ] CSRF failures converted to 403 rather than left to redirect to the login page
 - [ ] Every `#[Autowire(env:)]` variable declared, including the ones whose feature is disabled
+- [ ] E2E drives the real dispatch (`sync://` / direct handler) in a DAMA-wrapped transaction, paratest per-worker DB
+- [ ] Deterministic test secrets pinned in the test target (a real env var overrides `.env.*` and the vault)
+- [ ] Every entity namespace registered in `doctrine.orm.mappings` (unmapped = no EM, fails only at runtime)
 ```
