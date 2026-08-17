@@ -152,4 +152,5 @@ Storybook       : {Component}.stories.{ext}
 
 **Categories to load:**- `languages/` → load the project’s frontend language (TypeScript)
 - `frameworks/` → load the project's frontend framework (+ `frameworks/starlight.md` when the project uses Starlight)
+- `testing/` → `component-testing.md` (+ `e2e-testing.md` for browser journeys) — the frontend test pyramid
 - `security/` → always load `security/owasp.md`

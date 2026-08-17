@@ -65,6 +65,25 @@ strings, feature flags. Two recurring traps:
   execute that path. When an E2E surfaces such a gap, the fix belongs in the **runtime config**, and the
   E2E is what will keep it fixed.
 
+## 🖥️ Browser/UI E2E adds…
+
+The principles above are transport-agnostic (they hold for a pipeline E2E just as much as a browser one).
+Driving a **real browser** through the built app layers on a few extra rules — the concrete runner lives in
+the stack's `frameworks/` card:
+
+- **Select by the accessibility tree, not by markup.** `getByRole` / `getByLabel` / text — the way a user
+  finds things. Deep CSS chains and framework-internal selectors are brittle and break on every restyle.
+- **Authenticate once, reuse the session.** Log in in a `setup` project, save the **storage state**, and
+  have every spec start authenticated — don't script the login inside each test.
+- **A journey per test, page objects behind it.** A spec reads as steps ("open batch → download ZIP"); the
+  selectors and actions live in a page object. No selector soup in specs.
+- **Make it deterministic.** Wait on app-ready signals (loader gone, element visible), never on sleeps.
+  Pin the clock/data where you can; on retry, capture a **trace + screenshot** so a CI flake is diagnosable.
+- **Own the critical journeys, not every screen.** Component tests cover the per-component states
+  (`component-testing.md`); UI E2E proves the handful of end-to-end paths that must never break.
+- **Wire it into CI as its own job.** Browser E2E is slower and flakier than unit/component runs — give it a
+  dedicated, retryable job (nightly or gating once stable) so it never silently sits disabled.
+
 ## ✅ Checklist
 
 ```
