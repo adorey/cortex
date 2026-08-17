@@ -50,6 +50,7 @@ A role does **NOT** contain:
 |---------|------|---------|
 | `security-engineer.md` | Security Engineer (CISO) | Application, infra, data security |
 | `compliance-officer.md` | Compliance Officer | GDPR, compliance, ethics |
+| `regulatory-compliance-writer.md` | Regulatory Compliance Writer | Contractual annexes, regulatory plans, audit responses |
 
 ### `data/` — Data & analytics
 
