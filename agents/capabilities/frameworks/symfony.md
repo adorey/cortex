@@ -418,7 +418,7 @@ single-entity proxy N+1, because it scales with the parent's whole history.
 
 ## 🔐 Security traps that pass every gate
 
-Five that are invisible to PHPStan, to a green test suite, and to review — each cost real time on a real
+Eight that are invisible to PHPStan, to a green test suite, and to review — each cost real time on a real
 project before being understood.
 
 ### `QueryBuilder::where()` **replaces** the whole WHERE clause
@@ -474,6 +474,51 @@ next sign-in — `UserCheckerInterface` only runs when an authenticator authenti
 Trying `PRIMARY_TOKEN` then `SECONDARY_TOKEN` breaks the moment both hold the same value — which committed
 `.env` placeholders routinely do. The first match wins and grants the wrong role, and the symptom appears
 far from the cause. Resolve such fallbacks **per channel or per purpose**, never by sequence.
+
+### A nullable identity that can be absent in two ways will be read as present
+
+A per-user data perimeter resolves through an identifier — an email, an external account id — and the check
+is invariably `null === $identity`. An **empty string** then reads as a usable identity: the query matches
+no row, and the interface reports "no activity" for somebody whose mapping is merely missing. The two are
+indistinguishable to the reader and point at opposite fixes.
+
+```php
+public function setJiraAccountId(?string $value): static
+{
+    $trimmed = null !== $value ? trim($value) : null;
+    $this->jiraAccountId = '' !== $trimmed ? $trimmed : null;   // absent has one representation
+
+    return $this;
+}
+```
+
+A hand-written `UPDATE … SET email = '$VAR'` with an empty shell variable is how this arrives in practice —
+so normalise in the setter rather than trusting every write path.
+
+### A cache key must move when anything that changes visibility changes
+
+Caching a computed result per viewer with a key built from the **user id** is not enough. Correct that
+user's mapping — the external account their perimeter resolves through — and the id has not changed, so the
+entry computed under the *previous* mapping keeps being served until the TTL expires: someone else's data,
+with the fix apparently applied.
+
+Include a checksum of the resolved identities in the key, not just the identity of the caller. Then a
+changed mapping is a changed key and the stale entry is simply unreachable. Use a hash rather than the
+values: a cache key is written to Redis in the clear and has no business carrying an email address.
+
+### With `kernel.debug` on, your error templates are never rendered
+
+Symfony shows the exception page instead of `templates/bundles/TwigBundle/Exception/*` — including the
+message, which for an access denial reads *"The user doesn't have ROLE_X"*. A functional test asserting on
+a custom error page therefore passes identically **with no error templates at all**:
+
+```php
+$client = static::createClient(['debug' => false]);   // ← required for the assertion to mean anything
+```
+
+Worth pairing with the rule that an error template should **not extend the main layout**: a layout that
+calls `is_granted()`, `path()` or `app.user` can throw while the error page renders, and Symfony then
+reports a recursive error — a blank 500 in place of the refusal.
 
 ## 🚫 Symfony anti-patterns
 
