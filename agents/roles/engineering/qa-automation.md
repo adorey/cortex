@@ -158,6 +158,7 @@ Test dirs       : tests/Unit/, tests/Integration/, tests/E2E/
      by cross-referencing with the stack declared in `project-context.md` -->
 
 **Categories to load:**
+- `testing/` → Cross-cutting testing craft: `component-testing` (middle rung) + `e2e-testing` (top rung) of the pyramid
 - `languages/` → Project language(s) (for associated testing tools)
 - `frameworks/` → Project framework(s) (for framework-specific test patterns)
 
