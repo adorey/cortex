@@ -7,7 +7,7 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-08-17 — End to End
+## [0.7.0] - 2026-08-18 — End to End _(Released)_
 [Full notes](changelog/0.7.0.md)
 
 ### Added
