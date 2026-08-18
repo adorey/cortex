@@ -262,10 +262,10 @@ Cortex follows **semantic versioning** with a pragmatic interpretation:
 Release process (maintainers only):
 
 1. All target changes merged to `main`
-2. Add `cortex/changelog/{version}.md` summarizing user-visible changes
-3. Tag the commit: `git tag -a v0.2.0 -m "Layered overrides + validation tooling"`
-4. Push the tag: `git push origin v0.2.0`
-5. Update the README "Latest release" link
+2. Add `changelog/{version}.md` with the detailed, narrated release note
+3. Add the `{version}` section to the root **[`CHANGELOG.md`](CHANGELOG.md)** (Keep a Changelog), linking to that note — this is the single source of truth for versions; **no version number lives anywhere else** (README, docs, …) to avoid stale copies
+4. Tag the commit: `git tag -a v{version} -m "<summary>"`
+5. Push the tag: `git push origin v{version}`
 
 ## 🧪 Testing checklist before opening a PR
 
