@@ -81,6 +81,14 @@ per-component states.
 - **Tooling flips with the version**: Vue 2/webpack → Jest; Vue 3/Vite → Vitest. Written against Testing
   Library + MSW, the *tests* survive the runner swap; the config doesn't.
 
+## 💬 Comments in components
+
+> **What** earns a comment at all is in `practices/code-comments.md`. Below, the Vue specifics only.
+
+- Document the **non-obvious props/emits** — unit, accepted shape, side effect. Not the trivial ones.
+- A **template** comment explains **why a branch exists** (a `v-if` on a business condition, an SSR
+  workaround) — never what the markup below renders.
+
 ## 🚫 Anti-patterns
 
 ```
@@ -102,4 +110,5 @@ per-component states.
 - [ ] Component tests: Vitest (v3) / Jest+vue-jest (v2), Testing Library + user-event, MSW at the boundary, axe
 - [ ] E2E (Playwright) for critical journeys only — see testing/e2e-testing.md
 - [ ] New code forward-compatible for Vue 3 (no filters/.sync/mixins/event bus)
+- [ ] Non-obvious props/emits documented; template comments explain a branch, not the markup
 ```
