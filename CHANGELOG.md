@@ -7,6 +7,21 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-26 — Marginalia
+[Full notes](changelog/0.8.0.md)
+
+### Added
+- `practices/` capability category, opening with `code-comments` — comment the *why*, descriptive not narrative, density under the project's rule. Declared `always load` by `lead-backend`, `lead-frontend`, `architect` and `qa-automation`.
+
+### Changed
+- `languages/php`, `languages/typescript` and `frameworks/vue` gain a doc-block section covering their own mechanics only, pointing at the shared card; the orphan comment bullet in `lead-backend` now references it.
+- `templates/project-context.md.template` prompts for the project's own comment conventions (language, reference format).
+- The capability tree is refreshed in all three places that carry it — `README.md`, `agents/capabilities/README.md` and `docs/getting-started.md`; `agents/capabilities/README.md` also names the distinction between stack-resolved and unconditional categories.
+
+### Fixed
+- `lead-backend` declared no capability category at all, so the role loaded none — restored to `languages/`, `frameworks/`, `databases/`, `security/` and `practices/`.
+- `lead-frontend`'s capability list rendered as a single run-on line (lost newline after `**Categories to load:**`).
+
 ## [0.7.0] - 2026-08-18 — End to End _(Released)_
 [Full notes](changelog/0.7.0.md)
 

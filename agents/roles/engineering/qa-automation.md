@@ -161,6 +161,7 @@ Test dirs       : tests/Unit/, tests/Integration/, tests/E2E/
 - `testing/` → Cross-cutting testing craft: `component-testing` (middle rung) + `e2e-testing` (top rung) of the pyramid
 - `languages/` → Project language(s) (for associated testing tools)
 - `frameworks/` → Project framework(s) (for framework-specific test patterns)
+- `practices/` → always load `practices/code-comments.md` — the why, not the what; descriptive, not narrative
 
 ## 🔗 Interactions
 

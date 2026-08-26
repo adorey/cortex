@@ -153,3 +153,4 @@ ADR files       : ADR-{NNN}-{kebab-case-title}.md (e.g. ADR-001-event-driven-mod
 - `databases/` → load the project’s DBMS
 - `infrastructure/` → load relevant infra (Docker, Kubernetes)
 - `security/` → always load `security/owasp.md`
+- `practices/` → always load `practices/code-comments.md` — the why, not the what; descriptive, not narrative
