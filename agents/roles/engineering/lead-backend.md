@@ -159,4 +159,4 @@ Migrations      : version-prefixed, descriptive (per framework convention)
 - `frameworks/` → load the project's backend framework
 - `databases/` → load the project's DBMS
 - `security/` → always load `security/owasp.md`
-- `practices/` → always load `code-comments.md` — the why, not the what; descriptive, not narrative
+- `practices/` → always load `practices/code-comments.md` — the why, not the what; descriptive, not narrative
