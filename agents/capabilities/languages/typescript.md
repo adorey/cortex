@@ -178,6 +178,16 @@ function divide(a: number, b: number): Result<number, string> {
 
 ---
 
+## 💬 Doc blocks
+
+> **What** earns a comment at all is in `practices/code-comments.md`. Below, the TypeScript mechanics only.
+
+- **The type is the documentation.** A TSDoc block that restates the signature is dead weight.
+- TSDoc (`/** … */`) earns its place on **exported** API: the unit of a number, an invariant a branded
+  type cannot express, `@throws`, a non-obvious `@example`.
+- Every `as any`, non-null `!` and `eslint-disable-*` carries its reason inline — that comment must exist.
+- `@deprecated` names the replacement, not just the fact.
+
 ## 🚫 Anti-patterns
 
 ### NEVER do this
@@ -242,4 +252,5 @@ export let config = { /* ... */ }; // use export const
 - [ ] No non-null assertion (!) unless proven
 - [ ] ESLint + Prettier configured
 - [ ] tsc --noEmit in CI
+- [ ] TSDoc only where the type can't say it; every any/!/eslint-disable carries its reason
 ```

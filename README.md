@@ -120,6 +120,7 @@ cortex/
 │   │   ├── frameworks/                # symfony
 │   │   ├── infrastructure/            # docker, kubernetes
 │   │   ├── databases/                 # mysql, postgresql, mongodb
+│   │   ├── practices/                 # code-comments
 │   │   └── security/                  # owasp
 │   │
 │   ├── personalities/                 # Layer 3: Personality themes

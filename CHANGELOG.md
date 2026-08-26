@@ -7,6 +7,13 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+- `practices/` capability category, opening with `code-comments` — comment the *why*, descriptive not narrative, density under the project's rule. Declared `always load` by `lead-backend`, `lead-frontend`, `architect` and `qa-automation`.
+
+### Changed
+- `languages/php`, `languages/typescript` and `frameworks/vue` gain a doc-block section covering their own mechanics only, pointing at the shared card; the orphan comment bullet in `lead-backend` now references it.
+- `templates/project-context.md.template` prompts for the project's own comment conventions (language, reference format).
+
 ## [0.7.0] - 2026-08-18 — End to End _(Released)_
 [Full notes](changelog/0.7.0.md)
 

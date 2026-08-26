@@ -201,6 +201,16 @@ $label = match($status) {
 
 ---
 
+## 💬 Doc blocks
+
+> **What** earns a comment at all is in `practices/code-comments.md`. Below, the PHP mechanics only.
+
+- **PHPDoc only where the typed signature cannot say it**: collection value types
+  (`@param Foo[] $bar`, `@return array<string, Foo>`), `@throws`, generics PHPStan actually consumes.
+  Never restate what `declare(strict_types=1)` and the signature already guarantee.
+- **Standard `/** … */` block** for a class/method doc — never `/* */`, never a run of `//`.
+- PSR-1/2/12 formatting applies to comment blocks too (spacing, alignment); the CS fixer enforces it.
+
 ## 🚫 Anti-patterns
 
 ### NEVER do this
@@ -273,4 +283,5 @@ class UserService
 - [ ] No static except constants/factories
 - [ ] PHPStan level 8+ (or max)
 - [ ] PSR-12 / PER-CS respected
+- [ ] PHPDoc only where the signature can't say it (collections, @throws, generics)
 ```
