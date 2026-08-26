@@ -49,6 +49,7 @@ project/
 - **Naming conventions:** <!-- e.g. camelCase variables, PascalCase classes -->
 - **Standards:** <!-- e.g. PSR-12, Conventional Commits (optionally + gitmoji), Semantic Versioning -->
 - **Code review:** <!-- e.g. 1 approval required, feature branches only -->
+- **Comments:** <!-- language they are written in, reference format (ticket / ADR) — doctrine: cortex/agents/capabilities/practices/code-comments.md -->
 
 ## 🛠️ Development tools
 

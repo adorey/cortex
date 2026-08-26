@@ -62,7 +62,7 @@ no mixed when a precise type is possible.
 ```
 - Name methods explicitly (verb + object)
 - Prefer small single-responsibility functions
-- Comments explain the "why", not the "what"
+- Comments: the why only (see practices/code-comments.md)
 ```
 
 ### 3. No N+1 queries
@@ -153,3 +153,10 @@ Migrations      : version-prefixed, descriptive (per framework convention)
 
 <!-- The Prompt Manager loads matching files from `cortex/agents/capabilities/`
      by cross-referencing with the stack declared in `project-context.md` -->
+
+**Categories to load:**
+- `languages/` → load the project's backend language
+- `frameworks/` → load the project's backend framework
+- `databases/` → load the project's DBMS
+- `security/` → always load `security/owasp.md`
+- `practices/` → always load `practices/code-comments.md` — the why, not the what; descriptive, not narrative

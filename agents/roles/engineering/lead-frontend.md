@@ -150,7 +150,9 @@ Storybook       : {Component}.stories.{ext}
 <!-- The Prompt Manager loads matching files from `cortex/agents/capabilities/`
      by cross-referencing with the stack declared in `project-context.md` -->
 
-**Categories to load:**- `languages/` → load the project’s frontend language (TypeScript)
+**Categories to load:**
+- `languages/` → load the project’s frontend language (TypeScript)
 - `frameworks/` → load the project's frontend framework (+ `frameworks/starlight.md` when the project uses Starlight)
 - `testing/` → `component-testing.md` (+ `e2e-testing.md` for browser journeys) — the frontend test pyramid
 - `security/` → always load `security/owasp.md`
+- `practices/` → always load `practices/code-comments.md` — the why, not the what; descriptive, not narrative
