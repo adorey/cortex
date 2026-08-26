@@ -117,9 +117,11 @@ cortex/
 │   │
 │   ├── capabilities/                  # Layer 2: Loadable technical skills
 │   │   ├── languages/                 # php, typescript
-│   │   ├── frameworks/                # symfony
+│   │   ├── frameworks/                # symfony, vue, starlight
 │   │   ├── infrastructure/            # docker, kubernetes
 │   │   ├── databases/                 # mysql, postgresql, mongodb
+│   │   ├── search/                    # opensearch
+│   │   ├── testing/                   # component-testing, e2e-testing
 │   │   ├── practices/                 # code-comments
 │   │   └── security/                  # owasp
 │   │
