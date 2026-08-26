@@ -155,4 +155,8 @@ Migrations      : version-prefixed, descriptive (per framework convention)
      by cross-referencing with the stack declared in `project-context.md` -->
 
 **Categories to load:**
+- `languages/` → load the project's backend language
+- `frameworks/` → load the project's backend framework
+- `databases/` → load the project's DBMS
+- `security/` → always load `security/owasp.md`
 - `practices/` → always load `code-comments.md` — the why, not the what; descriptive, not narrative
