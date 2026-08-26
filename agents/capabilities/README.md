@@ -28,12 +28,23 @@ capabilities/
 │   └── ...
 ├── frameworks/
 │   ├── symfony.md            # Symfony best practices
+│   ├── vue.md                # Vue / Nuxt best practices
+│   ├── starlight.md          # Starlight documentation sites
 │   └── ...
 ├── infrastructure/
 │   ├── docker.md             # Docker best practices
 │   └── kubernetes.md         # Kubernetes best practices
 ├── databases/
-│   └── mysql.md              # MySQL best practices
+│   ├── mysql.md              # MySQL best practices
+│   ├── postgresql.md         # PostgreSQL best practices
+│   └── mongodb.md            # MongoDB best practices
+├── search/
+│   └── opensearch.md         # OpenSearch best practices
+├── testing/
+│   ├── component-testing.md  # Component tests (middle rung)
+│   └── e2e-testing.md        # End-to-end tests (top rung)
+├── practices/
+│   └── code-comments.md      # Comment discipline (stack-agnostic craft)
 └── security/
     └── owasp.md              # OWASP Top 10 & best practices
 ```
@@ -50,7 +61,12 @@ Each technical role has a `## 🔌 Capabilities` section listing the categories 
 - `frameworks/` → load the project's backend framework
 - `databases/` → load the project's DBMS
 - `security/` → always load `security/owasp.md`
+- `practices/` → always load `practices/code-comments.md`
 ```
+
+Two kinds of category coexist here: those resolved **against the project's stack** (`languages/`,
+`frameworks/`, `databases/`…) and those loaded **unconditionally** (`security/`, `practices/`) because
+the craft they carry is true whatever the stack.
 
 ### 2. The Prompt Manager resolves the files
 
@@ -58,7 +74,7 @@ When a role is activated, the PM reads its `🔌 Capabilities` section, cross-re
 
 **Example** — PHP/Symfony/MySQL project, `lead-backend` role:
 ```
-Role declares : languages/, frameworks/, databases/, security/
+Role declares : languages/, frameworks/, databases/, security/, practices/
 project-context.md declares : PHP 8.3, Symfony 7.2, MySQL 8
 
 PM loads:
@@ -66,6 +82,7 @@ PM loads:
   capabilities/frameworks/symfony.md
   capabilities/databases/mysql.md
   capabilities/security/owasp.md
+  capabilities/practices/code-comments.md
 ```
 
 **Example** — Role needing search capabilities (project uses OpenSearch):

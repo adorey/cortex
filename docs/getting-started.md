@@ -284,10 +284,14 @@ Capabilities live in `cortex/agents/capabilities/`. To add a *new* capability to
 
 ```
 cortex/agents/capabilities/
-├── languages/    php.md, typescript.md
-├── frameworks/   symfony.md
-├── databases/    mysql.md
-└── security/     owasp.md
+├── languages/       php.md, typescript.md
+├── frameworks/      symfony.md, vue.md, starlight.md
+├── infrastructure/  docker.md, kubernetes.md
+├── databases/       mysql.md, postgresql.md, mongodb.md
+├── search/          opensearch.md
+├── testing/         component-testing.md, e2e-testing.md
+├── practices/       code-comments.md
+└── security/        owasp.md
 ```
 
 Copy the format of an existing capability, then declare it in the `🔌 Capabilities` section of the relevant role. See [CONTRIBUTING.md](../CONTRIBUTING.md).
