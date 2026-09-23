@@ -1,17 +1,20 @@
 name: core tests
 
 # cortex-core is the one implementation of the cascade in code (ADR-007). It also reads the
-# spec itself — the self-hosting test resolves Cortex's own agents/ — so spec changes run it.
+# spec itself — the self-hosting test resolves Cortex's own agents/ — so spec changes run it,
+# and its captured validator outputs are pinned to bin/validate-overlays.sh.
 on:
   push:
     paths:
       - "core/**"
       - "agents/**"
+      - "bin/validate-overlays.sh"
       - ".github/workflows/core-tests.yml"
   pull_request:
     paths:
       - "core/**"
       - "agents/**"
+      - "bin/validate-overlays.sh"
       - ".github/workflows/core-tests.yml"
 
 jobs:
