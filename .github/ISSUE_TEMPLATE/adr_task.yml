@@ -1,0 +1,70 @@
+name: ADR task
+description: One testable task inside an ADR phase (maintainer workflow)
+title: "ADR-NNN PN — "
+labels: ["adr-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A **sub-issue** of an ADR phase. One task, one outcome, one criterion that can fail.
+        If it needs two criteria, it is two tasks.
+
+  - type: input
+    id: parent
+    attributes:
+      label: Parent phase issue
+      placeholder: "#41"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: >
+        Sets the `type:` label. spec, core and runtime mirror the ADR-002 firewall — a task
+        that needs two of them is usually two tasks.
+      options:
+        - spec — the Markdown cascade (roles, capabilities, personalities, workflows)
+        - core — cortex-core, the CLI, packaging and distribution
+        - runtime — the engine (API, agentic loop, stores, security gate)
+        - test — tests, fixtures, validators, test tooling
+        - security — hardening or a security finding
+        - perf — optimisation or a performance finding
+        - docs — documentation, ADR amendment, release note
+        - infra — Docker, CI, deployment, configuration
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What is true once this is done, in one or two sentences.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criterion
+      description: >
+        How it is proven. A command and its expected output, or the test that asserts it.
+        "It works" is not a criterion.
+    validations:
+      required: true
+
+  - type: input
+    id: area
+    attributes:
+      label: Files or area touched
+      description: Best guess — it helps spot two tasks that will conflict in the same stack.
+      placeholder: runtime/cortex_runtime/resolver.py, bin/validate-overlays.sh
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes and traps
+      description: >
+        Anything already known that would cost time twice — a stale base, an ordering
+        constraint, a file two phases both need.
