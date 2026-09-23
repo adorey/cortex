@@ -66,7 +66,16 @@ def resolve_layer(
     ]
     if service:
         candidates.append(root / service / "agents" / layer / file)  # service overlay
-    return [p for p in candidates if p.is_file()]
+
+    # When base_root == project_root the base and the workspace tier are one directory: a
+    # file found there is read once, never stacked onto itself (ADR-007 §3.1).
+    found: List[Path] = []
+    seen = set()
+    for path in candidates:
+        if path.is_file() and path.resolve() not in seen:
+            seen.add(path.resolve())
+            found.append(path)
+    return found
 
 
 # --------------------------------------------------------------------------- #
