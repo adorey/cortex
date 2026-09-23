@@ -45,7 +45,7 @@ after:   base    = {base_root}/agents/{layer}/{file}              # base_root de
          service = {project_root}/{service}/agents/{layer}/{file} # unchanged
 ```
 
-Setting `base_root = {project_root}` resolves a repository that is its own base — Cortex itself. Setting it to an installation directory is ADR-008's concern.
+Setting `base_root = {project_root}` resolves a repository that is its own base — Cortex itself. The base and the workspace tier are then **the same directory**: a file found there is read once, as the base, never stacked onto itself. Setting `base_root` to an installation directory is ADR-008's concern.
 
 ### 3.2 What cortex-core owns — and what it does not
 
@@ -97,7 +97,7 @@ Acceptance criteria:
 - the runtime test suite passes with no test modified — `test_parity.py` included
 - `docker build -f deploy/Dockerfile .` succeeds, and the container answers `GET /health`
 - a test fails when any `cortex_core` module imports `cortex_runtime`
-- resolving `roles/engineering/lead-backend.md` with `base_root` and `project_root` both set to the Cortex repository returns the repository's own file
+- resolving `roles/engineering/lead-backend.md` with `base_root` and `project_root` both set to the Cortex repository returns the repository's own file **once**, and its resolved content equals that file
 
 ### Phase 2 — The validator, at parity
 
