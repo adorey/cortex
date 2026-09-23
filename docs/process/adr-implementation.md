@@ -60,10 +60,15 @@ collapses one level at a time without manual edits.
 
 **Rules that keep a stack survivable:**
 
-- **Never squash-merge a pull request inside a stack.** Squashing rewrites the parent's commits,
-  so every branch above it loses its base and has to be rebuilt by hand. Use a rebase merge or a
-  merge commit. Squashing is fine again for the last pull request of a stack, and for any
-  standalone pull request.
+- **Merge a pull request inside a stack with a merge commit.** Squashing rewrites the parent's
+  commits, so every branch above it loses its base and has to be rebuilt by hand. GitHub's
+  *Rebase and merge* does the same — it always creates new commits — so it is only safe if every
+  branch above is then restacked by hand. A merge commit keeps the commits the next branch is built
+  on. Squashing is fine again for the last pull request of a stack, and for any standalone pull
+  request.
+- **Delete the branch once its pull request is merged.** That deletion is what makes GitHub
+  retarget the child pull request onto the merged one's base; with automatic deletion off, the
+  stack does not collapse until someone clicks *Delete branch*.
 - **Restack with `git rebase --update-refs`** when a lower branch is amended: run it on the top
   branch and every branch pointer below it moves with it. Then `git push --force-with-lease`,
   never a bare `--force`.
