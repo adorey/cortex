@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/adorey/cortex/security/advisories/new
+    about: Private disclosure — never open a public issue for a security problem (see SECURITY.md).
+  - name: Read the architecture decisions
+    url: https://github.com/adorey/cortex/tree/main/docs/adr
+    about: Many design questions are already settled there, with the alternatives that were rejected.
