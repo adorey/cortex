@@ -190,4 +190,29 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
                      f"overlay path 'agents/{file_rel_to_agents}' must mirror base 'cortex/agents/{base_rel_to_agents}'")
         return
 
+    # Tier 2.1 — non-overridable: characters.md (reported as an error, as the script does)
+    if fnmatch.fnmatchcase(base, "*/personalities/*/characters.md"):
+        report.error(rel_path, "NON_OVERRIDABLE",
+                     "characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)")
+        return
+
+    # Tier 2.2 — layer is known; a warning, checking goes on
+    file_layer = file_rel_to_agents.split("/")[0]
+    if file_layer not in LAYERS:
+        report.warning(rel_path, "UNKNOWN_LAYER", f"'{file_layer}' is not a known layer (expected: {' '.join(LAYERS)})")
+
+    # Tier 2.3 — scope vs location: a workspace overlay has 3 slashes below the project,
+    # a service overlay 4 or more
+    depth_from_project = strip_prefix(file, f"{project_root}/").count("/")
+    if scope.startswith("workspace") and depth_from_project > 3 and not rel_path.startswith("agents/"):
+        report.warning(rel_path, "SCOPE_MISMATCH", f"Scope: '{scope}' but file is not at workspace root (agents/...)")
+    if scope.startswith("service") and rel_path.startswith("agents/"):
+        report.warning(rel_path, "SCOPE_MISMATCH",
+                       f"Scope: '{scope}' but file is at workspace root — should be under {{service}}/agents/")
+
+    # Tier 2.4 — an additive overlay tags at least one section
+    if semantic == "additive" and not any(_ADDITIVE_TAG.search(line) for line in text.split("\n")):
+        report.warning(rel_path, "SECTIONS_UNTAGGED",
+                       "additive overlay should tag at least one section as '(additive)' or use '## 🚫 Disabled rules from base'")
+
     report.ok(rel_path)

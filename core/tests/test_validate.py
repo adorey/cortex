@@ -62,6 +62,17 @@ class Tier1Tests(VerdictTestCase):
                 self.assert_case(case)
 
 
+TIER_2 = ["non-overridable", "sections-untagged", "scope-service-at-root", "scope-workspace-in-service",
+          "unknown-layer"]
+
+
+class Tier2Tests(VerdictTestCase):
+    def test_every_tier_2_case_gets_its_captured_verdicts(self):
+        for case in TIER_2:
+            with self.subTest(case=case):
+                self.assert_case(case)
+
+
 class EchoTests(unittest.TestCase):
     def test_bash_echo_e_escapes(self):
         self.assertEqual(echo_e_line("a\\tb"), "a\tb\n")
