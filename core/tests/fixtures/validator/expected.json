@@ -9,6 +9,13 @@
     "  Strict mode:   false",
     "",
     "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Base: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -24,6 +31,61 @@
     "  Strict mode:   true",
     "",
     "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Base: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "absent-key-among-others": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Base: is required in OVERLAY header",
+    "✓ agents/workflows/engineering/code-review.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  2 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Base: is required in OVERLAY header",
+    "✓ agents/workflows/engineering/code-review.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  2 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -41,6 +103,13 @@
     "  Strict mode:   false",
     "",
     "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Scope: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -56,6 +125,13 @@
     "  Strict mode:   true",
     "",
     "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Scope: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -73,6 +149,13 @@
     "  Strict mode:   false",
     "",
     "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Semantic: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -88,6 +171,13 @@
     "  Strict mode:   true",
     "",
     "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Semantic: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [

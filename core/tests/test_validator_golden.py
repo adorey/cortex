@@ -1,7 +1,8 @@
 """The overlay validator's behaviour, frozen — ADR-007 phase 2.
 
-``fixtures/validator/expected.json`` holds what the Bash implementation of
-``bin/validate-overlays.sh`` printed for every run of every case (see ``validator_harness.py``).
+``fixtures/validator/expected.json`` holds what the validator prints for every run of every case —
+captured from its Bash implementation, then re-captured for ADR-007 phase 4 (see
+``validator_harness.py``).
 These tests replay it through the script — now a shim over the core — and through the core
 directly, and check that it covers every verdict the validator can emit.
 """
