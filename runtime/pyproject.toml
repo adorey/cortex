@@ -11,6 +11,7 @@ readme = "README.md"
 # Kept intentionally lean — the runtime ASSEMBLES mature components (ADR-002 Build vs Buy).
 dependencies = [
     "fastapi>=0.110",       # agnostic API surface (POST /run) — ADR-002 §3.2
+    "cortex-core",          # the cascade itself (ADR-007) — install it from ../core, it is on no index
 ]
 
 [project.optional-dependencies]
