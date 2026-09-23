@@ -21,7 +21,9 @@ It is not a rigid script. It is a safety net to ensure nothing is forgotten.
 ```
 cortex/agents/workflows/                       ← priority 3 — Generic workflows (this folder)
     ├── engineering/                                 ← Development & technical
-    │   └── feature-development.md
+    │   ├── feature-development.md
+    │   ├── frontend-testing.md
+    │   └── support-triage.md
     ├── intelligence/                                ← Research & analysis
     │   └── tech-watch.md
     ├── ops/                                         ← Deployment & incident (future)
@@ -51,6 +53,8 @@ The Prompt Manager is the **single entry point**. For every request it:
 | Category | File | Activation context |
 |---|---|---|
 | `engineering/` | `feature-development.md` | Developing a new feature |
+| `engineering/` | `frontend-testing.md` | Adding or reviewing frontend tests |
+| `engineering/` | `support-triage.md` | Diagnosing a support ticket |
 | `intelligence/` | `tech-watch.md` | Technology watch on a subject or tool |
 
 ## 🗂️ Categories
