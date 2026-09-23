@@ -228,29 +228,29 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
 # --------------------------------------------------------------------------- #
 def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: bool = False,
          excludes: Tuple[str, ...] = ()) -> List[str]:
-    """``find TOP [-maxdepth N] -name NAME [-type f] -not -path EXCLUDE…``, sorted.
+    """``find TOP [-maxdepth N] -name NAME [-type f] -not -path EXCLUDE…``, in ``find``'s order.
 
-    ``find`` lists in directory order, which varies between file systems; sorting makes the
-    output deterministic without changing any verdict.
+    Depth first, each directory's entries in the order the file system returns them — the
+    order ``find`` prints, so the report lists files in the same sequence as the script did.
     """
     found: List[str] = []
-    for dirpath, dirnames, filenames in os.walk(top):
-        depth = 0 if dirpath == top else dirpath[len(top) + 1:].count(os.sep) + 1
-        if maxdepth is not None and depth + 1 > maxdepth:
-            dirnames[:] = []
-            continue
-        for entry in filenames + ([] if regular_files else dirnames):
-            path = os.path.join(dirpath, entry)
-            if not fnmatch.fnmatchcase(entry, name):
-                continue
-            if regular_files and (os.path.islink(path) or not os.path.isfile(path)):
-                continue                      # -type f: not a symbolic link, not a directory
-            if any(fnmatch.fnmatchcase(path, pattern) for pattern in excludes):
-                continue
-            found.append(path)
-        if maxdepth is not None and depth + 1 >= maxdepth:
-            dirnames[:] = []
-    return sorted(found)
+
+    def visit(directory: str, depth: int) -> None:
+        try:
+            entries = list(os.scandir(directory))
+        except OSError:
+            return                    # find reports it on stderr, which the script discards
+        for entry in entries:
+            path = f"{directory}/{entry.name}"
+            if (maxdepth is None or depth + 1 <= maxdepth) and fnmatch.fnmatchcase(entry.name, name) \
+                    and (not regular_files or entry.is_file(follow_symlinks=False)) \
+                    and not any(fnmatch.fnmatchcase(path, pattern) for pattern in excludes):
+                found.append(path)
+            if entry.is_dir(follow_symlinks=False) and (maxdepth is None or depth + 1 < maxdepth):
+                visit(path, depth + 1)
+
+    visit(top, 0)
+    return found
 
 
 def overlay_roots(project_root: str, base_root: str, service: str) -> List[str]:
