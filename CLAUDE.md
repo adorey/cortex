@@ -47,7 +47,7 @@ Every file under `agents/roles/`, `agents/capabilities/`, `agents/personalities/
 - Read [CONTRIBUTING.md](CONTRIBUTING.md) before editing any of the four layers — it covers the repo structure, the test loop (throwaway host projects in `/tmp`, both submodule and standalone-clone modes), and validation tooling.
 - A change to structure, contracts, or cross-cutting behavior (the cascade, the runtime, security, persistence…) needs an ADR — see [docs/adr/](docs/adr/) and its own [README](docs/adr/README.md) for the process. Check the index for prior decisions before proposing a new one.
 - `docs/extending-layers.md` describes the overlay convention **from a host project's point of view** — useful to know when changing a base file, since it's what host-project overlays point at (`Base: cortex/agents/...`); it does not apply reflexively to this repo.
-- `./bin/validate-overlays.sh` and `./bin/validate-cortex.sh` are for host-project overlay integrity and cortex's own internal links, respectively — run the relevant one after structural edits.
+- `./bin/validate-overlays.sh` checks overlay integrity in host projects, and `bin/check-english.sh` enforces the English-only rule CI gates on — run the relevant one after structural edits.
 
 ## References (read on demand depending on context)
 - **Agent roles:** `agents/roles/{category}/`

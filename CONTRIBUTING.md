@@ -81,7 +81,7 @@ cat CLAUDE.md   # (or .github/copilot-instructions.md, etc.)
 
 ```bash
 ./cortex/bin/validate-overlays.sh           # checks overlay file integrity (host projects)
-./cortex/bin/validate-cortex.sh             # checks cortex's own internal links and structure (planned v0.3)
+bash bin/check-english.sh                   # in the cortex repository: tracked content is English (CI gate)
 ```
 
 If you change a base file under `cortex/agents/`, run `validate-overlays.sh` against any host project that uses overlays — your rename may break their files.
