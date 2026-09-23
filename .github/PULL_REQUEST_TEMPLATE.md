@@ -14,7 +14,7 @@ Closes #
 
 - **Targets:** `release/adr-NNN-slug`, or the phase branch below this one — never `main` for ADR work
 - **Position:** phase N of ADR-NNN
-- **Merge with:** rebase or merge commit — **never squash** inside a stack
+- **Merge with:** a merge commit — **never squash or rebase** inside a stack
 
 ## How it was verified
 

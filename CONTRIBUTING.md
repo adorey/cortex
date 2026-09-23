@@ -189,7 +189,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
    - A clear description of *why* (not just *what*)
    - A "Test plan" checklist (how you verified it works)
    - For architecture changes, link the ADR PR
-6. **Address review feedback** with new commits. A standalone pull request is squash-merged; a pull request **inside a stack** is merged with a rebase or a merge commit, **never squashed** — squashing rewrites the commits every branch above it is built on
+6. **Address review feedback** with new commits. A standalone pull request is squash-merged; a pull request **inside a stack** is merged with a **merge commit** — never squashed, and not rebased either: both rewrite the commits every branch above it is built on
 
 > **Delivering a multi-phase ADR?** The branches, the stacked pull requests, the issue hierarchy and the gates are described in [docs/process/adr-implementation.md](docs/process/adr-implementation.md).
 
