@@ -271,6 +271,15 @@ Release process (maintainers only):
 4. Tag the commit: `git tag -a v{version} -m "<summary>"`
 5. Push the tag: `git push origin v{version}`
 
+### Release names
+
+Every release carries a **name** — a short phrase that says what the release is about, never a generic label: `Marginalia` for the comment-discipline release, `Trapdoor` for the security traps, `Reuse before create` for a patch. It appears in exactly two places:
+
+- the `CHANGELOG.md` heading — `## [0.9.0] - 2026-09-23 — Beware of the Leopard`
+- the release note's title — `# 🚀 Cortex v0.9.0 — Beware of the Leopard`
+
+The note then opens with an **epigraph**: a short quote that makes the release's point better than its summary, attributed to whoever says it — so far always someone from *The Hitchhiker's Guide to the Galaxy*. A patch gets its own name, like any other release. Every release since 0.1.0 has followed this; it is written down here so it outlives the memory of whoever started it.
+
 ## 🧪 Testing checklist before opening a PR
 
 - [ ] Markdown lints cleanly (no broken links, no malformed tables)
