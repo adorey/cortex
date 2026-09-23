@@ -51,6 +51,33 @@ class ScriptTests(unittest.TestCase):
                     self.assertEqual(harness.execute(case, args, harness.run_script), EXPECTED[case][harness.run_key(args)])
 
 
+    def test_the_core_matches_the_script_on_a_large_project(self):
+        # Many files, directories mixing files and subdirectories, nesting: the case where the
+        # order ``find`` lists files in matters. Both run on the same file system, so their
+        # outputs must be identical even though that order is not predictable.
+        import tempfile
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = tmp / "host"
+        (project / "cortex").mkdir(parents=True)
+        for i in range(60):
+            base = project / "cortex" / "agents" / "roles" / f"team{i}"
+            base.mkdir(parents=True)
+            (base / "lead.md").write_text("# base\n", encoding="utf-8")
+            overlay = project / "agents" / "roles" / f"team{i}"
+            overlay.mkdir(parents=True)
+            (overlay / "lead.md").write_text(
+                "<!-- OVERLAY\n     Base: cortex/agents/roles/team%d/lead.md\n     Scope: workspace\n"
+                "     Semantic: additive\n-->\n\n## Rules%s\n" % (i, " (additive)" if i % 4 else ""), encoding="utf-8")
+            if i % 3 == 0:
+                (overlay / "notes.md").write_text("no header\n", encoding="utf-8")
+        (project / "agents" / "roles" / "team7" / "deep").mkdir()
+        (project / "agents" / "roles" / "team7" / "deep" / "z.md").write_text("x\n", encoding="utf-8")
+        for args in ([], ["--strict"]):
+            with self.subTest(run=harness.run_key(args)):
+                self.assertEqual(harness.run_core(project, args), harness.run_script(project, args))
+
+
 class CoreTests(unittest.TestCase):
     """ADR-007 phase 2 — the port reproduces every captured output byte for byte."""
 
