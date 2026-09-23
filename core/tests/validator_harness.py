@@ -1,0 +1,113 @@
+"""Golden fixtures for the overlay validator — ADR-007 phase 2.
+
+Each case under ``fixtures/validator/cases/`` becomes a throwaway host project: the shared
+base goes to ``{project}/cortex/agents/``, the case's own files on top. The Bash validator's
+output for every run of every case was captured once into ``expected.json``; the Python port
+must reproduce it byte for byte, the temporary directory aside.
+
+A case may carry a ``case.json``:
+
+- ``project`` — where the project root sits under the temporary directory (default ``host``);
+- ``runs`` — the argument lists to run it with (default: none, then ``--strict``);
+- ``crlf`` — files to rewrite with CRLF line endings at layout time (git keeps them LF).
+
+Re-capture from the script — only meaningful while it still holds the logic:
+
+    cd core && python3 -m tests.validator_harness --capture
+"""
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+FIXTURES = HERE / "fixtures" / "validator"
+CORE = HERE.parent
+REPO = CORE.parent
+SCRIPT = REPO / "bin" / "validate-overlays.sh"
+EXPECTED = FIXTURES / "expected.json"
+DEFAULT_RUNS = [[], ["--strict"]]
+
+
+def cases():
+    return sorted(p.name for p in (FIXTURES / "cases").iterdir() if p.is_dir())
+
+
+def config(case):
+    path = FIXTURES / "cases" / case / "case.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+
+
+def runs(case):
+    return config(case).get("runs", DEFAULT_RUNS)
+
+
+def run_key(args):
+    return " ".join(args) or "default"
+
+
+def layout(case, tmp):
+    """Build the host project of ``case`` under ``tmp`` and return its root."""
+    cfg = config(case)
+    project = tmp / cfg.get("project", "host")
+    shutil.copytree(FIXTURES / "base", project / "cortex")
+    source = FIXTURES / "cases" / case
+    for src in sorted(source.rglob("*")):
+        if src.is_file() and src.name != "case.json":
+            dst = project / src.relative_to(source)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(src, dst)
+    for rel in cfg.get("crlf", []):
+        path = project / rel
+        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    return project
+
+
+def _run(cmd, env=None):
+    proc = subprocess.run(cmd, capture_output=True, env=env)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def run_script(project, args):
+    """The validator as host projects run it: ``{project}/cortex/bin/validate-overlays.sh``."""
+    bin_dir = project / "cortex" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(SCRIPT, bin_dir / SCRIPT.name)
+    return _run(["bash", str(bin_dir / SCRIPT.name), *args])
+
+
+def run_core(project, args):
+    """The Python port, from the core's source, given the two roots the script derives."""
+    env = dict(os.environ, PYTHONPATH=str(CORE))
+    return _run([sys.executable, "-m", "cortex_core.validate",
+                 "--project-root", str(project), "--base-root", str(project / "cortex"), *args], env=env)
+
+
+def execute(case, args, runner):
+    tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+    # The script matches "*/agents/*" and "*/cortex/*" against absolute paths: the temporary
+    # directory itself must contain neither, or every case would measure the wrong thing.
+    assert "/agents/" not in f"{tmp}/" and "/cortex/" not in f"{tmp}/", tmp
+    try:
+        code, out, err = runner(layout(case, tmp), args)
+        norm = lambda b: b.decode("utf-8", "surrogateescape").replace(str(tmp), "<TMP>").split("\n")
+        return {"code": code, "stdout": norm(out), "stderr": norm(err)}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def capture():
+    expected = {case: {run_key(a): execute(case, a, run_script) for a in runs(case)} for case in cases()}
+    EXPECTED.write_text(json.dumps(expected, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    return expected
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] != ["--capture"]:
+        sys.exit("usage: python3 -m tests.validator_harness --capture")
+    captured = capture()
+    print(f"captured {sum(len(r) for r in captured.values())} runs of {len(captured)} cases into {EXPECTED}")
