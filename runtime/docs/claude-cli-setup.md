@@ -38,7 +38,7 @@ export DISABLE_TELEMETRY=1        # optional, for a service
 ```bash
 cd runtime
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[serve]"        # if venv fails: sudo apt install python3-venv
+pip install -e ../core -e ".[serve]"   # cortex-core first; if venv fails: sudo apt install python3-venv
 ```
 
 ## Step 5 — Run the service against your project

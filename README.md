@@ -63,7 +63,7 @@ Overlays are **additive** by default (rules are appended to the base), except fo
 
 ## ⚙️ The Runtime
 
-[`cortex-runtime`](runtime/README.md) is the **deployable engine**. It compiles the ADR-001 cascade into an executable resolver and wraps it in a thin, domain-agnostic HTTP API that drives an agentic loop — so the same spec you use at design time can run as a 24/7 service ([ADR-002](docs/adr/ADR-002-cortex-runtime.md)).
+[`cortex-runtime`](runtime/README.md) is the **deployable engine**. It consumes [`cortex-core`](core/README.md) — the one implementation of the ADR-001 cascade in code ([ADR-007](docs/adr/ADR-007-cortex-core.md)) — and wraps it in a thin, domain-agnostic HTTP API that drives an agentic loop — so the same spec you use at design time can run as a 24/7 service ([ADR-002](docs/adr/ADR-002-cortex-runtime.md)).
 
 Everything below the API is **swappable and opt-in** — you run only what you need:
 
@@ -78,7 +78,7 @@ Everything below the API is **swappable and opt-in** — you run only what you n
 **Quick start** (no key, no CLI — runs the whole wire):
 
 ```bash
-cd runtime && pip install -e ".[serve]"
+cd runtime && pip install -e ../core -e ".[serve]"   # cortex-core first: the runtime depends on it
 CORTEX_BACKEND=demo python -m cortex_runtime      # serves on 127.0.0.1:8000
 ```
 
@@ -132,8 +132,13 @@ cortex/
 │       ├── engineering/               # feature-development
 │       └── intelligence/              # tech-watch
 │
+├── core/                              # ── cortex-core — the cascade in code (ADR-007) ──
+│   ├── cortex_core/                   # resolution, merge semantics, capability catalog,
+│   │                                  #   prompt assembly — standard library only
+│   └── tests/                         # runs on Python 3.9+ with nothing installed
+│
 ├── runtime/                           # ── ⚙️ cortex-runtime — the deployable engine ──
-│   ├── cortex_runtime/                # resolver, agnostic API, agentic loop, StateStore,
+│   ├── cortex_runtime/                # agnostic API, agentic loop, StateStore,
 │   │                                  #   security gate, job queue, model backends
 │   ├── tests/                         # unit + integration suite
 │   └── docs/                          # e.g. claude-cli-setup.md
