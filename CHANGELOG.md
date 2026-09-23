@@ -7,7 +7,26 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
-## [0.8.0] - 2026-08-26 — Marginalia
+## [0.9.0] - 2026-09-23 — Beware of the Leopard _(Released)_
+[Full notes](changelog/0.9.0.md)
+
+### Added
+- `adr-implementation` workflow — a generic, stack-agnostic eight-step pipeline for delivering one phase of an accepted multi-phase ADR.
+- `docs/process/adr-implementation.md` — one integration branch per ADR, one stacked pull request per phase, the four-level issue model (epic → milestone → phase → task), labels and gates.
+- Maintainer tooling: `bin/setup-labels.sh`, ADR epic / phase / task issue templates and a pull request template.
+
+### Changed
+- ADRs delivered in several steps end with a numbered **Phases** section; new `Implemented` status.
+- A pull request inside a stack is merged with a merge commit — never squashed or rebased; ADR work puts `#<issue>` before the commit subject.
+- The release naming convention — a name per release, an epigraph per note — is written into `CONTRIBUTING.md`.
+
+### Fixed
+- The workflows index listed two of the four generic workflows; `frontend-testing` and `support-triage` were missing.
+- `CONTRIBUTING.md` described a release process nobody followed: its release steps now match practice — an integration branch, artefacts stacked last with their heading already marked `_(Released)_`, a GitHub Release, tags without a `v` prefix — and its changelog instruction points at `## [Unreleased]` instead of a `## Changes` section that does not exist.
+- `CONTRIBUTING.md` and `CLAUDE.md` no longer point at a `validate-cortex.sh` planned for 0.3 and never written; both name `bin/check-english.sh`, the gate CI actually runs.
+- 0.8.0 was released without its `_(Released)_` marker.
+
+## [0.8.0] - 2026-08-26 — Marginalia _(Released)_
 [Full notes](changelog/0.8.0.md)
 
 ### Added
