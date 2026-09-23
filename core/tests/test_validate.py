@@ -1,0 +1,74 @@
+"""The validator's checks, tier by tier, against the verdicts captured from the script."""
+
+import io
+import json
+import sys
+import tempfile
+import shutil
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from cortex_core.validate import Abort, Colors, Report, check_overlay, echo_e_line  # noqa: E402
+from tests import validator_harness as harness  # noqa: E402
+
+EXPECTED = json.loads(harness.EXPECTED.read_text(encoding="utf-8"))
+
+TIER_1 = ["ok-additive", "ok-replacement", "custom-addition", "header-after-line-10", "crlf",
+          "absent-base-key", "absent-scope-key", "absent-semantic-key",
+          "empty-base-value", "empty-scope-value", "empty-semantic-value",
+          "base-not-found", "invalid-semantic", "escape-in-field", "replacement-outside-workflows", "path-mirror"]
+
+
+def captured_verdicts(case):
+    """The verdict lines the script printed for ``case``: what follows its scope header."""
+    lines = EXPECTED[case]["default"]["stdout"]
+    start = next(i for i, line in enumerate(lines) if line.startswith("── Scope: ")) + 1
+    return lines[start:lines.index("", start)]
+
+
+def core_verdicts(case):
+    tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+    try:
+        project = harness.layout(case, tmp)
+        overlays = sorted(p for p in project.rglob("*.md")
+                          if p.relative_to(project).parts[0] != "cortex" and p.name != "project-overview.md")
+        out = io.StringIO()
+        report = Report(out, Colors(False))
+        try:
+            for path in overlays:
+                check_overlay(str(path), str(project), str(project / "cortex"), report)
+        except Abort:
+            return None, out.getvalue().split("\n")[:-1]
+        return report, out.getvalue().split("\n")[:-1]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+class VerdictTestCase(unittest.TestCase):
+    def assert_case(self, case):
+        report, lines = core_verdicts(case)
+        expected = captured_verdicts(case)
+        if report is None:  # the script aborted before any verdict
+            self.assertEqual(EXPECTED[case]["default"]["code"], 1)
+        self.assertEqual(lines, expected)
+
+
+class Tier1Tests(VerdictTestCase):
+    def test_every_tier_1_case_gets_its_captured_verdicts(self):
+        for case in TIER_1:
+            with self.subTest(case=case):
+                self.assert_case(case)
+
+
+class EchoTests(unittest.TestCase):
+    def test_bash_echo_e_escapes(self):
+        self.assertEqual(echo_e_line("a\\tb"), "a\tb\n")
+        self.assertEqual(echo_e_line("x\\cy"), "x")            # \c cuts the output and its newline
+        self.assertEqual(echo_e_line("p\\qz"), "p\\qz\n")      # an unknown escape stays as it is
+        self.assertEqual(echo_e_line("\\x41\\0102"), "AB\n")
+
+
+if __name__ == "__main__":
+    unittest.main()
