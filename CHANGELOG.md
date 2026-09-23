@@ -7,6 +7,22 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-23 — Beware of the Leopard
+[Full notes](changelog/0.9.0.md)
+
+### Added
+- `adr-implementation` workflow — a generic, stack-agnostic eight-step pipeline for delivering one phase of an accepted multi-phase ADR.
+- `docs/process/adr-implementation.md` — one integration branch per ADR, one stacked pull request per phase, the four-level issue model (epic → milestone → phase → task), labels and gates.
+- Maintainer tooling: `bin/setup-labels.sh`, ADR epic / phase / task issue templates and a pull request template.
+
+### Changed
+- ADRs delivered in several steps end with a numbered **Phases** section; new `Implemented` status.
+- A pull request inside a stack is merged with a merge commit — never squashed or rebased; ADR work puts `#<issue>` before the commit subject.
+- The release naming convention — a name per release, an epigraph per note — is written into `CONTRIBUTING.md`.
+
+### Fixed
+- The workflows index listed two of the four generic workflows; `frontend-testing` and `support-triage` were missing.
+
 ## [0.8.0] - 2026-08-26 — Marginalia
 [Full notes](changelog/0.8.0.md)
 
