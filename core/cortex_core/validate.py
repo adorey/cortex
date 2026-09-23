@@ -10,11 +10,16 @@ changes when the script becomes a shim over this module.
 from __future__ import annotations
 
 import fnmatch
+import io
 import os
 import re
+import sys
 from typing import List, Optional, TextIO, Tuple
 
 LAYERS = ("roles", "capabilities", "personalities", "workflows")
+
+USAGE = 'Usage: validate-overlays.sh [OPTIONS]\n\nOptions:\n  --service PATH     Validate overlays under a specific service folder only\n                     (path relative to project root or absolute)\n  --strict           Treat warnings as errors (CI-friendly)\n  -h, --help         Show this help\n\nExit codes:\n  0   No errors (and no warnings in --strict mode)\n  1   Errors detected (or warnings in --strict mode)\n  2   Bad arguments\n\nReference: ADR-001-layered-overrides.md\n'
+SEPARATOR = '──────────────────────────────────────────'
 
 _SPACE = "[ \t\n\v\f\r]"          # POSIX [[:space:]]
 _ADDITIVE_TAG = re.compile(r"^##.*\(additive\)|^## 🚫 Disabled rules from base")
@@ -216,3 +221,150 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
                        "additive overlay should tag at least one section as '(additive)' or use '## 🚫 Disabled rules from base'")
 
     report.ok(rel_path)
+
+
+# --------------------------------------------------------------------------- #
+# Discovery — the script's two ``find`` calls
+# --------------------------------------------------------------------------- #
+def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: bool = False,
+         excludes: Tuple[str, ...] = ()) -> List[str]:
+    """``find TOP [-maxdepth N] -name NAME [-type f] -not -path EXCLUDE…``, sorted.
+
+    ``find`` lists in directory order, which varies between file systems; sorting makes the
+    output deterministic without changing any verdict.
+    """
+    found: List[str] = []
+    for dirpath, dirnames, filenames in os.walk(top):
+        depth = 0 if dirpath == top else dirpath[len(top) + 1:].count(os.sep) + 1
+        if maxdepth is not None and depth + 1 > maxdepth:
+            dirnames[:] = []
+            continue
+        for entry in filenames + ([] if regular_files else dirnames):
+            path = os.path.join(dirpath, entry)
+            if not fnmatch.fnmatchcase(entry, name):
+                continue
+            if regular_files and (os.path.islink(path) or not os.path.isfile(path)):
+                continue                      # -type f: not a symbolic link, not a directory
+            if any(fnmatch.fnmatchcase(path, pattern) for pattern in excludes):
+                continue
+            found.append(path)
+        if maxdepth is not None and depth + 1 >= maxdepth:
+            dirnames[:] = []
+    return sorted(found)
+
+
+def overlay_roots(project_root: str, base_root: str, service: str) -> List[str]:
+    """The workspace, when it has ``agents/``, then every service that has both a
+    ``project-overview.md`` and an ``agents/`` — or the one ``--service`` names."""
+    if service:
+        return [service if service.startswith("/") else f"{project_root}/{service}"]
+    roots = [project_root] if os.path.isdir(f"{project_root}/agents") else []
+    for overview in find(project_root, "project-overview.md", maxdepth=5, excludes=("*/cortex/*", "*/.git/*")):
+        service_dir = os.path.dirname(overview)
+        if service_dir in (project_root, base_root) or not os.path.isdir(f"{service_dir}/agents"):
+            continue
+        roots.append(service_dir)
+    return roots
+
+
+# --------------------------------------------------------------------------- #
+# The run
+# --------------------------------------------------------------------------- #
+def validate(project_root: str, base_root: str, service: str, strict: bool, out: TextIO, colors: Colors) -> int:
+    """Validate every overlay under the overlay roots; return the script's exit code."""
+    c = colors
+    report = Report(out, c)
+    report.echo_e(f"{c.BOLD}{c.BLUE}Cortex overlay validator{c.NC}")
+    report.echo(f"  Project root:  {project_root}")
+    report.echo(f"  Cortex dir:    {base_root}")
+    report.echo(f"  Strict mode:   {'true' if strict else 'false'}")
+    if service:
+        report.echo(f"  Service only:  {service}")
+    report.echo("")
+
+    roots = overlay_roots(project_root, base_root, service)
+    if not roots:
+        report.echo_e(f"{c.YELLOW}ℹ{c.NC}  No overlay roots found (no agents/ directory at workspace or service level).")
+        report.echo("   Nothing to validate. This is expected if you haven't created overlays yet.")
+        return 0
+
+    try:
+        for root in roots:
+            # The script strips "{project}/", so the workspace root itself prints its full path.
+            rel_root = strip_prefix(root, f"{project_root}/") or "."
+            report.echo_e(f"{c.BOLD}── Scope: {rel_root} ──{c.NC}")
+            found = 0
+            for layer in LAYERS:
+                layer_dir = f"{root}/agents/{layer}"
+                if not os.path.isdir(layer_dir):
+                    continue
+                for path in find(layer_dir, "*.md", regular_files=True):
+                    check_overlay(path, project_root, base_root, report)
+                    found += 1
+            if found == 0:
+                report.echo("  (no overlay files)")
+            report.echo("")
+    except Abort:
+        return 1
+
+    report.echo(SEPARATOR)
+    report.echo_e(f"Checked:  {c.BOLD}{report.checked}{c.NC} files")
+    report.echo_e(f"Errors:   {c.RED}{c.BOLD}{report.errors}{c.NC}" if report.errors else f"Errors:   {c.GREEN}0{c.NC}")
+    report.echo_e(f"Warnings: {c.YELLOW}{c.BOLD}{report.warnings}{c.NC}" if report.warnings else f"Warnings: {c.GREEN}0{c.NC}")
+    if report.errors:
+        return 1
+    if strict and report.warnings:
+        report.echo_e(f"{c.RED}Strict mode: warnings count as errors.{c.NC}")
+        return 1
+    return 0
+
+
+def _stream(stream: TextIO) -> TextIO:
+    """Bytes out as the script writes them — file names that are not valid UTF-8 included."""
+    return io.TextIOWrapper(stream.buffer, encoding="utf-8", errors="surrogateescape", newline="\n", write_through=True)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """``bin/validate-overlays.sh [--service PATH] [--strict] [-h|--help]``.
+
+    ``--project-root`` and ``--base-root`` are internal: the script passes the two roots it
+    derives from its own location. Left out, they are derived the same way from this file's
+    location in a Cortex checkout — ``{project}/cortex/core/cortex_core/validate.py``.
+    """
+    args = sys.argv[1:] if argv is None else list(argv)
+    out, err = _stream(sys.stdout), _stream(sys.stderr)
+    base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    project_root: Optional[str] = None
+    service, strict = "", False
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--service":
+            if i + 1 >= len(args):
+                return 1          # the script's `shift 2` fails under errexit: exit 1, nothing printed
+            service, i = args[i + 1], i + 2
+        elif arg == "--strict":
+            strict, i = True, i + 1
+        elif arg in ("-h", "--help"):
+            out.write(USAGE)
+            return 0
+        elif arg in ("--project-root", "--base-root"):
+            if i + 1 >= len(args):
+                err.write(f"{arg} needs a value\n")
+                return 2
+            if arg == "--project-root":
+                project_root = args[i + 1]
+            else:
+                base_root = args[i + 1]
+            i += 2
+        else:
+            err.write(f"Unknown argument: {arg}\n")
+            err.write(USAGE)
+            return 2
+    if project_root is None:
+        project_root = os.path.dirname(base_root)
+    return validate(project_root, base_root, service, strict, out, Colors(out.isatty()))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

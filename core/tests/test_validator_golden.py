@@ -51,5 +51,15 @@ class ScriptTests(unittest.TestCase):
                     self.assertEqual(harness.execute(case, args, harness.run_script), EXPECTED[case][harness.run_key(args)])
 
 
+class CoreTests(unittest.TestCase):
+    """ADR-007 phase 2 — the port reproduces every captured output byte for byte."""
+
+    def test_the_core_reproduces_the_captured_outputs(self):
+        for case in harness.cases():
+            for args in harness.runs(case):
+                with self.subTest(case=case, run=harness.run_key(args)):
+                    self.assertEqual(harness.execute(case, args, harness.run_core), EXPECTED[case][harness.run_key(args)])
+
+
 if __name__ == "__main__":
     unittest.main()
