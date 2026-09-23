@@ -51,5 +51,9 @@ if [[ -z "$PYTHON" ]]; then
 fi
 
 # --- Run -------------------------------------------------------------------
-PYTHONPATH="$CORTEX_DIR/core${PYTHONPATH:+:$PYTHONPATH}" exec "$PYTHON" -m cortex_core.validate \
+# The module runs as a file under -I (isolated mode): neither the working directory nor this
+# script's directory lands on sys.path, and PYTHON* variables are ignored. Without it, running
+# the validator from a project root that holds, say, an fnmatch.py would execute that file —
+# code from the very project under validation, in CI included.
+exec "$PYTHON" -I "$CORTEX_DIR/core/cortex_core/validate.py" \
     --project-root "$PROJECT_DIR" --base-root "$CORTEX_DIR" "$@"
