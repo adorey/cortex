@@ -63,7 +63,8 @@ class Tier1Tests(VerdictTestCase):
 
 
 TIER_2 = ["non-overridable", "sections-untagged", "scope-service-at-root", "scope-workspace-in-service",
-          "unknown-layer"]
+          # depth 3 — a service overlay straight under its layer directory: the script does not warn
+          "scope-workspace-in-service-shallow", "unknown-layer"]
 
 
 class Tier2Tests(VerdictTestCase):
