@@ -60,22 +60,15 @@ def resolve_layer(
     ``base_root`` locates the base (ADR-007 §3.1).
     """
     root = Path(root)
-    candidates = [
-        _base(root, base_root) / "agents" / layer / file,   # base
-        root / "agents" / layer / file,                      # workspace overlay
-    ]
+    candidates = [_base(root, base_root) / "agents" / layer / file]   # base
+    # When base_root is the project root, the base and the workspace tier are one directory:
+    # a file found there is read once, never stacked onto itself (ADR-007 §3.1). The roots
+    # are compared only when base_root is given — the default path pays nothing.
+    if base_root is None or Path(base_root).resolve() != root.resolve():
+        candidates.append(root / "agents" / layer / file)             # workspace overlay
     if service:
         candidates.append(root / service / "agents" / layer / file)  # service overlay
-
-    # When base_root == project_root the base and the workspace tier are one directory: a
-    # file found there is read once, never stacked onto itself (ADR-007 §3.1).
-    found: List[Path] = []
-    seen = set()
-    for path in candidates:
-        if path.is_file() and path.resolve() not in seen:
-            seen.add(path.resolve())
-            found.append(path)
-    return found
+    return [p for p in candidates if p.is_file()]
 
 
 # --------------------------------------------------------------------------- #
