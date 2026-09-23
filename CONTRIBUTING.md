@@ -15,6 +15,7 @@ Cortex is a **framework of AI agents** that host projects mount, either as a **G
 | Add project-specific rules | [docs/extending-layers.md](docs/extending-layers.md) |
 | Create a personality theme | [docs/creating-a-theme.md](docs/creating-a-theme.md) |
 | Understand a design decision | [docs/adr/](docs/adr/) |
+| Deliver a multi-phase ADR | [docs/process/adr-implementation.md](docs/process/adr-implementation.md) |
 
 ## 🧱 Repository structure (what to touch where)
 
@@ -80,7 +81,7 @@ cat CLAUDE.md   # (or .github/copilot-instructions.md, etc.)
 
 ```bash
 ./cortex/bin/validate-overlays.sh           # checks overlay file integrity (host projects)
-./cortex/bin/validate-cortex.sh             # checks cortex's own internal links and structure (planned v0.3)
+bash bin/check-english.sh                   # in the cortex repository: tracked content is English (CI gate)
 ```
 
 If you change a base file under `cortex/agents/`, run `validate-overlays.sh` against any host project that uses overlays — your rename may break their files.
@@ -182,13 +183,15 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 
 1. **Branch from `main`** with a descriptive name: `feat/redis-capability`, `fix/setup-workspace-template`, `docs/extending-layers-examples`
 2. **Make atomic commits** — one logical change per commit. Cortex uses **[Conventional Commits](https://www.conventionalcommits.org/) prefixed with a [gitmoji](https://gitmoji.dev/)** (see table below).
-3. **Update the changelog** if your change is user-visible: add an entry under the next version's `## Changes` section
+3. **Update the changelog** if your change is user-visible: add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), in its Keep a Changelog group (`Added`, `Changed`, `Fixed`, …)
 4. **Run validators** before pushing
 5. **Open the PR** with:
    - A clear description of *why* (not just *what*)
    - A "Test plan" checklist (how you verified it works)
    - For architecture changes, link the ADR PR
-6. **Address review feedback** with new commits — squash on merge
+6. **Address review feedback** with new commits. A standalone pull request is squash-merged; a pull request **inside a stack** is merged with a **merge commit** — never squashed, and not rebased either: both rewrite the commits every branch above it is built on
+
+> **Delivering a multi-phase ADR?** The branches, the stacked pull requests, the issue hierarchy and the gates are described in [docs/process/adr-implementation.md](docs/process/adr-implementation.md).
 
 ### Commit message convention
 
@@ -204,6 +207,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 - `<type>` — Conventional Commits type (parseable by changelog tools)
 - `<scope>` *(optional)* — component or layer affected (`runtime`, `roles`, `capabilities`, `setup`, `adr`, `docs`, `extending-layers`, …)
 - `<subject>` — imperative, present tense, no trailing period, ≤ 72 chars
+- `#<issue>` *(ADR work only)* — the task being delivered, immediately before the subject, so the issue timeline reads as a changelog: `✨ feat(core): #42 resolve the cascade from a configurable base root`
 
 **Why both gitmoji and Conventional Commits?** The gitmoji gives instant visual scanning of `git log`. The conventional prefix keeps commits parseable for automated changelog/release tooling. They compose cleanly — best of both worlds.
 
@@ -259,13 +263,23 @@ Cortex follows **semantic versioning** with a pragmatic interpretation:
 | **Minor** (0.x.0) | New role/capability/theme/workflow; new ADR-anchored feature |
 | **Patch** (0.x.y) | Bug fix, docs improvement, internal refactor |
 
-Release process (maintainers only):
+Release process (maintainers only). A release is a **stack of pull requests onto an integration branch**, not a series of pushes to `main`:
 
-1. All target changes merged to `main`
-2. Add `changelog/{version}.md` with the detailed, narrated release note
-3. Add the `{version}` section to the root **[`CHANGELOG.md`](CHANGELOG.md)** (Keep a Changelog), linking to that note — this is the single source of truth for versions; **no version number lives anywhere else** (README, docs, …) to avoid stale copies
-4. Tag the commit: `git tag -a v{version} -m "<summary>"`
-5. Push the tag: `git push origin v{version}`
+1. Cut `release/{version}` from `main` and push it — it gets no pull request of its own until the end
+2. Feature pull requests target `release/{version}`; one that builds on another is stacked on it, and a contributor's pull request opened against `main` is retargeted. Each adds its entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md)
+3. The release artefacts come **last**, in a pull request stacked on top of everything else: `changelog/{version}.md`, the detailed, narrated release note, and the `{version}` section of `CHANGELOG.md` (Keep a Changelog) that replaces the `[Unreleased]` entries and links to that note. Last, because they rewrite the `[Unreleased]` anchor every feature pull request also touches. The heading is written **final** — its release date and `_(Released)_` — because `CHANGELOG.md` is never edited after a release: if the release slips, the date is corrected in this pull request before it merges. `CHANGELOG.md` is the single source of truth for versions; **no version number lives anywhere else** (README, docs, …) to avoid stale copies
+4. Merge the stack in order — with a **merge commit** for any pull request that has another stacked on it, see [the stacking rules](docs/process/adr-implementation.md#2-stacking-the-phases)
+5. Merge `release/{version}` into `main`
+6. Publish a **GitHub Release** named `{version}` that creates the tag `{version}` on `main` — **no `v` prefix**, like every tag since 0.1.0 — with the release note as its body. From the command line: `gh release create {version} --target main --title {version} --notes-file changelog/{version}.md`
+
+### Release names
+
+Every release carries a **name** — a short phrase that says what the release is about, never a generic label: `Marginalia` for the comment-discipline release, `Trapdoor` for the security traps, `Reuse before create` for a patch. It appears in exactly two places:
+
+- the `CHANGELOG.md` heading — `## [0.9.0] - 2026-09-23 — Beware of the Leopard _(Released)_`
+- the release note's title — `# 🚀 Cortex v0.9.0 — Beware of the Leopard`
+
+The note then opens with an **epigraph**: a short quote that makes the release's point better than its summary, attributed to whoever says it — so far always someone from *The Hitchhiker's Guide to the Galaxy*. A patch gets its own name, like any other release. The name and the `v` belong to the note's title only: the tag and the GitHub Release carry the bare version (`0.9.0`). Every release since 0.1.0 has followed this; it is written down here so it outlives the memory of whoever started it.
 
 ## 🧪 Testing checklist before opening a PR
 

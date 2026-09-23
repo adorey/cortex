@@ -1,0 +1,71 @@
+name: ADR epic
+description: Put one ADR on the roadmap, from proposal to implementation (maintainer workflow)
+title: "ADR-NNN · "
+labels: ["adr-epic"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A **roadmap item** for one Architecture Decision Record. It exists before the ADR is
+        written, so the whole roadmap can be planned and dated in the GitHub Project.
+
+        It does not carry the implementation. Once the ADR is accepted with its numbered
+        phases, each phase is created from the *ADR phase* template and attached here as a
+        sub-issue — that is what gives this epic a real progress bar.
+
+        The process is in
+        [docs/process/adr-implementation.md](../blob/main/docs/process/adr-implementation.md).
+
+  - type: input
+    id: number
+    attributes:
+      label: ADR number
+      description: >
+        Provisional until the ADR is written. Numbering is strictly sequential and never
+        reused, so writing ADRs out of order shifts every number above.
+      placeholder: ADR-007
+    validations:
+      required: true
+
+  - type: textarea
+    id: decision
+    attributes:
+      label: The decision
+      description: >
+        One decision, stated the way the ADR will state it. If it needs two sentences joined
+        by "and", it is probably two ADRs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: excludes
+    attributes:
+      label: Explicitly excluded
+      description: >
+        What a reader might expect here but belongs to another ADR. This is what keeps the
+        record from growing until nobody can review it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: depends
+    attributes:
+      label: Depends on
+      description: Epics or accepted ADRs that must land first. Link epics with `#NN`.
+      placeholder: |
+        - #12 (ADR-007)
+        - ADR-004 (accepted)
+
+  - type: textarea
+    id: informed
+    attributes:
+      label: Informed by
+      description: Prior art worth reading before drafting — repositories, articles, earlier ADRs.
+
+  - type: checkboxes
+    id: ready
+    attributes:
+      label: Before drafting
+      options:
+        - label: Added to the roadmap Project, with its wave set
+        - label: Dependencies recorded above

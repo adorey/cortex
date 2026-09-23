@@ -1,0 +1,93 @@
+name: ADR phase
+description: Track one numbered phase of an accepted ADR (maintainer workflow)
+title: "ADR-NNN Phase N — "
+labels: ["adr-phase"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A **parent** issue for one phase of an accepted ADR, itself a sub-issue of the ADR's
+        epic. Its tasks go in sub-issues created from the *ADR task* template — not in a
+        checklist here, because a checklist item cannot be assigned, labelled or closed by a
+        pull request.
+
+        The process is in
+        [docs/process/adr-implementation.md](../blob/main/docs/process/adr-implementation.md).
+
+  - type: input
+    id: adr
+    attributes:
+      label: ADR
+      placeholder: ADR-007 — Cortex Core, unified cascade resolution
+    validations:
+      required: true
+
+  - type: input
+    id: epic
+    attributes:
+      label: Epic issue
+      description: This phase is attached to it as a sub-issue.
+      placeholder: "#12"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase
+      description: The number used by the ADR itself, not the execution order.
+      options: ["1", "2", "3", "4", "5", "6", "7", "8"]
+    validations:
+      required: true
+
+  - type: input
+    id: branch
+    attributes:
+      label: Phase branch
+      description: Stacked on the previous phase branch once one exists, never on the release branch.
+      placeholder: adr-007/phase-1-core-library
+    validations:
+      required: true
+
+  - type: input
+    id: parent_branch
+    attributes:
+      label: Branches from
+      placeholder: release/adr-007-cortex-core
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: The phase as the ADR states it. Quote it; do not paraphrase from memory.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: >
+        One line per criterion, each one able to fail. A command with its expected output
+        beats a description.
+      placeholder: |
+        - `grep -rn '"cortex" / "agents"' runtime/cortex_runtime/` returns nothing
+        - `bin/validate-overlays.sh --strict` exits 0 against a scaffolded host project
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Deliberately out of scope
+      description: What a reviewer might expect here but belongs to another phase, and which one.
+
+  - type: checkboxes
+    id: gate
+    attributes:
+      label: Gate
+      options:
+        - label: This phase blocks the ADR's release gate (a release waits on it)
+        - label: Labels applied — `adr:NNN`, `phase:N` — milestone set, attached to the epic
