@@ -22,7 +22,9 @@ release note under [`changelog/`](changelog/).
 
 ### Fixed
 - The workflows index listed two of the four generic workflows; `frontend-testing` and `support-triage` were missing.
-- `CONTRIBUTING.md` described a release process nobody followed: its release steps now match practice — an integration branch, artefacts stacked last, a GitHub Release, tags without a `v` prefix — and its changelog instruction points at `## [Unreleased]` instead of a `## Changes` section that does not exist.
+- `CONTRIBUTING.md` described a release process nobody followed: its release steps now match practice — an integration branch, artefacts stacked last with their heading already marked `_(Released)_`, a GitHub Release, tags without a `v` prefix — and its changelog instruction points at `## [Unreleased]` instead of a `## Changes` section that does not exist.
+- `CONTRIBUTING.md` and `CLAUDE.md` no longer point at a `validate-cortex.sh` planned for 0.3 and never written; both name `bin/check-english.sh`, the gate CI actually runs.
+- 0.8.0 was released without its `_(Released)_` marker.
 
 ## [0.8.0] - 2026-08-26 — Marginalia _(Released)_
 [Full notes](changelog/0.8.0.md)
