@@ -7,6 +7,8 @@ absolute paths (``${file#*/agents/}``, ``"$PROJECT_DIR/$base"``) and its ``echo 
 reproduced as they were, so that nothing a host project relied on changed with the port.
 """
 
+# Standard library only, and no import from this package: bin/validate-overlays.sh runs this file
+# directly under ``python -I``, where ``cortex_core`` is not importable (see the shim).
 from __future__ import annotations
 
 import fnmatch
