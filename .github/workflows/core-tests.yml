@@ -1,0 +1,36 @@
+name: core tests
+
+# cortex-core is the one implementation of the cascade in code (ADR-007). It also reads the
+# spec itself — the self-hosting test resolves Cortex's own agents/ — so spec changes run it.
+on:
+  push:
+    paths:
+      - "core/**"
+      - "agents/**"
+      - ".github/workflows/core-tests.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "agents/**"
+      - ".github/workflows/core-tests.yml"
+
+jobs:
+  test:
+    name: cortex-core (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor ADR-007 promises. A floor CI never runs on is a claim, not a guarantee.
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Nothing is installed, on purpose: the core must run from source (ADR-007 §3.3).
+      - name: Run the core suite
+        working-directory: core
+        run: python -m unittest discover -s tests -v
