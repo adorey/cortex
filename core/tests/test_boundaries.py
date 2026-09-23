@@ -49,6 +49,20 @@ class DependencyDirectionTests(unittest.TestCase):
         self.assertEqual(runtime_imports("import cortex_core"), [])
 
 
+class ShimContractTests(unittest.TestCase):
+    """bin/validate-overlays.sh runs validate.py as a file under ``python -I``: the package is not
+    importable there, so the module may import the standard library only."""
+
+    def test_validate_imports_nothing_from_the_package(self):
+        tree = ast.parse((CORE_PKG / "validate.py").read_text(encoding="utf-8"))
+        offenders = [
+            ast.dump(node) for node in ast.walk(tree)
+            if (isinstance(node, ast.ImportFrom) and (node.level > 0 or (node.module or "").startswith("cortex_core")))
+            or (isinstance(node, ast.Import) and any(a.name.startswith("cortex_core") for a in node.names))
+        ]
+        self.assertEqual(offenders, [])
+
+
 class SpecFirewallTests(unittest.TestCase):
     def test_spec_does_not_reference_the_core(self):
         self.assertTrue(SPEC_DIR.is_dir(), f"spec dir not found: {SPEC_DIR}")
