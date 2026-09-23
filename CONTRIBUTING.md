@@ -15,6 +15,7 @@ Cortex is a **framework of AI agents** that host projects mount, either as a **G
 | Add project-specific rules | [docs/extending-layers.md](docs/extending-layers.md) |
 | Create a personality theme | [docs/creating-a-theme.md](docs/creating-a-theme.md) |
 | Understand a design decision | [docs/adr/](docs/adr/) |
+| Deliver a multi-phase ADR | [docs/process/adr-implementation.md](docs/process/adr-implementation.md) |
 
 ## 🧱 Repository structure (what to touch where)
 
@@ -188,7 +189,9 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
    - A clear description of *why* (not just *what*)
    - A "Test plan" checklist (how you verified it works)
    - For architecture changes, link the ADR PR
-6. **Address review feedback** with new commits — squash on merge
+6. **Address review feedback** with new commits. A standalone pull request is squash-merged; a pull request **inside a stack** is merged with a rebase or a merge commit, **never squashed** — squashing rewrites the commits every branch above it is built on
+
+> **Delivering a multi-phase ADR?** The branches, the stacked pull requests, the issue hierarchy and the gates are described in [docs/process/adr-implementation.md](docs/process/adr-implementation.md).
 
 ### Commit message convention
 
@@ -204,6 +207,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 - `<type>` — Conventional Commits type (parseable by changelog tools)
 - `<scope>` *(optional)* — component or layer affected (`runtime`, `roles`, `capabilities`, `setup`, `adr`, `docs`, `extending-layers`, …)
 - `<subject>` — imperative, present tense, no trailing period, ≤ 72 chars
+- `#<issue>` *(ADR work only)* — the task being delivered, immediately before the subject, so the issue timeline reads as a changelog: `✨ feat(core): #42 resolve the cascade from a configurable base root`
 
 **Why both gitmoji and Conventional Commits?** The gitmoji gives instant visual scanning of `git log`. The conventional prefix keeps commits parseable for automated changelog/release tooling. They compose cleanly — best of both worlds.
 
