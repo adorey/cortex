@@ -48,5 +48,40 @@ class DeriveCapabilitiesTests(unittest.TestCase):
         self.assertEqual(derive_capabilities(ROOT / "svc-a"), [])
 
 
+class TeamContextTests(unittest.TestCase):
+    """ADR-006: the team tier ``agents/project-context.md`` is read before the developer tier,
+    each labelled by scope when both exist (ADR-007 §3.6)."""
+
+    def make(self, team=None, developer=None):
+        import shutil
+        import tempfile
+        root = Path(tempfile.mkdtemp(prefix="cortex-context-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        if team is not None:
+            (root / "agents").mkdir()
+            (root / "agents" / "project-context.md").write_text(team, encoding="utf-8")
+        if developer is not None:
+            (root / "project-context.md").write_text(developer, encoding="utf-8")
+        return root
+
+    def test_team_tier_comes_first_and_both_are_labelled(self):
+        ctx = read_project_context(self.make(team="TEAM-RULE", developer="DEV-NOTE"))
+        self.assertLess(ctx.index("## Team context"), ctx.index("TEAM-RULE"))
+        self.assertLess(ctx.index("TEAM-RULE"), ctx.index("## Developer notes"))
+        self.assertLess(ctx.index("## Developer notes"), ctx.index("DEV-NOTE"))
+
+    def test_team_tier_alone_is_read(self):
+        self.assertIn("TEAM-RULE", read_project_context(self.make(team="TEAM-RULE")))
+
+    def test_developer_tier_alone_is_unchanged(self):
+        self.assertEqual(read_project_context(self.make(developer="DEV-NOTE")), "DEV-NOTE")
+
+    def test_team_tier_selects_capabilities(self):
+        root = self.make(team="We write PHP.")
+        (root / "cortex" / "agents" / "capabilities" / "languages").mkdir(parents=True)
+        (root / "cortex" / "agents" / "capabilities" / "languages" / "php.md").write_text("# PHP", encoding="utf-8")
+        self.assertEqual(derive_capabilities(root), ["languages/php.md"])
+
+
 if __name__ == "__main__":
     unittest.main()
