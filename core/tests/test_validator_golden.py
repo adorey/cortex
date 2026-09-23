@@ -1,8 +1,9 @@
 """The overlay validator's behaviour, frozen — ADR-007 phase 2.
 
-``fixtures/validator/expected.json`` holds what ``bin/validate-overlays.sh`` printed for every
-run of every case (see ``validator_harness.py``). These tests pin that capture to the script, and
-check that it covers every verdict the script can emit.
+``fixtures/validator/expected.json`` holds what the Bash implementation of
+``bin/validate-overlays.sh`` printed for every run of every case (see ``validator_harness.py``).
+These tests replay it through the script — now a shim over the core — and through the core
+directly, and check that it covers every verdict the validator can emit.
 """
 
 import json
@@ -53,8 +54,8 @@ class ScriptTests(unittest.TestCase):
 
     def test_the_core_matches_the_script_on_a_large_project(self):
         # Many files, directories mixing files and subdirectories, nesting: the case where the
-        # order ``find`` lists files in matters. Both run on the same file system, so their
-        # outputs must be identical even though that order is not predictable.
+        # order files are listed in matters. The script and the core run on the same file
+        # system, so their outputs must be identical even though that order is not predictable.
         import tempfile
         tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
