@@ -15,7 +15,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cortex_core.validate import (  # noqa: E402
-    Abort, Colors, Report, check_overlay, echo_e_line, find, main, overlay_roots, validate,
+    Colors, Report, check_overlay, echo_e_line, find, main, overlay_roots, validate,
 )
 from tests import validator_harness as harness  # noqa: E402
 
@@ -42,11 +42,8 @@ def core_verdicts(case):
                           if p.relative_to(project).parts[0] != "cortex" and p.name != "project-overview.md")
         out = io.StringIO()
         report = Report(out, Colors(False))
-        try:
-            for path in overlays:
-                check_overlay(str(path), str(project), str(project / "cortex"), report)
-        except Abort:
-            return None, out.getvalue().split("\n")[:-1]
+        for path in overlays:
+            check_overlay(str(path), str(project), str(project / "cortex"), report)
         return report, out.getvalue().split("\n")[:-1]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -54,11 +51,8 @@ def core_verdicts(case):
 
 class VerdictTestCase(unittest.TestCase):
     def assert_case(self, case):
-        report, lines = core_verdicts(case)
-        expected = captured_verdicts(case)
-        if report is None:  # the script aborted before any verdict
-            self.assertEqual(EXPECTED[case]["default"]["code"], 1)
-        self.assertEqual(lines, expected)
+        _, lines = core_verdicts(case)
+        self.assertEqual(lines, captured_verdicts(case))
 
 
 class Tier1Tests(VerdictTestCase):
@@ -238,6 +232,24 @@ class MissingHeaderTests(unittest.TestCase):
     def test_a_headerless_file_with_no_base_is_still_a_custom_addition(self):
         _, lines = core_verdicts("custom-addition")
         self.assertEqual(lines, ["ℹ agents/roles/engineering/my-own-role.md (custom addition — no cortex base, skipping overlay checks)"])
+
+
+class MissingFieldTests(unittest.TestCase):
+    """#81 — a header key that is absent is reported like an empty one, and the run goes on."""
+
+    def test_an_absent_key_is_reported(self):
+        for case, field in (("absent-base-key", "Base"), ("absent-scope-key", "Scope"), ("absent-semantic-key", "Semantic")):
+            with self.subTest(case=case):
+                report, lines = core_verdicts(case)
+                self.assertIsNotNone(report, "the run was aborted")
+                self.assertEqual(lines, ["✗ agents/roles/engineering/lead-backend.md",
+                                         f"  MISSING_FIELD — {field}: is required in OVERLAY header"])
+
+    def test_the_other_overlays_are_still_checked(self):
+        report, lines = core_verdicts("absent-key-among-others")
+        self.assertIsNotNone(report, "the run was aborted")
+        self.assertIn("✓ agents/workflows/engineering/code-review.md", lines)
+        self.assertEqual((report.errors, report.checked), (1, 2))
 
 
 class EchoTests(unittest.TestCase):

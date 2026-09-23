@@ -3,7 +3,9 @@
 Each case under ``fixtures/validator/cases/`` becomes a throwaway host project: the shared
 base goes to ``{project}/cortex/agents/``, the case's own files on top. ``expected.json`` was
 captured from the Bash implementation of ``bin/validate-overlays.sh`` (Cortex 0.9.0), before it
-became a shim; the core must reproduce it byte for byte, the temporary directory aside.
+became a shim, then re-captured once, deliberately, for the behaviour changes of ADR-007 phase 4
+(``missing-header``, ``header-after-line-10``, the ``absent-*`` cases). The core must reproduce it
+byte for byte, the temporary directory aside.
 
 A case may carry a ``case.json``:
 

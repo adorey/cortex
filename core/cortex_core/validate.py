@@ -6,6 +6,10 @@ codes, byte-identical output. Literal means literal — the string arithmetic th
 absolute paths (``${file#*/agents/}``, ``"$PROJECT_DIR/$base"``) and its ``echo -e`` escapes are
 reproduced as they were, so that nothing a host project relied on changed with the port.
 
+It then departed from that output on purpose, twice (ADR-007 §3.6 and its amendments): a file
+without a header at the path of a base is reported as ``MISSING_HEADER``, and a header key that is
+absent — not only empty — is reported as ``MISSING_FIELD`` instead of aborting the run.
+
 The cascade's own rules — which layer replaces, which file cannot be overridden — are not
 restated here: they come from the resolver, the one implementation the runtime runs too.
 """
@@ -34,11 +38,6 @@ _ADDITIVE_TAG = re.compile(r"^##.*\(additive\)|^## 🚫 Disabled rules from base
 _ESCAPE = re.compile(r"\\(0[0-7]{0,3}|x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{1,4}|U[0-9A-Fa-f]{1,8}|.)", re.S)
 _SIMPLE = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
            "t": "\t", "v": "\v", "\\": "\\"}
-
-
-class Abort(Exception):
-    """The script dies under ``set -e`` when a header key is missing: an empty ``grep`` fails the
-    pipeline, and the assignment exits the shell before any verdict is printed."""
 
 
 class Colors:
@@ -126,7 +125,7 @@ def read_text(path: str) -> str:
 def extract_field(text: str, name: str) -> Optional[str]:
     """The script's ``sed -n '/<!-- OVERLAY/,/-->/p' | grep -E '^[[:space:]]*Name:' | head -1``.
 
-    Returns ``None`` when no line matches — where the script's pipeline fails.
+    Returns ``None`` when no line matches — the key is absent.
     """
     block: List[str] = []
     in_range = False
@@ -206,15 +205,13 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
         report.echo_e(f"{report.c.BLUE}ℹ{report.c.NC} {rel_path} (custom addition — no cortex base, skipping overlay checks)")
         return
 
-    # Tier 1.2 — required fields
-    fields = [extract_field(text, name) for name in ("Base", "Scope", "Semantic")]
-    if any(value is None for value in fields):
-        raise Abort()
-    base, scope, semantic = fields
-    for name, value in (("Base", base), ("Scope", scope), ("Semantic", semantic)):
+    # Tier 1.2 — required fields, absent or empty alike
+    fields = {name: extract_field(text, name) for name in ("Base", "Scope", "Semantic")}
+    for name, value in fields.items():
         if not value:
             report.error(rel_path, "MISSING_FIELD", f"{name}: is required in OVERLAY header")
             return
+    base, scope, semantic = fields["Base"], fields["Scope"], fields["Semantic"]
 
     # Tier 1.3 — base exists
     if not os.path.isfile(base_file(base, project_root, base_root)):
@@ -349,24 +346,21 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
         report.echo("   Nothing to validate. This is expected if you haven't created overlays yet.")
         return 0
 
-    try:
-        for root in roots:
-            # The script strips "{project}/", so the workspace root itself prints its full path.
-            rel_root = strip_prefix(root, f"{project_root}/") or "."
-            report.echo_e(f"{c.BOLD}── Scope: {rel_root} ──{c.NC}")
-            found = 0
-            for layer in LAYERS:
-                layer_dir = f"{root}/agents/{layer}"
-                if not os.path.isdir(layer_dir):
-                    continue
-                for path in find(layer_dir, "*.md", regular_files=True, follow_links=True):
-                    check_overlay(path, project_root, base_root, report)
-                    found += 1
-            if found == 0:
-                report.echo("  (no overlay files)")
-            report.echo("")
-    except Abort:
-        return 1
+    for root in roots:
+        # The script strips "{project}/", so the workspace root itself prints its full path.
+        rel_root = strip_prefix(root, f"{project_root}/") or "."
+        report.echo_e(f"{c.BOLD}── Scope: {rel_root} ──{c.NC}")
+        found = 0
+        for layer in LAYERS:
+            layer_dir = f"{root}/agents/{layer}"
+            if not os.path.isdir(layer_dir):
+                continue
+            for path in find(layer_dir, "*.md", regular_files=True, follow_links=True):
+                check_overlay(path, project_root, base_root, report)
+                found += 1
+        if found == 0:
+            report.echo("  (no overlay files)")
+        report.echo("")
 
     report.echo(SEPARATOR)
     report.echo_e(f"Checked:  {c.BOLD}{report.checked}{c.NC} files")
