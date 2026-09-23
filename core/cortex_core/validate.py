@@ -193,8 +193,16 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
         sys.stderr.write(f"head: cannot open '{file}' for reading: {error.strerror}\n")
         text = ""
 
-    # Tier 1.1 — header presence, in the first ten lines; otherwise a custom addition
+    # Tier 1.1 — header presence, in the first ten lines. Without one, a file at the path of a
+    # base shadows it — the resolver stacks it, so it is an overlay missing its header
+    # (ADR-007 §3.6); anywhere else it is a custom addition.
     if not any("<!-- OVERLAY" in line for line in text.split("\n")[:10]):
+        shadowed = after_first(file, "/agents/")
+        if os.path.isfile(f"{base_root}/agents/{shadowed}"):
+            report.warning(rel_path, "MISSING_HEADER",
+                           f"no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/{shadowed}' — "
+                           "add the header, or rename the file if it is not meant to extend that base")
+            return
         report.echo_e(f"{report.c.BLUE}ℹ{report.c.NC} {rel_path} (custom addition — no cortex base, skipping overlay checks)")
         return
 

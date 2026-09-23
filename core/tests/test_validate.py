@@ -226,6 +226,19 @@ class MainTests(unittest.TestCase):
         self.assertIn(b"Usage: validate-overlays.sh", stdout.buffer.getvalue())
         self.assertIn(b"Unknown argument: --no-such-option", stderr.buffer.getvalue())
 
+class MissingHeaderTests(unittest.TestCase):
+    """ADR-007 §3.6 — a file without a header at the path of a base shadows it: it is an overlay."""
+
+    def test_a_headerless_file_at_a_base_path_is_reported(self):
+        _, lines = core_verdicts("missing-header")
+        self.assertEqual(lines[0], "⚠ agents/roles/engineering/lead-backend.md")
+        self.assertTrue(lines[1].startswith("  MISSING_HEADER — "), lines[1])
+        self.assertEqual(len(lines), 2)
+
+    def test_a_headerless_file_with_no_base_is_still_a_custom_addition(self):
+        _, lines = core_verdicts("custom-addition")
+        self.assertEqual(lines, ["ℹ agents/roles/engineering/my-own-role.md (custom addition — no cortex base, skipping overlay checks)"])
+
 
 class EchoTests(unittest.TestCase):
     def test_bash_echo_e_escapes(self):
