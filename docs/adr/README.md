@@ -18,7 +18,7 @@ An ADR documents a **significant architectural decision**: the context that trig
 |---|---|
 | **Filename** | `ADR-{NNN}-{kebab-case-title}.md` (e.g. `ADR-001-layered-overrides.md`) |
 | **Numbering** | Strict sequential, never reused — even for superseded ADRs |
-| **Status** | One of: `Proposed`, `Accepted`, `Deprecated`, `Superseded by ADR-XXX` |
+| **Status** | One of: `Proposed`, `Accepted`, `Implemented`, `Deprecated`, `Superseded by ADR-XXX` — `Implemented` applies to a phased ADR once every phase has merged |
 | **Modification policy** | Append-only. To revise: write a new ADR that supersedes the old one. Mark the old one `Superseded by ADR-XXX` (only metadata change allowed). |
 | **Scope** | Decisions that affect Cortex's structure, contracts, or behavior. Not implementation details. |
 
@@ -33,6 +33,13 @@ Every ADR must contain:
 5. **Consequences** — Positive, negative, neutral impacts
 6. **Alternatives considered** — What was rejected and why
 7. **References** — Linked files, related ADRs, external sources
+
+An ADR delivered in several steps adds:
+
+8. **Phases** — numbered, each with its scope and its acceptance criteria. This list is the
+   authoritative scope: the implementation issues quote it rather than paraphrase it, and the
+   phase numbers become the `phase:N` labels. How a phased ADR is then delivered — branches,
+   issues, gates — is described in [docs/process/adr-implementation.md](../process/adr-implementation.md).
 
 ## Index
 
