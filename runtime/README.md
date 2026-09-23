@@ -46,9 +46,8 @@ merge semantics of §3.2:
 - `roles/`, `capabilities/`, `personalities/{theme}/theme.md`, `…/{character}.md` → **additive**
 - `personalities/{theme}/characters.md` → **not overridable** (base only)
 
-`tests/test_parity.py` asserts the Python resolver agrees with the shipped
-[`bin/validate-overlays.sh`](../bin/validate-overlays.sh) on a fixture cascade, so the two
-implementations cannot drift apart silently (ADR-002 §3.1).
+[`bin/validate-overlays.sh`](../bin/validate-overlays.sh) runs the same core, so the resolver and
+the overlay validator are one implementation and cannot drift apart (ADR-002 §3.1, ADR-007).
 
 ## Run the slice (Phase 5) — no key, no SDK
 

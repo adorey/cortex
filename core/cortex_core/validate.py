@@ -1,10 +1,10 @@
 """Overlay validation — ADR-001 Tier 1 and Tier 2 (ADR-007).
 
-A literal port of ``bin/validate-overlays.sh``: same checks in the same order, same messages,
-same exit codes, and output that is byte-identical to the script's. Literal means literal — the
-string arithmetic the script does on absolute paths (``${file#*/agents/}``, ``"$PROJECT_DIR/$base"``)
-and its ``echo -e`` escapes are reproduced as they are, so that nothing a host project relied on
-changes when the script becomes a shim over this module.
+``bin/validate-overlays.sh`` runs this module. It is a literal port of the Bash implementation
+that script held until Cortex 0.9.0: same checks in the same order, same messages, same exit
+codes, byte-identical output. Literal means literal — the string arithmetic the Bash code did on
+absolute paths (``${file#*/agents/}``, ``"$PROJECT_DIR/$base"``) and its ``echo -e`` escapes are
+reproduced as they were, so that nothing a host project relied on changed with the port.
 """
 
 from __future__ import annotations

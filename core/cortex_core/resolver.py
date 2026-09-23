@@ -1,8 +1,7 @@
 """Cascade resolution — ADR-001 §3.1 and §3.2 compiled to code (ADR-002 §3.1, ADR-007).
 
-It must stay behaviourally identical to ``bin/validate-overlays.sh`` until ADR-007 phase 3
-turns that script into a shim over this package; ``runtime/tests/test_parity.py`` guards the
-pair meanwhile.
+The one implementation of the cascade in code: the runtime and ``bin/validate-overlays.sh``
+both run it.
 
 Layout consumed:
 
