@@ -22,12 +22,26 @@ _CONTEXT_FILE = "project-context.md"
 
 
 def read_project_context(root: Path, service: Optional[str] = None) -> str:
-    """Concatenate the workspace and (optional) service ``project-context.md`` files."""
+    """The project context, tier by tier: team, developer, then the service's own.
+
+    ADR-006 splits the workspace context in two: the **team** tier ``agents/project-context.md``
+    and the **developer** tier ``project-context.md`` at the root, read in that order. When both
+    exist, each is labelled by scope (ADR-006 §3.3); with a single tier there is no scope to tell
+    apart, and the text stays exactly as it was.
+    """
     root = Path(root)
+    team = root / "agents" / _CONTEXT_FILE
+    developer = root / _CONTEXT_FILE
     parts = []
-    for ctx in (root / _CONTEXT_FILE, (root / service / _CONTEXT_FILE) if service else None):
-        if ctx and ctx.is_file():
-            parts.append(ctx.read_text(encoding="utf-8"))
+    if team.is_file() and developer.is_file():
+        parts.append("## Team context\n\n" + team.read_text(encoding="utf-8"))
+        parts.append("## Developer notes\n\n" + developer.read_text(encoding="utf-8"))
+    else:
+        for ctx in (team, developer):
+            if ctx.is_file():
+                parts.append(ctx.read_text(encoding="utf-8"))
+    if service and (root / service / _CONTEXT_FILE).is_file():
+        parts.append((root / service / _CONTEXT_FILE).read_text(encoding="utf-8"))
     return "\n\n".join(parts)
 
 
