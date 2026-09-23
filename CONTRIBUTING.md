@@ -183,7 +183,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 
 1. **Branch from `main`** with a descriptive name: `feat/redis-capability`, `fix/setup-workspace-template`, `docs/extending-layers-examples`
 2. **Make atomic commits** — one logical change per commit. Cortex uses **[Conventional Commits](https://www.conventionalcommits.org/) prefixed with a [gitmoji](https://gitmoji.dev/)** (see table below).
-3. **Update the changelog** if your change is user-visible: add an entry under the next version's `## Changes` section
+3. **Update the changelog** if your change is user-visible: add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), in its Keep a Changelog group (`Added`, `Changed`, `Fixed`, …)
 4. **Run validators** before pushing
 5. **Open the PR** with:
    - A clear description of *why* (not just *what*)
