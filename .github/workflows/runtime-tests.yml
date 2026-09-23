@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - "runtime/**"
+      - "core/**"
       - ".github/workflows/runtime-tests.yml"
   pull_request:
     paths:
       - "runtime/**"
+      - "core/**"
       - ".github/workflows/runtime-tests.yml"
 
 jobs:
@@ -43,7 +45,8 @@ jobs:
         # fastapi (core) + httpx (dev) make the API tests run rather than skip;
         # postgres extra makes the PostgresStateStore contract run against the service;
         # the parity test shells out to bin/validate-overlays.sh (bash, present on the runner).
-        run: pip install -e ".[dev,serve,postgres]"
+        # cortex-core comes from ../core, in the same command, so pip never looks for it on an index.
+        run: pip install -e ../core -e ".[dev,serve,postgres]"
 
       - name: Run the test suite
         working-directory: runtime
