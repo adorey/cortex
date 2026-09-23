@@ -1,7 +1,7 @@
 # ADR-007 — Cortex Core: unified cascade resolution
 
-- **Status:** Proposed
-- **Date:** 2026-09-23 (proposed)
+- **Status:** Accepted
+- **Date:** 2026-09-23 (proposed) · 2026-09-23 (accepted)
 - **Authors:** Cortex maintainers (initiated by the maintainer, drafted by @Oolon)
 - **Affects:** a new `core/` package (`cortex_core`), `runtime/cortex_runtime/resolver.py` and `context.py`, `bin/validate-overlays.sh`, `runtime/tests/test_parity.py` and `test_firewall.py`, `deploy/Dockerfile`, CI, the contributor prerequisites
 - **Relates to:** [ADR-001](ADR-001-layered-overrides.md) — refines §3.1, the base locator only; the cascade and its merge semantics are untouched · [ADR-002](ADR-002-cortex-runtime.md) §3.1 and §3.4 — the executable resolver and its `root` binding · [ADR-006](ADR-006-workspace-shareable-repo.md) — the team tier the runtime does not read yet · roadmap epic [#36](https://github.com/adorey/cortex/issues/36)
