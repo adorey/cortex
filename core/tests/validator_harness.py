@@ -80,10 +80,13 @@ def _run(cmd, env=None):
 
 
 def run_script(project, args):
-    """The validator as host projects run it: ``{project}/cortex/bin/validate-overlays.sh``."""
+    """The validator as host projects run it: ``{project}/cortex/bin/validate-overlays.sh``, with
+    the core it runs from at ``{project}/cortex/core`` — where a Cortex checkout has it."""
     bin_dir = project / "cortex" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(SCRIPT, bin_dir / SCRIPT.name)
+    shutil.copytree(CORE / "cortex_core", project / "cortex" / "core" / "cortex_core",
+                    ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)
     return _run(["bash", str(bin_dir / SCRIPT.name), *args])
 
 
