@@ -1,0 +1,16 @@
+# Lead Backend (fixture base)
+
+## 🎯 Mission
+BASE-ROLE: own the backend.
+
+## 🚫 Anti-patterns
+BASE-RULE: no N+1 queries.
+
+
+<!-- OVERLAY
+     Base: cortex/agents/roles/engineering/lead-backend.md
+     Scope: workspace
+     Semantic: additive
+-->
+## Project conventions (additive)
+WORKSPACE-RULE: all responses in French.

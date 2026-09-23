@@ -1,0 +1,39 @@
+# H2G2 Theme (fixture base)
+
+BASE-THEME: Don't Panic. British humour, cosmic absurdity.
+
+
+<!-- OVERLAY
+     Base: cortex/agents/personalities/h2g2/theme.md
+     Scope: workspace
+     Semantic: additive
+-->
+## Project narrative (additive)
+WORKSPACE-THEME: the ship is the Heart of Gold for this project.
+
+
+---
+
+# Hactar (fixture base)
+
+BASE-CHARACTER: "I calculated every permutation and chose the most elegant solution."
+
+
+---
+
+# Lead Backend (fixture base)
+
+## 🎯 Mission
+BASE-ROLE: own the backend.
+
+## 🚫 Anti-patterns
+BASE-RULE: no N+1 queries.
+
+
+<!-- OVERLAY
+     Base: cortex/agents/roles/engineering/lead-backend.md
+     Scope: workspace
+     Semantic: additive
+-->
+## Project conventions (additive)
+WORKSPACE-RULE: all responses in French.
