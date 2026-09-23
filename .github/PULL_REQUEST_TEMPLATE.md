@@ -33,5 +33,6 @@ shellcheck --severity=warning setup.sh bin/*.sh
 - [ ] Docs updated if behaviour or setup changed (README, `docs/`, templates)
 - [ ] An [ADR](../tree/main/docs/adr) was added or amended if this changes structure or contracts
 - [ ] Everything added is in **English** — `bin/check-english.sh` passes
+- [ ] Labelled like the issues it delivers — at least one `type:*`, plus `adr:NNN` and `phase:N` for ADR work
 - [ ] No secret, real email, real organisation name or deployment-specific value added
 - [ ] ADR work: every task delivered here is listed in `Closes`, and will be repeated in the release pull request — [why](../blob/main/docs/process/adr-implementation.md#6-commits-and-closing-keywords)

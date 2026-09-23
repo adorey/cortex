@@ -164,6 +164,12 @@ record.
 "Add a resolver" is not a criterion; "`bin/validate-overlays.sh --strict` exits 0 on a host
 project scaffolded without a `cortex/` directory" is.
 
+**Pull requests carry labels too** — the same ones as the issues they deliver. Every pull request
+has at least one `type:*`; ADR work adds its `adr:NNN`, its `phase:N` and, when the phase gates the
+release, `gate:blocking`. A release pull request carries `type:docs`. The board then filters pull
+requests the way it filters issues — and a pull request whose labels differ from its issues' is
+usually delivering something the issues do not describe.
+
 ## 6. Commits and closing keywords
 
 Commits follow the [convention in CONTRIBUTING.md](../../CONTRIBUTING.md#commit-message-convention)

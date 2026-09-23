@@ -191,6 +191,8 @@ the reason.
 
 **Checklist:**
 - [ ] Target the **parent branch** of the stack, never `main` directly
+- [ ] Label the pull request like the phase issue — `adr:NNN`, `phase:N`, `type:*`, and
+      `gate:blocking` when the phase carries it
 - [ ] Description: what the phase does, the acceptance criteria met, the sign-offs from steps 4
       to 6, what was deliberately left out
 - [ ] `Closes #NN` for every sub-issue — commits carry no body, so the closing keywords live
