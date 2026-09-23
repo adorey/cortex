@@ -15,6 +15,10 @@ release note under [`changelog/`](changelog/).
 - **`MISSING_HEADER`**: a file without an `<!-- OVERLAY -->` header at the path of a cortex base is reported — a warning, an error under `--strict` — instead of being skipped as a custom addition, since the cascade stacks it onto that base. A host project running `--strict` in CI may start failing on such files.
 - `bin/validate-overlays.sh` runs its checks from `cortex-core`: validating overlays needs **Python 3.9 or later**, until the native binary of ADR-008. Same options, same output, same exit codes — and about 77× faster on 200 overlays (5.4 s → 0.07 s). Without a usable Python it exits `2` and says so.
 
+### Fixed
+- A header missing its `Base:`, `Scope:` or `Semantic:` key made the overlay validator stop at once with exit `1` — no file named, no summary. It is now reported as `MISSING_FIELD`, like an empty value, and the other overlays are still checked.
+- The runtime read only the root and service `project-context.md`: it now reads the ADR-006 team tier, `agents/project-context.md`, first — both tiers labelled by scope when both exist.
+
 ## [0.9.0] - 2026-09-23 — Beware of the Leopard _(Released)_
 [Full notes](changelog/0.9.0.md)
 
