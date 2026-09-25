@@ -6,6 +6,7 @@ The shim must stop before running anything and say what is missing, with exit co
 
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -80,6 +81,26 @@ class ShimIsolationTests(unittest.TestCase):
         self.assertFalse(marker.exists(), "a module from the project under validation was executed")
         self.assertEqual(proc.returncode, 0)
         self.assertIn("✓ agents/roles/engineering/lead-backend.md", proc.stdout)
+
+
+@unittest.skipIf(shutil.which("bash") is None or not hasattr(signal, "SIGPIPE"), "bash or SIGPIPE not available")
+class ShimPipeTests(unittest.TestCase):
+    def test_a_reader_that_goes_away_ends_the_run_quietly(self):
+        # validate-overlays.sh | head -1: the script died of SIGPIPE, in silence — no traceback.
+        from tests import validator_harness as harness
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = harness.layout("ok-additive", tmp)
+        harness.run_script(project, [])       # puts the shim and the core in place
+        proc = subprocess.Popen(["bash", str(project / "cortex" / "bin" / "validate-overlays.sh")],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc.stdout.close()                   # gone before the first line is written
+        err = proc.stderr.read()
+        proc.stderr.close()
+        proc.wait()
+        self.assertNotIn(b"Traceback", err)
+        self.assertEqual(proc.returncode, -signal.SIGPIPE)
 
 
 if __name__ == "__main__":

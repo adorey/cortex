@@ -58,5 +58,5 @@ fi
 # holds, say, an fnmatch.py would execute that file — code from the very project under
 # validation, in CI included. The core is then imported from this checkout, first on sys.path:
 # the validator runs the same cascade rules as the runtime.
-exec "$PYTHON" -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); from cortex_core.validate import main; sys.exit(main())' \
+exec "$PYTHON" -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); from cortex_core.validate import cli; sys.exit(cli())' \
     "$CORTEX_DIR/core" --project-root "$PROJECT_DIR" --base-root "$CORTEX_DIR" "$@"
