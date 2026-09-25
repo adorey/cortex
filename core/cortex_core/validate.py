@@ -44,6 +44,28 @@ class Colors:
         self.NC = "\x1b[0m" if on else ""
 
 
+def _byte(value: int) -> str:
+    """One byte, as ``_stream`` writes it back: past ASCII, the surrogateescape character."""
+    return chr(value) if value < 0x80 else chr(0xDC00 + value)
+
+
+def _code_point(code: int) -> str:
+    """What Bash writes for ``\\u`` and ``\\U`` under a UTF-8 locale: the character, or, for a
+    surrogate or a code point past U+10FFFF, the bytes of UTF-8 extended as Bash's own encoder
+    extends it — up to six bytes, nothing past 0x7FFFFFFF."""
+    if code <= 0x10FFFF and not 0xD800 <= code <= 0xDFFF:
+        return chr(code)
+    if code > 0x7FFFFFFF:
+        return ""
+    count = next(n for n, limit in ((3, 0x10000), (4, 0x200000), (5, 0x4000000), (6, 0x80000000)) if code < limit)
+    tail = []
+    for _ in range(count - 1):
+        tail.insert(0, 0x80 | (code & 0x3F))
+        code >>= 6
+    lead = (0xE0, 0xF0, 0xF8, 0xFC)[count - 3] | code
+    return "".join(_byte(b) for b in [lead] + tail)
+
+
 def echo_e(text: str) -> Tuple[str, bool]:
     """What Bash's ``echo -e`` prints for ``text``, and whether a ``\\c`` cut it short.
 
@@ -58,9 +80,11 @@ def echo_e(text: str) -> Tuple[str, bool]:
         if head == "c":
             return "".join(out), True
         if head == "0":
-            out.append(chr(int(esc[1:] or "0", 8)))
-        elif head in ("x", "u", "U"):
-            out.append(chr(int(esc[1:], 16)))
+            out.append(_byte(int(esc[1:] or "0", 8) & 0xFF))
+        elif head == "x" and len(esc) > 1:
+            out.append(_byte(int(esc[1:], 16)))
+        elif head in ("u", "U") and len(esc) > 1:
+            out.append(_code_point(int(esc[1:], 16)))
         elif head in _SIMPLE:
             out.append(_SIMPLE[head])
         else:
