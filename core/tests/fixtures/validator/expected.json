@@ -483,6 +483,52 @@
    ]
   }
  },
+ "escape-incomplete-in-field": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\\xyz')",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\\xyz')",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
  "header-after-line-10": {
   "default": {
    "code": 0,

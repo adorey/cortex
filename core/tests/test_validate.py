@@ -113,6 +113,22 @@ class EchoTests(unittest.TestCase):
         self.assertEqual(echo_e_line("p\\qz"), "p\\qz\n")      # an unknown escape stays as it is
         self.assertEqual(echo_e_line("\\x41\\0102"), "AB\n")
 
+    def test_incomplete_escapes_are_printed_as_they_are(self):
+        # What Bash prints — and a Windows-style Base: path, \users included, used to crash the port.
+        self.assertEqual(echo_e_line("a\\xyz"), "a\\xyz\n")
+        self.assertEqual(echo_e_line("\\users\\Ux"), "\\users\\Ux\n")
+
+    def test_escapes_write_the_bytes_bash_writes(self):
+        # Measured with Bash under C.UTF-8. A byte that is not UTF-8 is carried as surrogateescape,
+        # which the output stream writes back as that very byte.
+        raw = lambda *bs: "".join(chr(0xDC00 + b) for b in bs)  # noqa: E731
+        self.assertEqual(echo_e_line("\\xe9\\0351"), raw(0xE9, 0xE9) + "\n")
+        self.assertEqual(echo_e_line("\\u00e9"), "\u00e9\n")
+        self.assertEqual(echo_e_line("\\uD800"), raw(0xED, 0xA0, 0x80) + "\n")
+        self.assertEqual(echo_e_line("\\U00110000"), raw(0xF4, 0x90, 0x80, 0x80) + "\n")
+        self.assertEqual(echo_e_line("\\U7FFFFFFF"), raw(0xFD, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF) + "\n")
+        self.assertEqual(echo_e_line("p\\UFFFFFFFFq"), "pq\n")
+
 
 if __name__ == "__main__":
     unittest.main()
