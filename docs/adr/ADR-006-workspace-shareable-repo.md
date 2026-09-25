@@ -110,3 +110,9 @@ No change to `bin/validate-overlays.sh` is needed: with exactly two tiers, both 
 - [docs/extending-layers.md](../extending-layers.md) — overlay convention `agents/` already hosts
 - [templates/bootstrap-instructions-workspace.md](../../templates/bootstrap-instructions-workspace.md) — bootstrap steps that read workspace context
 - [agents/roles/prompt-manager.md](../../agents/roles/prompt-manager.md) — dispatch protocol
+
+## 8. Amendments
+
+### ADR-007 phase 4 — the runtime reads the team tier, and when it labels it
+
+The runtime reads the team tier too since ADR-007 phase 4, first, as §3.3 orders. It labels the two tiers — `## Team context`, `## Developer notes` — only when **both** exist: with a single tier there is no scope to tell apart, and a workspace without a team tier sees its context unchanged. The Prompt Manager's protocol of §3.3 is unchanged. See [ADR-007 §9](ADR-007-cortex-core.md#9-amendments).
