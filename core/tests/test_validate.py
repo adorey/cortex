@@ -236,6 +236,21 @@ class MissingHeaderTests(unittest.TestCase):
         self.assertEqual(lines, ["ℹ agents/roles/engineering/my-own-role.md (custom addition — no cortex base, skipping overlay checks)"])
 
 
+class NonOverridableTests(unittest.TestCase):
+    """characters.md cannot be overridden: without a header it is the same error as with one."""
+
+    def test_a_headerless_characters_md_at_a_base_path_is_non_overridable(self):
+        report, lines = core_verdicts("non-overridable-without-header")
+        self.assertEqual(lines[0], "✗ agents/personalities/h2g2/characters.md")
+        self.assertTrue(lines[1].startswith("  NON_OVERRIDABLE — "), lines[1])
+        self.assertEqual(report.errors, 1)
+
+    def test_a_theme_of_the_projects_own_is_still_a_custom_addition(self):
+        # docs/creating-a-theme.md: a host project may carry its own theme under agents/personalities/.
+        _, lines = core_verdicts("custom-theme")
+        self.assertEqual(lines, ["ℹ agents/personalities/acme/characters.md (custom addition — no cortex base, skipping overlay checks)"])
+
+
 class MissingFieldTests(unittest.TestCase):
     """#81 — a header key that is absent is reported like an empty one, and the run goes on."""
 

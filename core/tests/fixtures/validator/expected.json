@@ -391,6 +391,50 @@
    ]
   }
  },
+ "custom-theme": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "ℹ agents/personalities/acme/characters.md (custom addition — no cortex base, skipping overlay checks)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "ℹ agents/personalities/acme/characters.md (custom addition — no cortex base, skipping overlay checks)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
  "empty-agents": {
   "default": {
    "code": 0,
@@ -888,6 +932,52 @@
   }
  },
  "non-overridable": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "✗ agents/personalities/h2g2/characters.md",
+    "  NON_OVERRIDABLE — characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "✗ agents/personalities/h2g2/characters.md",
+    "  NON_OVERRIDABLE — characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "non-overridable-without-header": {
   "default": {
    "code": 1,
    "stdout": [
