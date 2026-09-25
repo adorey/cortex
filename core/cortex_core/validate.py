@@ -377,17 +377,22 @@ def _stream(stream: TextIO) -> TextIO:
     return io.TextIOWrapper(stream.buffer, encoding="utf-8", errors="surrogateescape", newline="\n", write_through=True)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: Optional[List[str]] = None, *, project_root: Optional[str] = None,
+         base_root: Optional[str] = None) -> int:
     """``bin/validate-overlays.sh [--service PATH] [--strict] [-h|--help]``.
 
-    ``--project-root`` and ``--base-root`` are internal: the script passes the two roots it
-    derives from its own location. Left out, they are derived the same way from this file's
-    location in a Cortex checkout — ``{project}/cortex/core/cortex_core/validate.py``.
+    The two roots are no options: ``cli`` receives them from the script, which derives them from
+    its own location. Left out, they are derived the same way from this file's location in a
+    Cortex checkout — ``{project}/cortex/core/cortex_core/validate.py``.
     """
     args = sys.argv[1:] if argv is None else list(argv)
+    if base_root is None:
+        base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if project_root is None:
+        project_root = os.path.dirname(base_root)
     out, err = _stream(sys.stdout), _stream(sys.stderr)
     try:
-        return _main(args, out, err)
+        return _main(args, project_root, base_root, out, err)
     finally:
         # The wrappers borrow the process's own streams: detached, returning leaves stdout and
         # stderr open for whatever runs next in this process.
@@ -395,9 +400,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         err.detach()
 
 
-def _main(args: List[str], out: TextIO, err: TextIO) -> int:
-    base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    project_root: Optional[str] = None
+def _main(args: List[str], project_root: str, base_root: str, out: TextIO, err: TextIO) -> int:
     service, strict = "", False
     i = 0
     while i < len(args):
@@ -411,30 +414,26 @@ def _main(args: List[str], out: TextIO, err: TextIO) -> int:
         elif arg in ("-h", "--help"):
             out.write(USAGE)
             return 0
-        elif arg in ("--project-root", "--base-root"):
-            if i + 1 >= len(args):
-                err.write(f"{arg} needs a value\n")
-                return 2
-            if arg == "--project-root":
-                project_root = args[i + 1]
-            else:
-                base_root = args[i + 1]
-            i += 2
         else:
             err.write(f"Unknown argument: {arg}\n")
             err.write(USAGE)
             return 2
-    if project_root is None:
-        project_root = os.path.dirname(base_root)
     return validate(project_root, base_root, service, strict, out, Colors(out.isatty()))
 
 
 def cli() -> int:
-    """The command line ``bin/validate-overlays.sh`` runs. A reader that goes away — ``| head`` —
-    ends the run as it ended the script, by SIGPIPE and in silence, not with a BrokenPipeError."""
+    """The command line ``bin/validate-overlays.sh`` runs: ``PROJECT_ROOT BASE_ROOT [OPTIONS]``,
+    the two roots from the script, the options from its caller.
+
+    A reader that goes away — ``| head`` — ends the run as it ended the script, by SIGPIPE and in
+    silence, not with a BrokenPipeError.
+    """
     if hasattr(signal, "SIGPIPE"):
         signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-    return main()
+    if len(sys.argv) < 3:
+        sys.stderr.write("usage: PROJECT_ROOT BASE_ROOT [OPTIONS] — run it as bin/validate-overlays.sh\n")
+        return 2
+    return main(sys.argv[3:], project_root=sys.argv[1], base_root=sys.argv[2])
 
 
 if __name__ == "__main__":
