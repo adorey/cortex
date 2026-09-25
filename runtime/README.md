@@ -191,9 +191,13 @@ GET /runs/{run_id}                     → one run + its full metrics_json
 GET /audit?workspace=&subject=         → the action trail (with the gated flag)
 ```
 
-## Run the tests (zero install)
+## Run the tests
 
 ```bash
 cd runtime
-python3 -m unittest discover -s tests -v
+PYTHONPATH=../core python3 -m unittest discover -s tests -v
 ```
+
+Nothing to install for most of the suite: `cortex-core` is read from `../core`, standard library
+only. The modules that import `pytest` need the dev extra — `pip install -e ../core -e ".[dev]"`,
+as CI does.
