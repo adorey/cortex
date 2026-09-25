@@ -101,6 +101,50 @@ class ShimOptionsTests(unittest.TestCase):
                 self.assertEqual(out, b"")
 
 
+@unittest.skipIf(shutil.which("bash") is None, "bash not available")
+class ShimLocationTests(unittest.TestCase):
+    """The shim finds the core next to itself, however it is called."""
+
+    def project(self):
+        from tests import validator_harness as harness
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = harness.layout("ok-additive", tmp)
+        harness.run_script(project, [])       # puts the shim and the core in place
+        return tmp, project
+
+    def run_shim(self, path, cwd, env=None):
+        return subprocess.run(["bash", str(path)], capture_output=True, text=True, cwd=cwd, env=env)
+
+    def test_with_cdpath_exported(self):
+        # With CDPATH exported, cd looks there first — here, into a decoy cortex/bin — and prints
+        # what it found, which the shim would have captured into the path.
+        tmp, project = self.project()
+        (tmp / "elsewhere" / "cortex" / "bin").mkdir(parents=True)
+        env = dict(os.environ, CDPATH=f"{tmp / 'elsewhere'}:.")
+        proc = self.run_shim(Path("cortex/bin/validate-overlays.sh"), project, env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", proc.stdout)
+
+    def test_through_a_symbolic_link(self):
+        tmp, project = self.project()
+        (tmp / "bin").mkdir()
+        (tmp / "bin" / "validate-overlays").symlink_to(project / "cortex" / "bin" / "validate-overlays.sh")
+        proc = self.run_shim(tmp / "bin" / "validate-overlays", tmp)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", proc.stdout)
+
+    def test_a_copy_away_from_the_checkout_says_so(self):
+        tmp, project = self.project()
+        (tmp / "bin").mkdir()
+        shutil.copy(project / "cortex" / "bin" / "validate-overlays.sh", tmp / "bin" / "validate-overlays.sh")
+        proc = self.run_shim(tmp / "bin" / "validate-overlays.sh", tmp)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("cannot find cortex-core", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
+
 @unittest.skipIf(shutil.which("bash") is None or not hasattr(signal, "SIGPIPE"), "bash or SIGPIPE not available")
 class ShimPipeTests(unittest.TestCase):
     def test_a_reader_that_goes_away_ends_the_run_quietly(self):
