@@ -2,11 +2,13 @@
 
 import io
 import json
+import os
 import sys
 import tempfile
 import shutil
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -104,6 +106,33 @@ class SymlinkTests(unittest.TestCase):
         (project / "agents").mkdir()
         (project / "agents" / "roles").symlink_to(overlay.parent.parent, target_is_directory=True)
         self.assertIn("✓ agents/roles/engineering/lead-backend.md", self.run_validator(project))
+
+
+class UnreadableFileTests(unittest.TestCase):
+    """A file the validator cannot read: the script's head failed, said so on stderr, and the
+    file counted as one without a header."""
+
+    def test_an_unreadable_file_is_reported_on_stderr_and_skipped(self):
+        err = io.StringIO()
+        with mock.patch("cortex_core.validate.read_text", side_effect=PermissionError(13, "Permission denied")), \
+                mock.patch("sys.stderr", err):
+            _, lines = core_verdicts("custom-addition")
+        self.assertEqual(lines, ["ℹ agents/roles/engineering/my-own-role.md (custom addition — no cortex base, skipping overlay checks)"])
+        self.assertRegex(err.getvalue(), r"^head: cannot open '.*/agents/roles/engineering/my-own-role.md' for reading: Permission denied\n$")
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root reads any file")
+    def test_a_file_without_read_permission(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = harness.layout("custom-addition", tmp)
+        overlay = project / "agents" / "roles" / "engineering" / "my-own-role.md"
+        overlay.chmod(0)
+        self.addCleanup(overlay.chmod, 0o644)
+        code, out, err = harness.run_core(project, [])
+        self.assertEqual(code, 0)
+        self.assertIn(b"custom addition", out)
+        self.assertIn(b"Permission denied", err)
+        self.assertNotIn(b"Traceback", err)
 
 
 class EchoTests(unittest.TestCase):
