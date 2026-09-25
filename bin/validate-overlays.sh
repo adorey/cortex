@@ -28,9 +28,23 @@
 set -eo pipefail
 
 # --- Paths -----------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Called through a symbolic link, the script is where the link points. CDPATH is
+# cleared: with it exported, cd prints the directory it found, into the path.
+SOURCE="$0"
+while [[ -L "$SOURCE" ]]; do
+    LINK_DIR="$(CDPATH='' cd -- "$(dirname -- "$SOURCE")" >/dev/null && pwd)"
+    SOURCE="$(readlink -- "$SOURCE")"
+    [[ "$SOURCE" == /* ]] || SOURCE="$LINK_DIR/$SOURCE"
+done
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$SOURCE")" >/dev/null && pwd)"
 CORTEX_DIR="$(dirname "$SCRIPT_DIR")"
 PROJECT_DIR="$(dirname "$CORTEX_DIR")"
+
+if [[ ! -f "$CORTEX_DIR/core/cortex_core/validate.py" ]]; then
+    echo "validate-overlays.sh cannot find cortex-core next to it, in $CORTEX_DIR/core." >&2
+    echo "Run it from the Cortex checkout — cortex/bin/validate-overlays.sh — or through a link to it." >&2
+    exit 2
+fi
 
 # --- Python ----------------------------------------------------------------
 # The version is checked, not only the presence: an old python3 would fail
