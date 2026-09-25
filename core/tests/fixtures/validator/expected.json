@@ -1289,6 +1289,52 @@
    ]
   }
  },
+ "unicode-space-in-field": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'additive ')",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'additive ')",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
  "unknown-layer": {
   "default": {
    "code": 0,

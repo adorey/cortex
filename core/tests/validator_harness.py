@@ -11,6 +11,11 @@ A case may carry a ``case.json``:
 - ``runs`` — the argument lists to run it with (default: none, then ``--strict``);
 - ``crlf`` — files to rewrite with CRLF line endings at layout time (git keeps them LF).
 
+Every run happens under ``LC_ALL=C``. The port reads bytes and ASCII character classes the way
+the script's grep and sed did in the C locale; under a UTF-8 locale they also took Unicode
+spaces for spaces (``unicode-space-in-field``). Pinning the locale measures the script in the
+one the port reproduces, whatever the machine running the tests (ADR-007 §9).
+
 Re-capture from the script — only meaningful while it still holds the logic:
 
     cd core && python3 -m tests.validator_harness --capture
@@ -68,6 +73,7 @@ def layout(case, tmp):
 
 
 def _run(cmd, env=None):
+    env = dict(os.environ if env is None else env, LC_ALL="C")
     proc = subprocess.run(cmd, capture_output=True, env=env)
     return proc.returncode, proc.stdout, proc.stderr
 
