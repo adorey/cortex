@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cortex_core.catalog import capability_catalog  # noqa: E402
+from cortex_core.catalog import capability_catalog, capability_dirs  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ROOT = FIXTURES / "host"
@@ -36,6 +36,12 @@ class CatalogTests(unittest.TestCase):
         shutil.copytree(ROOT / "cortex", tmp / "install")
         shutil.copytree(ROOT, tmp / "project", ignore=shutil.ignore_patterns("cortex"))
         self.assertEqual(capability_catalog(tmp / "project", "svc-a", base_root=tmp / "install"), GOLDEN["svc-a"])
+
+    def test_a_base_that_is_the_project_root_is_listed_once(self):
+        # ADR-007 §3.1: the base and the workspace tier coincide — one directory, not two.
+        base = ROOT / "cortex"
+        self.assertEqual(capability_dirs(base, "svc-a", base_root=base),
+                         [base / "agents" / "capabilities", base / "svc-a" / "agents" / "capabilities"])
 
 
 if __name__ == "__main__":
