@@ -18,6 +18,7 @@ import fnmatch
 import io
 import os
 import re
+import signal
 import sys
 from typing import List, Optional, TextIO, Tuple
 
@@ -428,5 +429,13 @@ def _main(args: List[str], out: TextIO, err: TextIO) -> int:
     return validate(project_root, base_root, service, strict, out, Colors(out.isatty()))
 
 
+def cli() -> int:
+    """The command line ``bin/validate-overlays.sh`` runs. A reader that goes away — ``| head`` —
+    ends the run as it ended the script, by SIGPIPE and in silence, not with a BrokenPipeError."""
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    return main()
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(cli())
