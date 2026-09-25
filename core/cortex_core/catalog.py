@@ -9,19 +9,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from .resolver import _base
+from .resolver import _tiers
 
 
 def capability_dirs(root: Path, service: Optional[str] = None, *, base_root: Optional[Path] = None) -> List[Path]:
-    """The capability directories of the cascade, base first."""
-    root = Path(root)
-    dirs = [
-        _base(root, base_root) / "agents" / "capabilities",   # base catalog
-        root / "agents" / "capabilities",                      # workspace-added capabilities
-    ]
-    if service:
-        dirs.append(root / service / "agents" / "capabilities")  # service-added capabilities
-    return dirs
+    """The capability directories of the cascade, base first — one per tier, as the resolver
+    counts them."""
+    return [tier / "agents" / "capabilities" for tier in _tiers(root, service, base_root)]
 
 
 def capability_catalog(root: Path, service: Optional[str] = None, *, base_root: Optional[Path] = None) -> List[str]:
