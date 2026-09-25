@@ -3,6 +3,7 @@
 Runnable with zero install:  cd core && python3 -m unittest discover -s tests -v
 """
 
+import os
 import shutil
 import sys
 import tempfile
@@ -94,6 +95,35 @@ class BaseRootTests(unittest.TestCase):
         self.assertEqual(character_for_role("lead-backend", "h2g2", project, base_root=install), "h2g2/Hactar.md")
         # and without base_root the same project has no base at all
         self.assertIsNone(find_role_relpath("lead-backend", project))
+
+
+def case_insensitive_dir():
+    """A fresh directory on a case-insensitive file system, or None. The default temporary
+    directory is one on macOS and Windows; elsewhere CORTEX_TEST_CASEFOLD_DIR may name one —
+    ``/mnt/c/...`` under WSL."""
+    for parent in (os.environ.get("CORTEX_TEST_CASEFOLD_DIR"), tempfile.gettempdir()):
+        if not parent or not os.path.isdir(parent):
+            continue
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-case-", dir=parent))
+        if Path(str(tmp).replace("cortex-case-", "CORTEX-CASE-")).is_dir():
+            return tmp
+        shutil.rmtree(tmp, ignore_errors=True)
+    return None
+
+
+class CaseInsensitiveFileSystemTests(unittest.TestCase):
+    """macOS (APFS) and Windows (NTFS) name one directory in several spellings."""
+
+    def test_the_project_root_spelled_otherwise_is_still_the_base(self):
+        tmp = case_insensitive_dir()
+        if tmp is None:
+            self.skipTest("no case-insensitive file system available")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        root = tmp / "Cortex"
+        (root / "agents" / "roles" / "engineering").mkdir(parents=True)
+        (root / "agents" / "roles" / "engineering" / "lead-backend.md").write_text("# base\n", encoding="utf-8")
+        found = resolve_layer("roles", "engineering/lead-backend.md", None, root, base_root=tmp / "CORTEX")
+        self.assertEqual(len(found), 1, found)
 
 
 class SemanticTests(unittest.TestCase):
