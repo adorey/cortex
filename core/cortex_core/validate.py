@@ -178,7 +178,12 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
     """Validate one overlay file — the script's ``validate_overlay_file``."""
     rel_path = strip_prefix(file, f"{project_root}/")
     report.checked += 1
-    text = read_text(file)
+    try:
+        text = read_text(file)
+    except OSError as error:
+        # The script's head failed, said so on stderr, and so found no header.
+        sys.stderr.write(f"head: cannot open '{file}' for reading: {error.strerror}\n")
+        text = ""
 
     # Tier 1.1 — header presence, in the first ten lines; otherwise a custom addition
     if not any("<!-- OVERLAY" in line for line in text.split("\n")[:10]):
