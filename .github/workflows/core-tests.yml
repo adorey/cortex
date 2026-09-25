@@ -34,3 +34,19 @@ jobs:
       - name: Run the core suite
         working-directory: core
         run: python -m unittest discover -s tests -v
+
+  macos:
+    # Apple's own Python — the 3.9.6 of the Command Line Tools that ADR-007 §3.3 names — on a
+    # file system that ignores case, where two spellings of one directory must still be one.
+    # The resolver's tests only: the validator's captured outputs list files in the order the
+    # file system returns them, which is ext4's in the captures and not APFS's.
+    name: cortex-core (macOS, system Python)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the resolver's tests
+        working-directory: core
+        run: |
+          /usr/bin/python3 --version
+          /usr/bin/python3 -m unittest -v tests.test_package tests.test_resolver tests.test_catalog tests.test_prompt tests.test_self_hosting
