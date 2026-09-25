@@ -12,7 +12,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cortex_core.validate import Abort, Colors, Report, check_overlay, echo_e_line, validate  # noqa: E402
+from cortex_core.validate import Abort, Colors, Report, check_overlay, echo_e_line, main, validate  # noqa: E402
 from tests import validator_harness as harness  # noqa: E402
 
 EXPECTED = json.loads(harness.EXPECTED.read_text(encoding="utf-8"))
@@ -133,6 +133,22 @@ class UnreadableFileTests(unittest.TestCase):
         self.assertIn(b"custom addition", out)
         self.assertIn(b"Permission denied", err)
         self.assertNotIn(b"Traceback", err)
+
+
+class MainTests(unittest.TestCase):
+    def test_main_leaves_the_process_streams_open(self):
+        # In one process — a test, a CLI embedding the core — whatever runs next still writes.
+        stdout = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        stderr = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+            self.assertEqual(main(["--help"]), 0)
+            self.assertEqual(main(["--no-such-option"]), 2)
+        self.assertFalse(stdout.closed)
+        self.assertFalse(stderr.closed)
+        stdout.write("still open\n")
+        stdout.flush()
+        self.assertIn(b"Usage: validate-overlays.sh", stdout.buffer.getvalue())
+        self.assertIn(b"Unknown argument: --no-such-option", stderr.buffer.getvalue())
 
 
 class EchoTests(unittest.TestCase):
