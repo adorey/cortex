@@ -176,3 +176,7 @@ Acceptance criteria:
 ### Phase 1 — the firewall, extended from the core's side
 
 §3.3 extends the ADR-002 firewall test so that spec Markdown references neither the runtime nor the core. That test is `runtime/tests/test_firewall.py`, and phase 1 must pass with no runtime test modified. The core's tokens are therefore guarded by a test of the core's own, `core/tests/test_boundaries.py`, which also enforces the dependency direction; the runtime's test keeps guarding the runtime's. The guarantee is the one §3.3 asks for, held by two files instead of one.
+
+### Phase 2 — where the port parts from the script, on purpose
+
+- **A layer directory reached through a symbolic link is validated.** With `agents/roles` a link to a shared directory, the script checked nothing — GNU `find -P` does not enter a starting point that is a link — while the resolver reads the overlays behind it. The port validates what the resolver reads; a test pins it. A file that is itself a link is still skipped, as `find -type f` skipped it.
