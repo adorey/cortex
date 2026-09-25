@@ -63,7 +63,7 @@ Prompt assembly belongs to the core because every client needs it: the runtime t
 ### 3.3 The package
 
 - `core/`, imported as `cortex_core`, distributed as `cortex-core` — the same shape as `runtime/`.
-- **No third-party dependency**, and `requires-python >= 3.9` — deliberately lower than the runtime's 3.11: the core must run from source on a host machine, with no install step.
+- **No third-party dependency**, and `requires-python >= 3.9` — deliberately lower than the runtime's 3.11: the core must run from source on a host machine, with no install step. 3.9 is the Python such machines already have: Apple's Command Line Tools install Python 3.9.6 as `/usr/bin/python3` (macOS 15 included), and RHEL 9 and its rebuilds ship 3.9 as their system Python, maintained by the distribution after upstream's end of life in October 2025. Raising the floor drops those machines — until the native binary of ADR-008 makes the question moot.
 - **Dependency direction:** the runtime imports the core; the core never imports the runtime. A test enforces it, and the ADR-002 firewall test is extended so that spec Markdown references neither.
 
 ### 3.4 The `Base:` header stays a logical identifier
