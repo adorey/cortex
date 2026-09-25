@@ -1,6 +1,6 @@
 """Unit tests for the cascade resolver — ADR-001 §3.1/§3.2 (ADR-002 §3.1).
 
-Runnable with zero install:  python3 -m unittest discover -s tests -v
+Runnable with nothing installed:  PYTHONPATH=../core python3 -m unittest discover -s tests -v
 """
 
 import sys
