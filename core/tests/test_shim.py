@@ -41,9 +41,15 @@ class ShimWithoutPythonTests(unittest.TestCase):
         self.assert_names_the_requirement(self.run_with_path({}))
 
     def test_a_python_too_old(self):
-        # Answers the version probe the way Python 3.8 would: exit status 1.
-        old = "#!/bin/bash\n[ \"$1\" = -c ] && exit 1\necho 'Python 3.8.18'\n"
+        # Answers the version probe the way Python 3.8 would: it runs the -c code, which exits 1.
+        old = "#!/bin/bash\nfor a; do [ \"$a\" = -c ] && exit 1; done\necho 'Python 3.8.18'\n"
         self.assert_names_the_requirement(self.run_with_path({"python3": old, "python": old}))
+
+    def test_a_python_2(self):
+        # Python 2 rejects -I (exit status 2), and without it runs the probe, which exits 1.
+        py2 = ("#!/bin/bash\n[ \"$1\" = -I ] && { echo 'Unknown option: -I' >&2; exit 2; }\n"
+               "[ \"$1\" = -c ] && exit 1\nexit 0\n")
+        self.assert_names_the_requirement(self.run_with_path({"python3": py2, "python": py2}))
 
 
 @unittest.skipIf(shutil.which("bash") is None, "bash not available")
@@ -58,8 +64,9 @@ class ShimIsolationTests(unittest.TestCase):
         project = harness.layout("ok-additive", tmp)
         marker = tmp / "executed"
         payload = f"open({str(marker)!r}, 'w').close()\n"
-        # Standard modules the validator imports, and the package name itself.
-        for name in ("fnmatch.py", "re.py", "typing.py"):
+        # Standard modules the validator imports, the package name itself, and sitecustomize,
+        # which any Python started without -I imports from sys.path — the version probe included.
+        for name in ("fnmatch.py", "re.py", "typing.py", "sitecustomize.py"):
             (project / name).write_text(payload, encoding="utf-8")
         (project / "cortex_core").mkdir()
         (project / "cortex_core" / "__init__.py").write_text(payload, encoding="utf-8")
