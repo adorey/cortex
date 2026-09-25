@@ -309,7 +309,7 @@ def overlay_roots(project_root: str, base_root: str, service: str) -> List[str]:
     """The workspace, when it has ``agents/``, then every service that has both a
     ``project-overview.md`` and an ``agents/`` — or the one ``--service`` names."""
     if service:
-        return [service if service.startswith("/") else f"{project_root}/{service}"]
+        return [service if os.path.isabs(service) else f"{project_root}/{service}"]
     roots = [project_root] if os.path.isdir(f"{project_root}/agents") else []
     for overview in find(project_root, "project-overview.md", maxdepth=5, excludes=("*/cortex/*", "*/.git/*")):
         service_dir = os.path.dirname(overview)
