@@ -64,9 +64,9 @@ class ShimIsolationTests(unittest.TestCase):
         project = harness.layout("ok-additive", tmp)
         marker = tmp / "executed"
         payload = f"open({str(marker)!r}, 'w').close()\n"
-        # Standard modules the validator imports, the package name itself, and sitecustomize,
+        # Standard modules the core imports, the package name itself, and sitecustomize,
         # which any Python started without -I imports from sys.path — the version probe included.
-        for name in ("fnmatch.py", "re.py", "typing.py", "sitecustomize.py"):
+        for name in ("fnmatch.py", "re.py", "typing.py", "enum.py", "pathlib.py", "sitecustomize.py"):
             (project / name).write_text(payload, encoding="utf-8")
         (project / "cortex_core").mkdir()
         (project / "cortex_core" / "__init__.py").write_text(payload, encoding="utf-8")

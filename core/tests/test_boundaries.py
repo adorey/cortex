@@ -7,9 +7,13 @@
 """
 
 import ast
+import io
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -49,18 +53,32 @@ class DependencyDirectionTests(unittest.TestCase):
         self.assertEqual(runtime_imports("import cortex_core"), [])
 
 
-class ShimContractTests(unittest.TestCase):
-    """bin/validate-overlays.sh runs validate.py as a file under ``python -I``: the package is not
-    importable there, so the module may import the standard library only."""
+class OneImplementationTests(unittest.TestCase):
+    """ADR-007 §2 — the validator applies the resolver's cascade rules and keeps no copy of them:
+    change the rule in the resolver, and the validator's verdict changes with it."""
 
-    def test_validate_imports_nothing_from_the_package(self):
-        tree = ast.parse((CORE_PKG / "validate.py").read_text(encoding="utf-8"))
-        offenders = [
-            ast.dump(node) for node in ast.walk(tree)
-            if (isinstance(node, ast.ImportFrom) and (node.level > 0 or (node.module or "").startswith("cortex_core")))
-            or (isinstance(node, ast.Import) and any(a.name.startswith("cortex_core") for a in node.names))
-        ]
-        self.assertEqual(offenders, [])
+    def run_validator(self, case):
+        from cortex_core.validate import Colors, validate
+        from tests import validator_harness as harness
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = harness.layout(case, tmp)
+        out = io.StringIO()
+        validate(str(project), str(project / "cortex"), "", False, out, Colors(False))
+        return out.getvalue()
+
+    def test_the_validator_follows_the_resolvers_rules(self):
+        from cortex_core import resolver
+
+        cases = ("replacement-outside-workflows", "non-overridable")
+        for case in cases:
+            self.assertIn("✗", self.run_validator(case), case)
+        everything_replaces = lambda layer, file: resolver.MergeSemantic.REPLACEMENT  # noqa: E731
+        with mock.patch.object(resolver, "semantic_for", everything_replaces):
+            for case in cases:
+                with self.subTest(case=case):
+                    self.assertNotIn("✗", self.run_validator(case))
 
 
 class SpecFirewallTests(unittest.TestCase):
