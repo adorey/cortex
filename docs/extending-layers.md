@@ -59,7 +59,7 @@ There are **two ways** to put a file in your project's `agents/` tree:
 
 This guide focuses on **overlays**. For custom additions, you just place the file at the cascade path and the PM picks it up — no header needed. The `validate-overlays.sh` script logs custom additions as informational and skips overlay-specific checks for them.
 
-A file with no header that sits **at the path of a cortex base** is not a custom addition: it shadows that base, and the cascade stacks it as an overlay. The validator reports it as `MISSING_HEADER` — a warning, and an error under `--strict`. Add the header, or rename the file if it was never meant to extend the base.
+A file with no header that sits **at the path of a cortex base** is not a custom addition: it shadows that base, and the cascade stacks it as an overlay. The validator reports it as `MISSING_HEADER` — a warning, and an error under `--strict`. Add the header, or rename the file if it was never meant to extend the base. The one exception is `personalities/{theme}/characters.md`: it cannot be overridden at all, so a copy at the path of a base is `NON_OVERRIDABLE`, an error, header or not. A theme of your own, with no base of that name, is a custom addition.
 
 Examples of custom additions:
 - A fully custom personality theme (you don't extend `h2g2`, you create your own)
