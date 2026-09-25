@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cortex_core.validate import Abort, Colors, Report, check_overlay, echo_e_line  # noqa: E402
+from cortex_core.validate import Abort, Colors, Report, check_overlay, echo_e_line, validate  # noqa: E402
 from tests import validator_harness as harness  # noqa: E402
 
 EXPECTED = json.loads(harness.EXPECTED.read_text(encoding="utf-8"))
@@ -72,6 +72,38 @@ class Tier2Tests(VerdictTestCase):
         for case in TIER_2:
             with self.subTest(case=case):
                 self.assert_case(case)
+
+
+OVERLAY = ("<!-- OVERLAY\n     Base: cortex/agents/roles/engineering/lead-backend.md\n     Scope: workspace\n"
+           "     Semantic: additive\n-->\n\n## Naming (additive)\n- a project rule\n")
+
+
+class SymlinkTests(unittest.TestCase):
+    """Symbolic links, where the port parts from the script on purpose (ADR-007 §9)."""
+
+    def project(self):
+        """A host project, and an overlay kept outside its agents/ directory."""
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = tmp / "host"
+        shutil.copytree(harness.FIXTURES / "base", project / "cortex")
+        overlay = tmp / "shared" / "roles" / "engineering" / "lead-backend.md"
+        overlay.parent.mkdir(parents=True)
+        overlay.write_text(OVERLAY, encoding="utf-8")
+        return project, overlay
+
+    def run_validator(self, project):
+        out = io.StringIO()
+        validate(str(project), str(project / "cortex"), "", False, out, Colors(False))
+        return out.getvalue()
+
+    def test_a_layer_directory_reached_through_a_link_is_validated(self):
+        # The resolver reads through the link, so the validator checks what it reads. GNU find -P,
+        # which the script ran, did not enter a starting point that is a link: "Checked: 0 files".
+        project, overlay = self.project()
+        (project / "agents").mkdir()
+        (project / "agents" / "roles").symlink_to(overlay.parent.parent, target_is_directory=True)
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", self.run_validator(project))
 
 
 class EchoTests(unittest.TestCase):
