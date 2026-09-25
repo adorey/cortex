@@ -53,9 +53,10 @@ if [[ -z "$PYTHON" ]]; then
 fi
 
 # --- Run -------------------------------------------------------------------
-# The module runs as a file under -I (isolated mode): neither the working directory nor this
-# script's directory lands on sys.path, and PYTHON* variables are ignored. Without it, running
-# the validator from a project root that holds, say, an fnmatch.py would execute that file —
-# code from the very project under validation, in CI included.
-exec "$PYTHON" -I "$CORTEX_DIR/core/cortex_core/validate.py" \
-    --project-root "$PROJECT_DIR" --base-root "$CORTEX_DIR" "$@"
+# Python runs under -I (isolated mode): neither the working directory nor PYTHONPATH lands on
+# sys.path, and no sitecustomize from the project runs. Without it, validating a project that
+# holds, say, an fnmatch.py would execute that file — code from the very project under
+# validation, in CI included. The core is then imported from this checkout, first on sys.path:
+# the validator runs the same cascade rules as the runtime.
+exec "$PYTHON" -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); from cortex_core.validate import main; sys.exit(main())' \
+    "$CORTEX_DIR/core" --project-root "$PROJECT_DIR" --base-root "$CORTEX_DIR" "$@"
