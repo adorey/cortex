@@ -10,7 +10,7 @@ name: cortex
 services:
   cortex-runtime:
     build:
-      context: ..                     # repo root (the image needs runtime/ and mcp/)
+      context: ..                     # repo root (the image needs core/, runtime/ and mcp/)
       dockerfile: deploy/Dockerfile
     image: cortex-runtime
     container_name: cortex
