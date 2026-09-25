@@ -12,7 +12,7 @@ release note under [`changelog/`](changelog/).
 
 ### Changed
 - The runtime depends on `cortex-core` and re-exports it, so every name it offered keeps working. Install both — `pip install -e ../core -e .` from `runtime/`.
-- **`MISSING_HEADER`**: a file without an `<!-- OVERLAY -->` header at the path of a cortex base is reported — a warning, an error under `--strict` — instead of being skipped as a custom addition, since the cascade stacks it onto that base. A host project running `--strict` in CI may start failing on such files. A headerless `characters.md` at the path of a base is `NON_OVERRIDABLE` — an error, as it is with a header.
+- **`MISSING_HEADER`**: a file without an `<!-- OVERLAY -->` header at the path of a cortex base is reported — a warning, an error under `--strict` — instead of being skipped as a custom addition, since the cascade stacks it onto that base. A host project running `--strict` in CI may start failing on such files. A headerless `characters.md` at the path of a base is `NON_OVERRIDABLE` — an error, as it is with a header — and a `README.md` is documentation, never reported.
 - `bin/validate-overlays.sh` runs its checks from `cortex-core`: validating overlays needs **Python 3.9 or later**, until the native binary of ADR-008. Same options, same exit codes, the same output but for the fixes below — and about 77× faster on 200 overlays (5.4 s → 0.07 s). Without a usable Python it exits `2` and says so.
 
 ### Fixed

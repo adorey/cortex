@@ -1252,6 +1252,50 @@
    ]
   }
  },
+ "readme-in-layer": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "ℹ agents/roles/README.md (custom addition — no cortex base, skipping overlay checks)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "ℹ agents/roles/README.md (custom addition — no cortex base, skipping overlay checks)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
  "replacement-outside-workflows": {
   "default": {
    "code": 1,
