@@ -180,3 +180,4 @@ Acceptance criteria:
 ### Phase 2 — where the port parts from the script, on purpose
 
 - **A layer directory reached through a symbolic link is validated.** With `agents/roles` a link to a shared directory, the script checked nothing — GNU `find -P` does not enter a starting point that is a link — while the resolver reads the overlays behind it. The port validates what the resolver reads; a test pins it. A file that is itself a link is still skipped, as `find -type f` skipped it.
+- **The C locale, whatever the machine's.** The script's `grep` and `sed` followed the locale they ran in: under a UTF-8 one — CI runners' — `[[:space:]]` also matched Unicode spaces, so a header value ending in, say, U+2003 was trimmed there and not in the C locale. The port reads bytes and ASCII character classes, as the C locale does, on every machine; the captured outputs are measured with the script under `LC_ALL=C` to match.
