@@ -2,13 +2,13 @@
 
 ``bin/validate-overlays.sh`` runs this module. It is a literal port of the Bash implementation
 that script held until Cortex 0.9.0: same checks in the same order, same messages, same exit
-codes, byte-identical output. Literal means literal — the string arithmetic the Bash code did on
-absolute paths (``${file#*/agents/}``, ``"$PROJECT_DIR/$base"``) and its ``echo -e`` escapes are
-reproduced as they were, so that nothing a host project relied on changed with the port.
+codes, byte-identical output — ``echo -e`` escapes included — so that nothing a host project
+relied on changed with the port.
 
-It then departed from that output on purpose, twice (ADR-007 §3.6 and its amendments): a file
-without a header at the path of a base is reported as ``MISSING_HEADER``, and a header key that is
-absent — not only empty — is reported as ``MISSING_FIELD`` instead of aborting the run.
+It then departed from that output on purpose (ADR-007 §3.6 and its amendments): a file without a
+header at the path of a base is reported as ``MISSING_HEADER``; a header key that is absent — not
+only empty — is reported as ``MISSING_FIELD`` instead of aborting the run; and paths are taken
+from the root being scanned, where the script cut absolute paths at their first ``/agents/``.
 
 The cascade's own rules — which layer replaces, which file cannot be overridden — are not
 restated here: they come from the resolver, the one implementation the runtime runs too.
@@ -111,12 +111,6 @@ def strip_prefix(value: str, prefix: str) -> str:
     return value[len(prefix):] if value.startswith(prefix) else value
 
 
-def after_first(value: str, marker: str) -> str:
-    """Bash ``${value#*marker}`` — everything after the first occurrence of ``marker``."""
-    idx = value.find(marker)
-    return value[idx + len(marker):] if idx >= 0 else value
-
-
 def read_text(path: str) -> str:
     with open(path, "rb") as fh:
         return fh.read().decode("utf-8", "surrogateescape")
@@ -181,9 +175,15 @@ def base_file(base: str, project_root: str, base_root: str) -> str:
     return f"{project_root}/{base}"
 
 
-def check_overlay(file: str, project_root: str, base_root: str, report: Report) -> None:
-    """Validate one overlay file — the script's ``validate_overlay_file``."""
+def check_overlay(file: str, root: str, project_root: str, base_root: str, report: Report) -> None:
+    """Validate one overlay file, found under ``{root}/agents/`` — the script's ``validate_overlay_file``.
+
+    Its path under ``agents/`` and whether it is a workspace or a service overlay come from
+    ``root``, never from the absolute path: where the project sits on disk changes nothing (#84).
+    """
     rel_path = strip_prefix(file, f"{project_root}/")
+    file_rel_to_agents = strip_prefix(file, f"{root}/agents/")
+    in_workspace = os.path.normpath(root) == os.path.normpath(project_root)
     report.checked += 1
     try:
         text = read_text(file)
@@ -196,10 +196,9 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
     # base shadows it — the resolver stacks it, so it is an overlay missing its header
     # (ADR-007 §3.6); anywhere else it is a custom addition.
     if not any("<!-- OVERLAY" in line for line in text.split("\n")[:10]):
-        shadowed = after_first(file, "/agents/")
-        if os.path.isfile(f"{base_root}/agents/{shadowed}"):
+        if os.path.isfile(f"{base_root}/agents/{file_rel_to_agents}"):
             report.warning(rel_path, "MISSING_HEADER",
-                           f"no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/{shadowed}' — "
+                           f"no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/{file_rel_to_agents}' — "
                            "add the header, or rename the file if it is not meant to extend that base")
             return
         report.echo_e(f"{report.c.BLUE}ℹ{report.c.NC} {rel_path} (custom addition — no cortex base, skipping overlay checks)")
@@ -224,7 +223,6 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
         return
 
     # The file's layer, and its path within it, as the resolver sees them
-    file_rel_to_agents = after_first(file, "/agents/")
     layer, _, file_in_layer = file_rel_to_agents.partition("/")
     rule = resolver.semantic_for(layer, file_in_layer)
 
@@ -248,17 +246,13 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
                      "characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)")
         return
 
-    # Tier 2.2 — layer is known; a warning, checking goes on
-    file_layer = file_rel_to_agents.split("/")[0]
-    if file_layer not in LAYERS:
-        report.warning(rel_path, "UNKNOWN_LAYER", f"'{file_layer}' is not a known layer (expected: {' '.join(LAYERS)})")
+    # Tier 2.2 — the file is in a known layer: holds by construction, since discovery walks the
+    # four layer directories only
 
-    # Tier 2.3 — scope vs location: a workspace overlay has 3 slashes below the project,
-    # a service overlay 4 or more
-    depth_from_project = strip_prefix(file, f"{project_root}/").count("/")
-    if scope.startswith("workspace") and depth_from_project > 3 and not rel_path.startswith("agents/"):
+    # Tier 2.3 — scope vs location
+    if scope.startswith("workspace") and not in_workspace:
         report.warning(rel_path, "SCOPE_MISMATCH", f"Scope: '{scope}' but file is not at workspace root (agents/...)")
-    if scope.startswith("service") and rel_path.startswith("agents/"):
+    if scope.startswith("service") and in_workspace:
         report.warning(rel_path, "SCOPE_MISMATCH",
                        f"Scope: '{scope}' but file is at workspace root — should be under {{service}}/agents/")
 
@@ -274,15 +268,19 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
 # Discovery — the script's two ``find`` calls
 # --------------------------------------------------------------------------- #
 def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: bool = False,
-         excludes: Tuple[str, ...] = (), follow_links: bool = False) -> List[str]:
-    """``find TOP [-maxdepth N] -name NAME [-type f] -not -path EXCLUDE…``, in ``find``'s order.
+         prune_names: Tuple[str, ...] = (), prune_paths: Tuple[str, ...] = (),
+         follow_links: bool = False) -> List[str]:
+    """``find TOP [-maxdepth N] -name NAME [-type f]``, in ``find``'s order, without entering the
+    directories below ``TOP`` that are named in ``prune_names`` or located at ``prune_paths``.
 
     Depth first, each directory's entries in the order the file system returns them — the
     order ``find`` prints, so the report lists files in the same sequence as the script did.
+    Pruning looks below ``TOP`` only: what the directories above it are called changes nothing.
     With ``follow_links``, files and directories behind symbolic links count as the resolver
     reads them — ``find -L`` — and a directory reached twice, a link loop, is entered once.
     """
     found: List[str] = []
+    pruned = {os.path.normpath(p) for p in prune_paths}
     entered = set()
 
     def visit(directory: str, depth: int) -> None:
@@ -301,10 +299,10 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
         for entry in entries:
             path = f"{directory}/{entry.name}"
             if (maxdepth is None or depth + 1 <= maxdepth) and fnmatch.fnmatchcase(entry.name, name) \
-                    and (not regular_files or entry.is_file(follow_symlinks=follow_links)) \
-                    and not any(fnmatch.fnmatchcase(path, pattern) for pattern in excludes):
+                    and (not regular_files or entry.is_file(follow_symlinks=follow_links)):
                 found.append(path)
-            if entry.is_dir(follow_symlinks=follow_links) and (maxdepth is None or depth + 1 < maxdepth):
+            if entry.is_dir(follow_symlinks=follow_links) and (maxdepth is None or depth + 1 < maxdepth) \
+                    and entry.name not in prune_names and os.path.normpath(path) not in pruned:
                 visit(path, depth + 1)
 
     visit(top, 0)
@@ -313,13 +311,19 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
 
 def overlay_roots(project_root: str, base_root: str, service: str) -> List[str]:
     """The workspace, when it has ``agents/``, then every service that has both a
-    ``project-overview.md`` and an ``agents/`` — or the one ``--service`` names."""
+    ``project-overview.md`` and an ``agents/`` — or the one ``--service`` names.
+
+    Services are looked for outside the base, wherever it is mounted and whatever it is called,
+    and outside any directory named ``cortex`` or ``.git`` below the project root — a service
+    may mount its own Cortex.
+    """
     if service:
         return [service if os.path.isabs(service) else f"{project_root}/{service}"]
     roots = [project_root] if os.path.isdir(f"{project_root}/agents") else []
-    for overview in find(project_root, "project-overview.md", maxdepth=5, excludes=("*/cortex/*", "*/.git/*")):
+    for overview in find(project_root, "project-overview.md", maxdepth=5,
+                         prune_names=("cortex", ".git"), prune_paths=(base_root,)):
         service_dir = os.path.dirname(overview)
-        if service_dir in (project_root, base_root) or not os.path.isdir(f"{service_dir}/agents"):
+        if service_dir == project_root or not os.path.isdir(f"{service_dir}/agents"):
             continue
         roots.append(service_dir)
     return roots
@@ -356,7 +360,7 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
             if not os.path.isdir(layer_dir):
                 continue
             for path in find(layer_dir, "*.md", regular_files=True, follow_links=True):
-                check_overlay(path, project_root, base_root, report)
+                check_overlay(path, root, project_root, base_root, report)
                 found += 1
         if found == 0:
             report.echo("  (no overlay files)")

@@ -1021,6 +1021,101 @@
    ]
   }
  },
+ "project-under-agents-dir": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/agents/host",
+    "  Cortex dir:    <TMP>/agents/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: <TMP>/agents/host ──",
+    "⚠ agents/roles/engineering/architect.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/roles/engineering/architect.md' — add the header, or rename the file if it is not meant to extend that base",
+    "✓ agents/roles/engineering/lead-backend.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  2 files",
+    "Errors:   0",
+    "Warnings: 1",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/agents/host",
+    "  Cortex dir:    <TMP>/agents/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: <TMP>/agents/host ──",
+    "⚠ agents/roles/engineering/architect.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/roles/engineering/architect.md' — add the header, or rename the file if it is not meant to extend that base",
+    "✓ agents/roles/engineering/lead-backend.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  2 files",
+    "Errors:   0",
+    "Warnings: 1",
+    "Strict mode: warnings count as errors.",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "project-under-cortex-dir": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/cortex/host",
+    "  Cortex dir:    <TMP>/cortex/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: svc-a ──",
+    "✗ svc-a/agents/roles/engineering/lead-backend.md",
+    "  BASE_NOT_FOUND — Base: 'cortex/agents/roles/engineering/lead-backend-v2.md' does not exist (typo, or upstream removed it?)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/cortex/host",
+    "  Cortex dir:    <TMP>/cortex/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: svc-a ──",
+    "✗ svc-a/agents/roles/engineering/lead-backend.md",
+    "  BASE_NOT_FOUND — Base: 'cortex/agents/roles/engineering/lead-backend-v2.md' does not exist (typo, or upstream removed it?)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
  "replacement-outside-workflows": {
   "default": {
    "code": 1,
@@ -1053,6 +1148,52 @@
     "  Strict mode:   true",
     "",
     "── Scope: <TMP>/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "replacement-under-agents-workflows-dir": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/agents/workflows/host",
+    "  Cortex dir:    <TMP>/agents/workflows/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: <TMP>/agents/workflows/host ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/agents/workflows/host",
+    "  Cortex dir:    <TMP>/agents/workflows/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: <TMP>/agents/workflows/host ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
     "",
@@ -1175,12 +1316,14 @@
     "  Strict mode:   false",
     "",
     "── Scope: svc-a ──",
+    "⚠ svc-a/agents/roles/lead-backend.md",
+    "  SCOPE_MISMATCH — Scope: 'workspace' but file is not at workspace root (agents/...)",
     "✓ svc-a/agents/roles/lead-backend.md",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
     "Errors:   0",
-    "Warnings: 0",
+    "Warnings: 1",
     ""
    ],
    "stderr": [
@@ -1188,7 +1331,7 @@
    ]
   },
   "--strict": {
-   "code": 0,
+   "code": 1,
    "stdout": [
     "Cortex overlay validator",
     "  Project root:  <TMP>/host",
@@ -1196,12 +1339,15 @@
     "  Strict mode:   true",
     "",
     "── Scope: svc-a ──",
+    "⚠ svc-a/agents/roles/lead-backend.md",
+    "  SCOPE_MISMATCH — Scope: 'workspace' but file is not at workspace root (agents/...)",
     "✓ svc-a/agents/roles/lead-backend.md",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
     "Errors:   0",
-    "Warnings: 0",
+    "Warnings: 1",
+    "Strict mode: warnings count as errors.",
     ""
    ],
    "stderr": [
@@ -1490,55 +1636,6 @@
     "Checked:  1 files",
     "Errors:   1",
     "Warnings: 0",
-    ""
-   ],
-   "stderr": [
-    ""
-   ]
-  }
- },
- "unknown-layer": {
-  "default": {
-   "code": 0,
-   "stdout": [
-    "Cortex overlay validator",
-    "  Project root:  <TMP>/agents/host",
-    "  Cortex dir:    <TMP>/agents/host/cortex",
-    "  Strict mode:   false",
-    "",
-    "── Scope: <TMP>/agents/host ──",
-    "⚠ agents/roles/engineering/lead-backend.md",
-    "  UNKNOWN_LAYER — 'host' is not a known layer (expected: roles capabilities personalities workflows)",
-    "✓ agents/roles/engineering/lead-backend.md",
-    "",
-    "──────────────────────────────────────────",
-    "Checked:  1 files",
-    "Errors:   0",
-    "Warnings: 1",
-    ""
-   ],
-   "stderr": [
-    ""
-   ]
-  },
-  "--strict": {
-   "code": 1,
-   "stdout": [
-    "Cortex overlay validator",
-    "  Project root:  <TMP>/agents/host",
-    "  Cortex dir:    <TMP>/agents/host/cortex",
-    "  Strict mode:   true",
-    "",
-    "── Scope: <TMP>/agents/host ──",
-    "⚠ agents/roles/engineering/lead-backend.md",
-    "  UNKNOWN_LAYER — 'host' is not a known layer (expected: roles capabilities personalities workflows)",
-    "✓ agents/roles/engineering/lead-backend.md",
-    "",
-    "──────────────────────────────────────────",
-    "Checked:  1 files",
-    "Errors:   0",
-    "Warnings: 1",
-    "Strict mode: warnings count as errors.",
     ""
    ],
    "stderr": [

@@ -21,7 +21,7 @@ from tests import validator_harness as harness  # noqa: E402
 EXPECTED = json.loads(harness.EXPECTED.read_text(encoding="utf-8"))
 ERRORS = {"MISSING_FIELD", "BASE_NOT_FOUND", "INVALID_SEMANTIC", "REPLACEMENT_OUTSIDE_WORKFLOWS",
           "PATH_MIRROR", "NON_OVERRIDABLE"}
-WARNINGS = {"UNKNOWN_LAYER", "SCOPE_MISMATCH", "SECTIONS_UNTAGGED", "MISSING_HEADER"}
+WARNINGS = {"SCOPE_MISMATCH", "SECTIONS_UNTAGGED", "MISSING_HEADER"}
 
 
 def all_stdout_lines():

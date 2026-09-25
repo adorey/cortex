@@ -43,7 +43,9 @@ def core_verdicts(case):
         out = io.StringIO()
         report = Report(out, Colors(False))
         for path in overlays:
-            check_overlay(str(path), str(project), str(project / "cortex"), report)
+            parts = path.relative_to(project).parts
+            root = project.joinpath(*parts[:parts.index("agents")])
+            check_overlay(str(path), str(root), str(project), str(project / "cortex"), report)
         return report, out.getvalue().split("\n")[:-1]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -63,8 +65,8 @@ class Tier1Tests(VerdictTestCase):
 
 
 TIER_2 = ["non-overridable", "sections-untagged", "scope-service-at-root", "scope-workspace-in-service",
-          # depth 3 — a service overlay straight under its layer directory: the script does not warn
-          "scope-workspace-in-service-shallow", "unknown-layer"]
+          # a service overlay straight under its layer directory, with no category level (#84)
+          "scope-workspace-in-service-shallow"]
 
 
 class Tier2Tests(VerdictTestCase):
@@ -250,6 +252,53 @@ class MissingFieldTests(unittest.TestCase):
         self.assertIsNotNone(report, "the run was aborted")
         self.assertIn("✓ agents/workflows/engineering/code-review.md", lines)
         self.assertEqual((report.errors, report.checked), (1, 2))
+
+
+class PathTests(unittest.TestCase):
+    """#84 — the verdicts come from the root being scanned, not from where the project sits."""
+
+    def run_core(self, case, *args):
+        return harness.execute(case, list(args), harness.run_core)
+
+    def test_a_project_inside_a_directory_named_agents(self):
+        run = self.run_core("project-under-agents-dir")
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", run["stdout"])
+        at = run["stdout"].index("⚠ agents/roles/engineering/architect.md")
+        self.assertTrue(run["stdout"][at + 1].startswith("  MISSING_HEADER — "), run["stdout"][at + 1])
+
+    def test_a_project_inside_a_directory_named_cortex_has_its_services_checked(self):
+        run = self.run_core("project-under-cortex-dir", "--strict")
+        self.assertIn("✗ svc-a/agents/roles/engineering/lead-backend.md", run["stdout"])
+        self.assertEqual(run["code"], 1)
+
+    def test_a_replacement_outside_workflows_under_an_agents_workflows_directory(self):
+        run = self.run_core("replacement-under-agents-workflows-dir")
+        self.assertIn("  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
+                      run["stdout"])
+
+    def test_a_workspace_scope_on_a_service_overlay_with_no_category(self):
+        run = self.run_core("scope-workspace-in-service-shallow")
+        at = run["stdout"].index("⚠ svc-a/agents/roles/lead-backend.md")
+        self.assertTrue(run["stdout"][at + 1].startswith("  SCOPE_MISMATCH — "), run["stdout"][at + 1])
+
+    def test_the_base_is_skipped_by_its_location_whatever_its_name(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project, base = tmp / "host", tmp / "host" / ".cortex"
+        for root in (base, base / "tests" / "fixtures" / "host", project / "svc-a"):
+            (root / "agents").mkdir(parents=True)
+            (root / "project-overview.md").write_text("# overview\n", encoding="utf-8")
+        self.assertEqual(overlay_roots(str(project), str(base), ""), [f"{project}/svc-a"])
+
+    def test_a_git_directory_below_the_project_is_still_skipped(self):
+        # Not a fixture case: git refuses to track a directory named .git.
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = tmp / "host"
+        for root in (project / ".git" / "modules" / "svc-b", project / "svc-a"):
+            (root / "agents").mkdir(parents=True)
+            (root / "project-overview.md").write_text("# overview\n", encoding="utf-8")
+        self.assertEqual(overlay_roots(str(project), str(project / "cortex"), ""), [f"{project}/svc-a"])
 
 
 class EchoTests(unittest.TestCase):
