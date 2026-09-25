@@ -13,7 +13,8 @@ from cortex_core.catalog import capability_catalog, capability_dirs  # noqa: E40
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ROOT = FIXTURES / "host"
-# Captured from the runtime's context.capability_catalog before the move.
+# Captured from the runtime's context.capability_catalog before the move; svc-a then gained a
+# capability of its own, languages/go.md, so that the service tier makes a difference.
 GOLDEN = json.loads((FIXTURES / "golden" / "catalog.json").read_text(encoding="utf-8"))
 
 
