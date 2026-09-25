@@ -13,11 +13,14 @@ release note under [`changelog/`](changelog/).
 ### Changed
 - The runtime depends on `cortex-core` and re-exports it, so every name it offered keeps working. Install both — `pip install -e ../core -e .` from `runtime/`.
 - **`MISSING_HEADER`**: a file without an `<!-- OVERLAY -->` header at the path of a cortex base is reported — a warning, an error under `--strict` — instead of being skipped as a custom addition, since the cascade stacks it onto that base. A host project running `--strict` in CI may start failing on such files.
-- `bin/validate-overlays.sh` runs its checks from `cortex-core`: validating overlays needs **Python 3.9 or later**, until the native binary of ADR-008. Same options, same output, same exit codes — and about 77× faster on 200 overlays (5.4 s → 0.07 s). Without a usable Python it exits `2` and says so.
+- `bin/validate-overlays.sh` runs its checks from `cortex-core`: validating overlays needs **Python 3.9 or later**, until the native binary of ADR-008. Same options, same exit codes, the same output but for the fixes below — and about 77× faster on 200 overlays (5.4 s → 0.07 s). Without a usable Python it exits `2` and says so.
 
 ### Fixed
 - A header missing its `Base:`, `Scope:` or `Semantic:` key made the overlay validator stop at once with exit `1` — no file named, no summary. It is now reported as `MISSING_FIELD`, like an empty value, and the other overlays are still checked.
 - The runtime read only the root and service `project-context.md`: it now reads the ADR-006 team tier, `agents/project-context.md`, first — both tiers labelled by scope when both exist.
+- The overlay validator cut absolute paths at their first `/agents/` and skipped any path containing `/cortex/`. A project inside a directory named `agents` — on GitHub Actions, a repository named `agents` — failed every overlay with `PATH_MIRROR`; one inside a directory named `cortex` had none of its services checked, and passed, under `--strict` too. Paths now come from the root being scanned, and the base is skipped by its location, whatever it is called. `UNKNOWN_LAYER`, which only that bug could produce, is gone.
+- A service overlay with no category level — `svc/agents/roles/prompt-manager.md` — declaring `Scope: workspace` went unreported: it now gets `SCOPE_MISMATCH`, a warning, an error under `--strict`.
+- The overlay validator printed header values and file names through `echo -e`, so an overlay could write terminal control sequences to the console — erase a `✗`, print a `✓` in its place. They are printed as read, control characters shown escaped (`\x1b`). The workspace's section is headed `── Scope: . ──` instead of the project's absolute path.
 
 ## [0.9.0] - 2026-09-23 — Beware of the Leopard _(Released)_
 [Full notes](changelog/0.9.0.md)
