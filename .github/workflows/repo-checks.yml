@@ -105,3 +105,24 @@ jobs:
           set -euo pipefail
           cd /tmp/host
           ./cortex/bin/validate-overlays.sh --strict
+
+      # With no agents/ directory, the step above only proves that the shim finds Python and
+      # the core. This one proves the checks run: a valid overlay passes, the same one broken fails.
+      - name: The checks run on an overlay
+        run: |
+          set -euo pipefail
+          cd /tmp/host
+          mkdir -p agents/roles/engineering
+          printf '%s\n' '<!-- OVERLAY' \
+            '     Base: cortex/agents/roles/engineering/lead-backend.md' \
+            '     Scope: workspace' '     Semantic: additive' '-->' '' \
+            '## Naming (additive)' '- a project rule' > agents/roles/engineering/lead-backend.md
+          ./cortex/bin/validate-overlays.sh --strict | tee report.txt
+          grep -q '✓ agents/roles/engineering/lead-backend.md' report.txt
+
+          sed -i 's#engineering/lead-backend.md$#engineering/no-such-role.md#' agents/roles/engineering/lead-backend.md
+          if ./cortex/bin/validate-overlays.sh --strict; then
+            echo "a Base: pointing nowhere passed the checks"
+            exit 1
+          fi
+          echo "✓ the checks ran"
