@@ -362,6 +362,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     """
     args = sys.argv[1:] if argv is None else list(argv)
     out, err = _stream(sys.stdout), _stream(sys.stderr)
+    try:
+        return _main(args, out, err)
+    finally:
+        # The wrappers borrow the process's own streams: detached, returning leaves stdout and
+        # stderr open for whatever runs next in this process.
+        out.detach()
+        err.detach()
+
+
+def _main(args: List[str], out: TextIO, err: TextIO) -> int:
     base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     project_root: Optional[str] = None
     service, strict = "", False
