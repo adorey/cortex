@@ -1,7 +1,7 @@
 <!-- OVERLAY
-     Base: cortex/agents/host/agents/roles/engineering/lead-backend.md
+     Base: cortex/agents/roles/engineering/lead-backend.md
      Scope: workspace
-     Semantic: additive
+     Semantic: replacement
 -->
 
 # Lead Backend — project rules
