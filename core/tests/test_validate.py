@@ -254,6 +254,20 @@ class MissingFieldTests(unittest.TestCase):
         self.assertEqual((report.errors, report.checked), (1, 2))
 
 
+class SelfValidationTests(unittest.TestCase):
+    """ADR-007 §3.1 — when the base is the project root, its files are the base, not overlays of it."""
+
+    def test_the_base_is_not_an_overlay_of_itself(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        root = tmp / "cortex"
+        shutil.copytree(harness.FIXTURES / "base", root)
+        out = io.StringIO()
+        code = validate(str(root), str(root), "", True, out, Colors(False))
+        self.assertNotIn("MISSING_HEADER", out.getvalue())
+        self.assertEqual(code, 0)
+
+
 class PathTests(unittest.TestCase):
     """#84 — the verdicts come from the root being scanned, not from where the project sits."""
 
