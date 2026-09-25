@@ -129,6 +129,9 @@ def base_file(base: str, project_root: str, base_root: str) -> str:
     return f"{project_root}/{base}"
 
 
+_NON_OVERRIDABLE = "characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)"
+
+
 def check_overlay(file: str, root: str, project_root: str, base_root: str, report: Report) -> None:
     """Validate one overlay file, found under ``{root}/agents/`` — the script's ``validate_overlay_file``.
 
@@ -138,6 +141,9 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
     rel_path = strip_prefix(file, f"{project_root}/")
     file_rel_to_agents = strip_prefix(file, f"{root}/agents/")
     in_workspace = os.path.normpath(root) == os.path.normpath(project_root)
+    # The file's layer, and its path within it, as the resolver sees them
+    layer, _, file_in_layer = file_rel_to_agents.partition("/")
+    rule = resolver.semantic_for(layer, file_in_layer)
     report.checked += 1
     try:
         text = read_text(file)
@@ -148,9 +154,13 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
 
     # Tier 1.1 — header presence, in the first ten lines. Without one, a file at the path of a
     # base shadows it — the resolver stacks it, so it is an overlay missing its header
-    # (ADR-007 §3.6); anywhere else it is a custom addition.
+    # (ADR-007 §3.6), unless it is one the resolver never stacks: characters.md is the same
+    # error with a header or without. Anywhere else it is a custom addition.
     if not any("<!-- OVERLAY" in line for line in text.split("\n")[:10]):
         if os.path.isfile(f"{base_root}/agents/{file_rel_to_agents}"):
+            if rule is resolver.MergeSemantic.NOT_OVERRIDABLE:
+                report.error(rel_path, "NON_OVERRIDABLE", _NON_OVERRIDABLE)
+                return
             report.warning(rel_path, "MISSING_HEADER",
                            f"no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/{file_rel_to_agents}' — "
                            "add the header, or rename the file if it is not meant to extend that base")
@@ -176,10 +186,6 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
         report.error(rel_path, "INVALID_SEMANTIC", f"Semantic: must be 'additive' or 'replacement' (got '{semantic}')")
         return
 
-    # The file's layer, and its path within it, as the resolver sees them
-    layer, _, file_in_layer = file_rel_to_agents.partition("/")
-    rule = resolver.semantic_for(layer, file_in_layer)
-
     # Tier 1.5 — replacement only where the resolver replaces: workflows
     if semantic == "replacement" and rule is not resolver.MergeSemantic.REPLACEMENT:
         report.error(rel_path, "REPLACEMENT_OUTSIDE_WORKFLOWS",
@@ -196,8 +202,7 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
     # Tier 2.1 — non-overridable, as the resolver says: characters.md (reported as an error,
     # as the script does). Past the mirror check, the base and the file share this path.
     if rule is resolver.MergeSemantic.NOT_OVERRIDABLE:
-        report.error(rel_path, "NON_OVERRIDABLE",
-                     "characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)")
+        report.error(rel_path, "NON_OVERRIDABLE", _NON_OVERRIDABLE)
         return
 
     # Tier 2.2 — the file is in a known layer: holds by construction, since discovery walks the
