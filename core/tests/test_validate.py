@@ -2,6 +2,7 @@
 
 import io
 import json
+import ntpath
 import os
 import subprocess
 import sys
@@ -200,6 +201,14 @@ class UnreadableFileTests(unittest.TestCase):
         self.assertIn(b"custom addition", out)
         self.assertIn(b"Permission denied", err)
         self.assertNotIn(b"Traceback", err)
+
+
+class ServiceOptionTests(unittest.TestCase):
+    def test_an_absolute_service_path_in_windows_form(self):
+        # Git Bash hands Python /c/work as C:/work: absolute, though it does not start with "/".
+        with mock.patch("os.path.isabs", ntpath.isabs):
+            self.assertEqual(overlay_roots("C:/work/host", "C:/work/host/cortex", "C:/work/host/svc-a"),
+                             ["C:/work/host/svc-a"])
 
 
 class MainTests(unittest.TestCase):
