@@ -6,7 +6,9 @@ captured from the Bash implementation of ``bin/validate-overlays.sh`` (Cortex 0.
 became a shim, then re-captured deliberately for each behaviour change of ADR-007 phase 4 —
 ``missing-header`` and ``header-after-line-10`` (#76), the ``absent-*`` cases (#81), the projects
 inside a directory named ``agents`` or ``cortex`` and ``scope-workspace-in-service-shallow`` (#84),
-the workspace's ``── Scope: . ──`` header, ``escape-in-field`` and ``control-char-in-field`` (#85).
+the workspace's ``── Scope: . ──`` header, ``escape-in-field`` and ``control-char-in-field`` (#85),
+then the review's fixes to #76 — ``non-overridable-without-header``, ``custom-theme``,
+``readme-in-layer``, ``missing-header-in-service`` and the wording of ``MISSING_HEADER``.
 The core must reproduce it byte for byte, the temporary directory aside.
 
 A case may carry a ``case.json``:
