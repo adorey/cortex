@@ -53,6 +53,22 @@ def _same_directory(a: Path, b: Path) -> bool:
         return False
 
 
+def _tiers(root: Path, service: Optional[str], base_root: Optional[Path]) -> List[Path]:
+    """The directories whose ``agents/`` holds a tier of the cascade, base first.
+
+    When base_root is the project root, the base and the workspace tier are one directory,
+    listed once: a file found there is read once, never stacked onto itself (ADR-007 §3.1).
+    The roots are compared only when base_root is given — the default path pays nothing.
+    """
+    root = Path(root)
+    tiers = [_base(root, base_root)]                                   # base
+    if base_root is None or not _same_directory(Path(base_root), root):
+        tiers.append(root)                                             # workspace
+    if service:
+        tiers.append(root / service)                                   # service
+    return tiers
+
+
 # --------------------------------------------------------------------------- #
 # §3.1 — Resolution algorithm (the cascade)
 # --------------------------------------------------------------------------- #
@@ -69,15 +85,7 @@ def resolve_layer(
     Faithful port of ADR-001 §3.1 ``resolveLayer``. ``root`` is the project root;
     ``base_root`` locates the base (ADR-007 §3.1).
     """
-    root = Path(root)
-    candidates = [_base(root, base_root) / "agents" / layer / file]   # base
-    # When base_root is the project root, the base and the workspace tier are one directory:
-    # a file found there is read once, never stacked onto itself (ADR-007 §3.1). The roots
-    # are compared only when base_root is given — the default path pays nothing.
-    if base_root is None or not _same_directory(Path(base_root), root):
-        candidates.append(root / "agents" / layer / file)             # workspace overlay
-    if service:
-        candidates.append(root / service / "agents" / layer / file)  # service overlay
+    candidates = (tier / "agents" / layer / file for tier in _tiers(root, service, base_root))
     return [p for p in candidates if p.is_file()]
 
 
