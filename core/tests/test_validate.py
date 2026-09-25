@@ -231,6 +231,12 @@ class MissingHeaderTests(unittest.TestCase):
         self.assertTrue(lines[1].startswith("  MISSING_HEADER — "), lines[1])
         self.assertEqual(len(lines), 2)
 
+    def test_a_header_below_line_10_is_said_to_be_too_low(self):
+        # The file has a header — on line 11: "no header" alone would send its author looking for
+        # a header that is there.
+        _, lines = core_verdicts("header-after-line-10")
+        self.assertIn("no <!-- OVERLAY --> header in its first 10 lines", lines[1])
+
     def test_a_headerless_file_at_a_base_path_in_a_service(self):
         _, lines = core_verdicts("missing-header-in-service")
         self.assertEqual(lines[0], "⚠ svc-a/agents/roles/engineering/lead-backend.md")
