@@ -195,3 +195,12 @@ Freezing the Bash validator in phase 2 surfaced a third drift of the kind §3.6 
 
 §3.6 asks for the two workspace context tiers to be "labelled by scope". The runtime labels them when **both** exist: with a single tier there is no scope to tell apart, so a workspace without a team tier sees its context unchanged.
 
+### Phase 4 — what the port kept of the script, fixed
+
+Phase 2 reproduced three behaviours of the Bash script as they were — a parity phase is no place to fix them — and #79 listed them. Once phase 3 had deleted the script, the maintainer asked for them to be fixed in phase 4, beside the drifts of §3.6:
+
+- **Paths come from the root being scanned** (#84). The script cut absolute paths at their first `/agents/` and skipped every path matching `*/cortex/*`: a project inside a directory named `agents` failed every overlay with `PATH_MIRROR`, and one inside a directory named `cortex` had none of its services checked — exit `0`, under `--strict` too. It also told a service overlay from a workspace one by counting slashes, which missed a service overlay with no category level. The validator now works from the root it scans, and skips the base by its location, whatever it is called, as well as any directory named `cortex` or `.git` below the project root. ADR-001 §3.4's *file is in a known layer directory* holds by construction, since discovery walks the four layer directories only: `UNKNOWN_LAYER`, which only the first of these bugs could produce, is gone.
+- **What was read is printed as it was read** (#85). The script passed header values and file names through `echo -e`, so an overlay could write terminal control sequences to the console; control characters are now shown escaped — `\x1b` for ESC. The workspace's section is headed `── Scope: . ──`, as the script meant to and never did.
+
+Both change the captured outputs, re-captured and reviewed case by case.
+
