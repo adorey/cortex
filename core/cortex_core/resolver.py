@@ -15,6 +15,7 @@ Resolution is a pure path cascade; merging applies a per-layer semantic.
 
 from __future__ import annotations
 
+import os
 import re
 from enum import Enum
 from pathlib import Path
@@ -43,6 +44,15 @@ def _base(project_root: Path, base_root: Optional[Path]) -> Path:
     return Path(base_root) if base_root is not None else default_base_root(project_root)
 
 
+def _same_directory(a: Path, b: Path) -> bool:
+    """Whether two paths name one directory — also where a file system ignores case (macOS,
+    Windows), which comparing resolved paths would miss."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
 # --------------------------------------------------------------------------- #
 # §3.1 — Resolution algorithm (the cascade)
 # --------------------------------------------------------------------------- #
@@ -64,7 +74,7 @@ def resolve_layer(
     # When base_root is the project root, the base and the workspace tier are one directory:
     # a file found there is read once, never stacked onto itself (ADR-007 §3.1). The roots
     # are compared only when base_root is given — the default path pays nothing.
-    if base_root is None or Path(base_root).resolve() != root.resolve():
+    if base_root is None or not _same_directory(Path(base_root), root):
         candidates.append(root / "agents" / layer / file)             # workspace overlay
     if service:
         candidates.append(root / service / "agents" / layer / file)  # service overlay
