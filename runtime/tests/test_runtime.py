@@ -1,7 +1,8 @@
 """Tests for the executable slice — Runtime resolve + run end-to-end (Phase 5).
 
 Uses the no-dep `demo` backend against the fixture working tree, so the whole wire
-(resolve → tools → loop → durable state + audit) runs with zero install and no key.
+(resolve → tools → loop → durable state + audit) runs with no third-party package and no key —
+`cortex-core` read from ../core, as runtime/README.md shows.
 """
 
 import sys
