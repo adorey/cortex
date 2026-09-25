@@ -8,7 +8,8 @@ must reproduce it byte for byte, the temporary directory aside.
 A case may carry a ``case.json``:
 
 - ``project`` — where the project root sits under the temporary directory (default ``host``);
-- ``runs`` — the argument lists to run it with (default: none, then ``--strict``);
+- ``runs`` — the argument lists to run it with (default: none, then ``--strict``); ``{project}``
+  in an argument stands for the project root, for an absolute path;
 - ``crlf`` — files to rewrite with CRLF line endings at layout time (git keeps them LF).
 
 Every run happens under ``LC_ALL=C``. The port reads bytes and ASCII character classes the way
@@ -99,7 +100,8 @@ def execute(case, args, runner):
     # directory itself must contain neither, or every case would measure the wrong thing.
     assert "/agents/" not in f"{tmp}/" and "/cortex/" not in f"{tmp}/", tmp
     try:
-        code, out, err = runner(layout(case, tmp), args)
+        project = layout(case, tmp)
+        code, out, err = runner(project, [arg.replace("{project}", str(project)) for arg in args])
         norm = lambda b: b.decode("utf-8", "surrogateescape").replace(str(tmp), "<TMP>").split("\n")
         return {"code": code, "stdout": norm(out), "stderr": norm(err)}
     finally:

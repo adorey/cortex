@@ -73,6 +73,19 @@ class ScriptTests(unittest.TestCase):
                 (overlay / "notes.md").write_text("no header\n", encoding="utf-8")
         (project / "agents" / "roles" / "team7" / "deep").mkdir()
         (project / "agents" / "roles" / "team7" / "deep" / "z.md").write_text("x\n", encoding="utf-8")
+        # Services, and more than one layer: the order of the roots and of the layers matters too.
+        (project / "cortex" / "agents" / "workflows" / "eng").mkdir(parents=True)
+        (project / "cortex" / "agents" / "workflows" / "eng" / "review.md").write_text("# base\n", encoding="utf-8")
+        for service in ("svc-z", "svc-a", "apps/svc-m"):
+            (project / service).mkdir(parents=True)
+            (project / service / "project-overview.md").write_text("# s\n", encoding="utf-8")
+            for layer, rel, base in (("workflows", "eng/review.md", "workflows/eng/review.md"),
+                                     ("roles", "team3/lead.md", "roles/team3/lead.md")):
+                path = project / service / "agents" / layer / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("<!-- OVERLAY\n     Base: cortex/agents/%s\n     Scope: service @%s\n"
+                                "     Semantic: %s\n-->\n\n## Rules (additive)\n"
+                                % (base, service, "replacement" if layer == "workflows" else "additive"), encoding="utf-8")
         for args in ([], ["--strict"]):
             with self.subTest(run=harness.run_key(args)):
                 self.assertEqual(harness.run_core(project, args), harness.run_script(project, args))

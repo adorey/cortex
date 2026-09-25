@@ -1188,6 +1188,28 @@
    "stderr": [
     ""
    ]
+  },
+  "--service {project}/svc-a": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "  Service only:  <TMP>/host/svc-a",
+    "",
+    "── Scope: svc-a ──",
+    "✓ svc-a/agents/capabilities/languages/php.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
   }
  },
  "service-depth": {
