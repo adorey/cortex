@@ -5,7 +5,8 @@ base goes to ``{project}/cortex/agents/``, the case's own files on top. ``expect
 captured from the Bash implementation of ``bin/validate-overlays.sh`` (Cortex 0.9.0), before it
 became a shim, then re-captured deliberately for each behaviour change of ADR-007 phase 4 —
 ``missing-header`` and ``header-after-line-10`` (#76), the ``absent-*`` cases (#81), the projects
-inside a directory named ``agents`` or ``cortex`` and ``scope-workspace-in-service-shallow`` (#84).
+inside a directory named ``agents`` or ``cortex`` and ``scope-workspace-in-service-shallow`` (#84),
+the workspace's ``── Scope: . ──`` header, ``escape-in-field`` and ``control-char-in-field`` (#85).
 The core must reproduce it byte for byte, the temporary directory aside.
 
 A case may carry a ``case.json``:

@@ -15,7 +15,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cortex_core.validate import (  # noqa: E402
-    Colors, Report, check_overlay, echo_e_line, find, main, overlay_roots, validate,
+    Colors, Report, check_overlay, find, main, overlay_roots, shown, validate,
 )
 from tests import validator_harness as harness  # noqa: E402
 
@@ -301,28 +301,58 @@ class PathTests(unittest.TestCase):
         self.assertEqual(overlay_roots(str(project), str(project / "cortex"), ""), [f"{project}/svc-a"])
 
 
-class EchoTests(unittest.TestCase):
-    def test_bash_echo_e_escapes(self):
-        self.assertEqual(echo_e_line("a\\tb"), "a\tb\n")
-        self.assertEqual(echo_e_line("x\\cy"), "x")            # \c cuts the output and its newline
-        self.assertEqual(echo_e_line("p\\qz"), "p\\qz\n")      # an unknown escape stays as it is
-        self.assertEqual(echo_e_line("\\x41\\0102"), "AB\n")
+class OutputTests(unittest.TestCase):
+    """#85 — the validator prints what it read; its colours are the only escapes it emits."""
 
-    def test_incomplete_escapes_are_printed_as_they_are(self):
-        # What Bash prints — and a Windows-style Base: path, \users included, used to crash the port.
-        self.assertEqual(echo_e_line("a\\xyz"), "a\\xyz\n")
-        self.assertEqual(echo_e_line("\\users\\Ux"), "\\users\\Ux\n")
+    def test_the_workspace_section_is_headed_with_a_dot(self):
+        run = harness.execute("ok-additive", [], harness.run_core)
+        self.assertIn("── Scope: . ──", run["stdout"])
 
-    def test_escapes_write_the_bytes_bash_writes(self):
-        # Measured with Bash under C.UTF-8. A byte that is not UTF-8 is carried as surrogateescape,
-        # which the output stream writes back as that very byte.
-        raw = lambda *bs: "".join(chr(0xDC00 + b) for b in bs)  # noqa: E731
-        self.assertEqual(echo_e_line("\\xe9\\0351"), raw(0xE9, 0xE9) + "\n")
-        self.assertEqual(echo_e_line("\\u00e9"), "\u00e9\n")
-        self.assertEqual(echo_e_line("\\uD800"), raw(0xED, 0xA0, 0x80) + "\n")
-        self.assertEqual(echo_e_line("\\U00110000"), raw(0xF4, 0x90, 0x80, 0x80) + "\n")
-        self.assertEqual(echo_e_line("\\U7FFFFFFF"), raw(0xFD, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF) + "\n")
-        self.assertEqual(echo_e_line("p\\UFFFFFFFFq"), "pq\n")
+    def test_a_backslash_sequence_in_a_value_is_printed_as_typed(self):
+        _, lines = core_verdicts("escape-in-field")
+        self.assertEqual(lines[1], "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\\tive')")
+
+    def test_a_control_character_in_a_value_is_shown_escaped(self):
+        _, lines = core_verdicts("control-char-in-field")
+        self.assertEqual(lines[1], "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'additive\\x1b[2K\\x1b[1A')")
+
+    def test_a_control_character_in_a_file_name_is_shown_escaped(self):
+        out = io.StringIO()
+        Report(out, Colors(True)).ok("agents/roles/x\x1b[2K.md")
+        self.assertEqual(out.getvalue(), "\x1b[0;32m✓\x1b[0m agents/roles/x\\x1b[2K.md\n")
+        for verdict, args in (("error", ("CODE", "got '\x1b'")), ("warning", ("CODE", "got '\x1b'")), ("info", ("a note",))):
+            with self.subTest(verdict=verdict):
+                out = io.StringIO()
+                getattr(Report(out, Colors(False)), verdict)("agents/roles/x\x1b[2K.md", *args)
+                self.assertNotIn("\x1b", out.getvalue())
+
+    def test_a_backslash_c_no_longer_cuts_the_output(self):
+        out = io.StringIO()
+        Report(out, Colors(False)).error("agents/roles/x.md", "INVALID_SEMANTIC", "got 'x\\cy'")
+        self.assertEqual(out.getvalue(), "✗ agents/roles/x.md\n  INVALID_SEMANTIC — got 'x\\cy'\n")
+
+    def test_control_characters_in_directory_names_are_shown_escaped(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = tmp / "host\x1b[2K"
+        shutil.copytree(harness.FIXTURES / "base", project / "cortex")
+        overlay = project / "svc\x1b[1A" / "agents" / "roles" / "engineering" / "lead-backend.md"
+        overlay.parent.mkdir(parents=True)
+        overlay.write_text("<!-- OVERLAY\n     Base: cortex/agents/roles/engineering/lead-backend.md\n"
+                           "     Scope: service @svc\n     Semantic: additive\n-->\n## Rules (additive)\n", encoding="utf-8")
+        (project / "svc\x1b[1A" / "project-overview.md").write_text("# svc\n", encoding="utf-8")
+        for service in ("", "svc\x1b[1A"):
+            with self.subTest(service=service):
+                out = io.StringIO()
+                validate(str(project), str(project / "cortex"), service, False, out, Colors(False))
+                self.assertNotIn("\x1b", out.getvalue())
+                self.assertIn("✓ svc\\x1b[1A/agents/roles/engineering/lead-backend.md", out.getvalue())
+
+    def test_only_control_characters_are_rewritten(self):
+        # Printable text, and a raw byte from a file name that is not valid UTF-8, stay as they are.
+        self.assertEqual(shown("\u00e9 — ✓ 🚫 \udce9"), "\u00e9 — ✓ 🚫 \udce9")
+        # C0, DEL, C1 — as a character, or as a raw byte of an invalid file name.
+        self.assertEqual(shown("\x00\t\x1b\x7f\x9b\udc9b"), "\\x00\\x09\\x1b\\x7f\\x9b\\x9b")
 
 
 if __name__ == "__main__":

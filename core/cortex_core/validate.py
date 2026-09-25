@@ -2,13 +2,13 @@
 
 ``bin/validate-overlays.sh`` runs this module. It is a literal port of the Bash implementation
 that script held until Cortex 0.9.0: same checks in the same order, same messages, same exit
-codes, byte-identical output — ``echo -e`` escapes included — so that nothing a host project
-relied on changed with the port.
+codes, byte-identical output — so that nothing a host project relied on changed with the port.
 
 It then departed from that output on purpose (ADR-007 §3.6 and its amendments): a file without a
 header at the path of a base is reported as ``MISSING_HEADER``; a header key that is absent — not
-only empty — is reported as ``MISSING_FIELD`` instead of aborting the run; and paths are taken
-from the root being scanned, where the script cut absolute paths at their first ``/agents/``.
+only empty — is reported as ``MISSING_FIELD`` instead of aborting the run; paths are taken from
+the root being scanned, where the script cut absolute paths at their first ``/agents/``; and what
+was read is printed as it was read, where the script passed it through ``echo -e``.
 
 The cascade's own rules — which layer replaces, which file cannot be overridden — are not
 restated here: they come from the resolver, the one implementation the runtime runs too.
@@ -35,9 +35,9 @@ SEPARATOR = '──────────────────────�
 
 _SPACE = "[ \t\n\v\f\r]"          # POSIX [[:space:]]
 _ADDITIVE_TAG = re.compile(r"^##.*\(additive\)|^## 🚫 Disabled rules from base")
-_ESCAPE = re.compile(r"\\(0[0-7]{0,3}|x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{1,4}|U[0-9A-Fa-f]{1,8}|.)", re.S)
-_SIMPLE = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
-           "t": "\t", "v": "\v", "\\": "\\"}
+# C0, DEL and C1 — and C1 as the raw byte of a name that is not UTF-8, which surrogateescape
+# decodes to U+DC80..U+DC9F
+_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\udc80-\udc9f]")
 
 
 class Colors:
@@ -51,59 +51,10 @@ class Colors:
         self.NC = "\x1b[0m" if on else ""
 
 
-def _byte(value: int) -> str:
-    """One byte, as ``_stream`` writes it back: past ASCII, the surrogateescape character."""
-    return chr(value) if value < 0x80 else chr(0xDC00 + value)
-
-
-def _code_point(code: int) -> str:
-    """What Bash writes for ``\\u`` and ``\\U`` under a UTF-8 locale: the character, or, for a
-    surrogate or a code point past U+10FFFF, the bytes of UTF-8 extended as Bash's own encoder
-    extends it — up to six bytes, nothing past 0x7FFFFFFF."""
-    if code <= 0x10FFFF and not 0xD800 <= code <= 0xDFFF:
-        return chr(code)
-    if code > 0x7FFFFFFF:
-        return ""
-    count = next(n for n, limit in ((3, 0x10000), (4, 0x200000), (5, 0x4000000), (6, 0x80000000)) if code < limit)
-    tail = []
-    for _ in range(count - 1):
-        tail.insert(0, 0x80 | (code & 0x3F))
-        code >>= 6
-    lead = (0xE0, 0xF0, 0xF8, 0xFC)[count - 3] | code
-    return "".join(_byte(b) for b in [lead] + tail)
-
-
-def echo_e(text: str) -> Tuple[str, bool]:
-    """What Bash's ``echo -e`` prints for ``text``, and whether a ``\\c`` cut it short.
-
-    ``\\c`` stops the output there, trailing newline included.
-    """
-    out: List[str] = []
-    pos = 0
-    for m in _ESCAPE.finditer(text):
-        out.append(text[pos:m.start()])
-        esc = m.group(1)
-        head = esc[0]
-        if head == "c":
-            return "".join(out), True
-        if head == "0":
-            out.append(_byte(int(esc[1:] or "0", 8) & 0xFF))
-        elif head == "x" and len(esc) > 1:
-            out.append(_byte(int(esc[1:], 16)))
-        elif head in ("u", "U") and len(esc) > 1:
-            out.append(_code_point(int(esc[1:], 16)))
-        elif head in _SIMPLE:
-            out.append(_SIMPLE[head])
-        else:
-            out.append("\\" + esc)          # unknown escape: printed as it is
-        pos = m.end()
-    out.append(text[pos:])
-    return "".join(out), False
-
-
-def echo_e_line(text: str) -> str:
-    rendered, cut = echo_e(text)
-    return rendered if cut else rendered + "\n"
+def shown(value: str) -> str:
+    """``value`` with its control characters written out — ``\\x1b`` for ESC — so that nothing
+    read from a project reaches the terminal as a control sequence (#85)."""
+    return _CONTROL.sub(lambda m: "\\x%02x" % (ord(m.group()) & 0xFF), value)
 
 
 def strip_prefix(value: str, prefix: str) -> str:
@@ -140,7 +91,10 @@ def extract_field(text: str, name: str) -> Optional[str]:
 
 
 class Report:
-    """Verdict lines and counters, as the script's ``report_*`` helpers print them."""
+    """Verdict lines and counters, as the script's ``report_*`` helpers print them.
+
+    Paths and messages go through ``shown``: they carry what was read from the project.
+    """
 
     def __init__(self, out: TextIO, colors: Colors):
         self.out, self.c = out, colors
@@ -149,21 +103,21 @@ class Report:
     def echo(self, text: str) -> None:
         self.out.write(text + "\n")
 
-    def echo_e(self, text: str) -> None:
-        self.out.write(echo_e_line(text))
-
     def error(self, rel_path: str, code: str, message: str) -> None:
-        self.echo_e(f"{self.c.RED}✗{self.c.NC} {rel_path}")
-        self.echo_e(f"  {self.c.RED}{code}{self.c.NC} — {message}")
+        self.echo(f"{self.c.RED}✗{self.c.NC} {shown(rel_path)}")
+        self.echo(f"  {self.c.RED}{code}{self.c.NC} — {shown(message)}")
         self.errors += 1
 
     def warning(self, rel_path: str, code: str, message: str) -> None:
-        self.echo_e(f"{self.c.YELLOW}⚠{self.c.NC} {rel_path}")
-        self.echo_e(f"  {self.c.YELLOW}{code}{self.c.NC} — {message}")
+        self.echo(f"{self.c.YELLOW}⚠{self.c.NC} {shown(rel_path)}")
+        self.echo(f"  {self.c.YELLOW}{code}{self.c.NC} — {shown(message)}")
         self.warnings += 1
 
     def ok(self, rel_path: str) -> None:
-        self.echo_e(f"{self.c.GREEN}✓{self.c.NC} {rel_path}")
+        self.echo(f"{self.c.GREEN}✓{self.c.NC} {shown(rel_path)}")
+
+    def info(self, rel_path: str, note: str) -> None:
+        self.echo(f"{self.c.BLUE}ℹ{self.c.NC} {shown(rel_path)} ({note})")
 
 
 def base_file(base: str, project_root: str, base_root: str) -> str:
@@ -201,7 +155,7 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
                            f"no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/{file_rel_to_agents}' — "
                            "add the header, or rename the file if it is not meant to extend that base")
             return
-        report.echo_e(f"{report.c.BLUE}ℹ{report.c.NC} {rel_path} (custom addition — no cortex base, skipping overlay checks)")
+        report.info(rel_path, "custom addition — no cortex base, skipping overlay checks")
         return
 
     # Tier 1.2 — required fields, absent or empty alike
@@ -336,24 +290,24 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
     """Validate every overlay under the overlay roots; return the script's exit code."""
     c = colors
     report = Report(out, c)
-    report.echo_e(f"{c.BOLD}{c.BLUE}Cortex overlay validator{c.NC}")
-    report.echo(f"  Project root:  {project_root}")
-    report.echo(f"  Cortex dir:    {base_root}")
+    report.echo(f"{c.BOLD}{c.BLUE}Cortex overlay validator{c.NC}")
+    report.echo(f"  Project root:  {shown(project_root)}")
+    report.echo(f"  Cortex dir:    {shown(base_root)}")
     report.echo(f"  Strict mode:   {'true' if strict else 'false'}")
     if service:
-        report.echo(f"  Service only:  {service}")
+        report.echo(f"  Service only:  {shown(service)}")
     report.echo("")
 
     roots = overlay_roots(project_root, base_root, service)
     if not roots:
-        report.echo_e(f"{c.YELLOW}ℹ{c.NC}  No overlay roots found (no agents/ directory at workspace or service level).")
+        report.echo(f"{c.YELLOW}ℹ{c.NC}  No overlay roots found (no agents/ directory at workspace or service level).")
         report.echo("   Nothing to validate. This is expected if you haven't created overlays yet.")
         return 0
 
     for root in roots:
-        # The script strips "{project}/", so the workspace root itself prints its full path.
-        rel_root = strip_prefix(root, f"{project_root}/") or "."
-        report.echo_e(f"{c.BOLD}── Scope: {rel_root} ──{c.NC}")
+        in_workspace = os.path.normpath(root) == os.path.normpath(project_root)
+        rel_root = "." if in_workspace else strip_prefix(root, f"{project_root}/")
+        report.echo(f"{c.BOLD}── Scope: {shown(rel_root)} ──{c.NC}")
         found = 0
         for layer in LAYERS:
             layer_dir = f"{root}/agents/{layer}"
@@ -367,13 +321,13 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
         report.echo("")
 
     report.echo(SEPARATOR)
-    report.echo_e(f"Checked:  {c.BOLD}{report.checked}{c.NC} files")
-    report.echo_e(f"Errors:   {c.RED}{c.BOLD}{report.errors}{c.NC}" if report.errors else f"Errors:   {c.GREEN}0{c.NC}")
-    report.echo_e(f"Warnings: {c.YELLOW}{c.BOLD}{report.warnings}{c.NC}" if report.warnings else f"Warnings: {c.GREEN}0{c.NC}")
+    report.echo(f"Checked:  {c.BOLD}{report.checked}{c.NC} files")
+    report.echo(f"Errors:   {c.RED}{c.BOLD}{report.errors}{c.NC}" if report.errors else f"Errors:   {c.GREEN}0{c.NC}")
+    report.echo(f"Warnings: {c.YELLOW}{c.BOLD}{report.warnings}{c.NC}" if report.warnings else f"Warnings: {c.GREEN}0{c.NC}")
     if report.errors:
         return 1
     if strict and report.warnings:
-        report.echo_e(f"{c.RED}Strict mode: warnings count as errors.{c.NC}")
+        report.echo(f"{c.RED}Strict mode: warnings count as errors.{c.NC}")
         return 1
     return 0
 
