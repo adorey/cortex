@@ -5,10 +5,13 @@ that script held until Cortex 0.9.0: same checks in the same order, same message
 codes, byte-identical output. Literal means literal — the string arithmetic the Bash code did on
 absolute paths (``${file#*/agents/}``, ``"$PROJECT_DIR/$base"``) and its ``echo -e`` escapes are
 reproduced as they were, so that nothing a host project relied on changed with the port.
+
+The cascade's own rules — which layer replaces, which file cannot be overridden — are not
+restated here: they come from the resolver, the one implementation the runtime runs too.
 """
 
-# Standard library only, and no import from this package: bin/validate-overlays.sh runs this file
-# directly under ``python -I``, where ``cortex_core`` is not importable (see the shim).
+# The standard library and this package only: bin/validate-overlays.sh imports it under
+# ``python -I`` from the Cortex checkout, with nothing installed (see the shim).
 from __future__ import annotations
 
 import fnmatch
@@ -17,6 +20,8 @@ import os
 import re
 import sys
 from typing import List, Optional, TextIO, Tuple
+
+from . import resolver
 
 LAYERS = ("roles", "capabilities", "personalities", "workflows")
 
@@ -212,22 +217,27 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
         report.error(rel_path, "INVALID_SEMANTIC", f"Semantic: must be 'additive' or 'replacement' (got '{semantic}')")
         return
 
-    # Tier 1.5 — replacement only for workflows
-    if semantic == "replacement" and "/agents/workflows/" not in file:
+    # The file's layer, and its path within it, as the resolver sees them
+    file_rel_to_agents = after_first(file, "/agents/")
+    layer, _, file_in_layer = file_rel_to_agents.partition("/")
+    rule = resolver.semantic_for(layer, file_in_layer)
+
+    # Tier 1.5 — replacement only where the resolver replaces: workflows
+    if semantic == "replacement" and rule is not resolver.MergeSemantic.REPLACEMENT:
         report.error(rel_path, "REPLACEMENT_OUTSIDE_WORKFLOWS",
                      "Semantic: replacement is only allowed for files under agents/workflows/")
         return
 
     # Tier 1.6 — path mirroring
-    file_rel_to_agents = after_first(file, "/agents/")
     base_rel_to_agents = strip_prefix(base, "cortex/agents/")
     if file_rel_to_agents != base_rel_to_agents:
         report.error(rel_path, "PATH_MIRROR",
                      f"overlay path 'agents/{file_rel_to_agents}' must mirror base 'cortex/agents/{base_rel_to_agents}'")
         return
 
-    # Tier 2.1 — non-overridable: characters.md (reported as an error, as the script does)
-    if fnmatch.fnmatchcase(base, "*/personalities/*/characters.md"):
+    # Tier 2.1 — non-overridable, as the resolver says: characters.md (reported as an error,
+    # as the script does). Past the mirror check, the base and the file share this path.
+    if rule is resolver.MergeSemantic.NOT_OVERRIDABLE:
         report.error(rel_path, "NON_OVERRIDABLE",
                      "characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)")
         return
