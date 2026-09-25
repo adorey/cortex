@@ -26,7 +26,7 @@ import signal
 import sys
 from typing import List, Optional, TextIO, Tuple
 
-from . import resolver
+from . import catalog, resolver
 
 LAYERS = ("roles", "capabilities", "personalities", "workflows")
 
@@ -155,9 +155,10 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
     # Tier 1.1 — header presence, in the first ten lines. Without one, a file at the path of a
     # base shadows it — the resolver stacks it, so it is an overlay missing its header
     # (ADR-007 §3.6), unless it is one the resolver never stacks: characters.md is the same
-    # error with a header or without. Anywhere else it is a custom addition.
+    # error with a header or without. A README is documentation, which the cascade never reads.
+    # Anywhere else it is a custom addition.
     if not any("<!-- OVERLAY" in line for line in text.split("\n")[:10]):
-        if os.path.isfile(f"{base_root}/agents/{file_rel_to_agents}"):
+        if os.path.isfile(f"{base_root}/agents/{file_rel_to_agents}") and not catalog.is_readme(os.path.basename(file)):
             if rule is resolver.MergeSemantic.NOT_OVERRIDABLE:
                 report.error(rel_path, "NON_OVERRIDABLE", _NON_OVERRIDABLE)
                 return
