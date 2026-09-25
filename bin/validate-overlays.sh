@@ -34,11 +34,13 @@ PROJECT_DIR="$(dirname "$CORTEX_DIR")"
 
 # --- Python ----------------------------------------------------------------
 # The version is checked, not only the presence: an old python3 would fail
-# later, on syntax, with a traceback instead of an explanation.
+# later, on syntax, with a traceback instead of an explanation. The probe runs
+# under -I too: without it, a sitecustomize.py on PYTHONPATH would run before it
+# — code from the project under validation. Python 2 rejects -I and is skipped.
 PYTHON=""
 for candidate in python3 python; do
     if command -v "$candidate" >/dev/null 2>&1 \
-        && "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; then
+        && "$candidate" -I -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; then
         PYTHON="$candidate"
         break
     fi
