@@ -897,6 +897,53 @@
    ]
   }
  },
+ "missing-header-in-service": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: svc-a ──",
+    "⚠ svc-a/agents/roles/engineering/lead-backend.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/roles/engineering/lead-backend.md' — add the header, or rename the file if it is not meant to extend that base",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 1",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: svc-a ──",
+    "⚠ svc-a/agents/roles/engineering/lead-backend.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/roles/engineering/lead-backend.md' — add the header, or rename the file if it is not meant to extend that base",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 1",
+    "Strict mode: warnings count as errors.",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
  "no-overlay-roots": {
   "default": {
    "code": 0,

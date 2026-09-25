@@ -231,6 +231,11 @@ class MissingHeaderTests(unittest.TestCase):
         self.assertTrue(lines[1].startswith("  MISSING_HEADER — "), lines[1])
         self.assertEqual(len(lines), 2)
 
+    def test_a_headerless_file_at_a_base_path_in_a_service(self):
+        _, lines = core_verdicts("missing-header-in-service")
+        self.assertEqual(lines[0], "⚠ svc-a/agents/roles/engineering/lead-backend.md")
+        self.assertTrue(lines[1].startswith("  MISSING_HEADER — "), lines[1])
+
     def test_a_readme_at_a_base_path_is_no_overlay(self):
         # The resolver never reads a README, and the catalog leaves them out: documentation.
         report, lines = core_verdicts("readme-in-layer")
