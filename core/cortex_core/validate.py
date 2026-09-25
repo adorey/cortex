@@ -163,8 +163,9 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
                 report.error(rel_path, "NON_OVERRIDABLE", _NON_OVERRIDABLE)
                 return
             report.warning(rel_path, "MISSING_HEADER",
-                           f"no <!-- OVERLAY --> header, yet it shadows the base 'cortex/agents/{file_rel_to_agents}' — "
-                           "add the header, or rename the file if it is not meant to extend that base")
+                           f"no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base "
+                           f"'cortex/agents/{file_rel_to_agents}' — add the header at the top, or rename the file "
+                           "if it is not meant to extend that base")
             return
         report.info(rel_path, "custom addition — no cortex base, skipping overlay checks")
         return
