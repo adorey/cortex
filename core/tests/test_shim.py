@@ -83,6 +83,24 @@ class ShimIsolationTests(unittest.TestCase):
         self.assertIn("✓ agents/roles/engineering/lead-backend.md", proc.stdout)
 
 
+@unittest.skipIf(shutil.which("bash") is None, "bash not available")
+class ShimOptionsTests(unittest.TestCase):
+    def test_the_roots_are_not_options(self):
+        # The script knew --service, --strict and --help. A root given on the command line would
+        # validate somewhere else — /nonexistent, found empty: a green run that checked nothing.
+        from tests import validator_harness as harness
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = harness.layout("ok-additive", tmp)
+        for option in ("--project-root", "--base-root"):
+            with self.subTest(option=option):
+                code, out, err = harness.run_script(project, [option, "/nonexistent"])
+                self.assertEqual(code, 2)
+                self.assertTrue(err.startswith(f"Unknown argument: {option}\n".encode()), err[:80])
+                self.assertEqual(out, b"")
+
+
 @unittest.skipIf(shutil.which("bash") is None or not hasattr(signal, "SIGPIPE"), "bash or SIGPIPE not available")
 class ShimPipeTests(unittest.TestCase):
     def test_a_reader_that_goes_away_ends_the_run_quietly(self):

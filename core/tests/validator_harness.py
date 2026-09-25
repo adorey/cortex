@@ -92,10 +92,10 @@ def run_script(project, args):
 
 
 def run_core(project, args):
-    """The Python port, from the core's source, given the two roots the script derives."""
+    """The Python port, from the core's source, given the two roots the script derives — as the
+    script hands them to it, ahead of the options."""
     env = dict(os.environ, PYTHONPATH=str(CORE))
-    return _run([sys.executable, "-m", "cortex_core.validate",
-                 "--project-root", str(project), "--base-root", str(project / "cortex"), *args], env=env)
+    return _run([sys.executable, "-m", "cortex_core.validate", str(project), str(project / "cortex"), *args], env=env)
 
 
 def execute(case, args, runner):
