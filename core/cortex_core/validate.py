@@ -263,17 +263,27 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
     return found
 
 
+def _same_directory(a: str, b: str) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.normpath(a) == os.path.normpath(b)
+
+
 def overlay_roots(project_root: str, base_root: str, service: str) -> List[str]:
     """The workspace, when it has ``agents/``, then every service that has both a
     ``project-overview.md`` and an ``agents/`` — or the one ``--service`` names.
 
+    A project root that is the base itself — Cortex validating itself — is no workspace tier:
+    its files are the base, read once and never stacked onto themselves (ADR-007 §3.1).
     Services are looked for outside the base, wherever it is mounted and whatever it is called,
     and outside any directory named ``cortex`` or ``.git`` below the project root — a service
     may mount its own Cortex.
     """
     if service:
         return [service if os.path.isabs(service) else f"{project_root}/{service}"]
-    roots = [project_root] if os.path.isdir(f"{project_root}/agents") else []
+    is_base = _same_directory(project_root, base_root)
+    roots = [project_root] if os.path.isdir(f"{project_root}/agents") and not is_base else []
     for overview in find(project_root, "project-overview.md", maxdepth=5,
                          prune_names=("cortex", ".git"), prune_paths=(base_root,)):
         service_dir = os.path.dirname(overview)

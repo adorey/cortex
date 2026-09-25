@@ -204,3 +204,7 @@ Phase 2 reproduced three behaviours of the Bash script as they were — a parity
 
 Both change the captured outputs, re-captured and reviewed case by case.
 
+### Phase 4 — found in review
+
+- **The base is no overlay of itself.** Called with the project root as the base — Cortex validating itself, the case ADR-008 opens — the validator scanned the base's own files as workspace overlays and, with `MISSING_HEADER`, reported every one of them. A project root that is the base is no workspace tier: its files are the base, read once, as the resolver reads them (§3.1).
+
