@@ -48,5 +48,55 @@ class DeriveCapabilitiesTests(unittest.TestCase):
         self.assertEqual(derive_capabilities(ROOT / "svc-a"), [])
 
 
+class TeamContextTests(unittest.TestCase):
+    """ADR-006: the team tier ``agents/project-context.md`` is read before the developer tier,
+    each labelled by scope when both exist (ADR-007 §3.6)."""
+
+    def make(self, team=None, developer=None, service=None):
+        import shutil
+        import tempfile
+        root = Path(tempfile.mkdtemp(prefix="cortex-context-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        if team is not None:
+            (root / "agents").mkdir()
+            (root / "agents" / "project-context.md").write_text(team, encoding="utf-8")
+        if developer is not None:
+            (root / "project-context.md").write_text(developer, encoding="utf-8")
+        if service is not None:
+            (root / "svc-a").mkdir()
+            (root / "svc-a" / "project-context.md").write_text(service, encoding="utf-8")
+        return root
+
+    def test_every_tier_is_labelled_once_there_are_several(self):
+        # #87: the tiers reach the prompt, so the service's own must not read as developer notes.
+        ctx = read_project_context(self.make(team="TEAM-RULE", developer="DEV-NOTE", service="SVC-FACT"), "svc-a")
+        order = [ctx.index(s) for s in ("## Team context", "TEAM-RULE", "## Developer notes", "DEV-NOTE",
+                                        "## Service context — svc-a", "SVC-FACT")]
+        self.assertEqual(order, sorted(order))
+
+    def test_a_service_tier_beside_the_developer_tier_is_labelled(self):
+        ctx = read_project_context(self.make(developer="DEV-NOTE", service="SVC-FACT"), "svc-a")
+        self.assertIn("## Developer notes\n\nDEV-NOTE", ctx)
+        self.assertIn("## Service context — svc-a\n\nSVC-FACT", ctx)
+
+    def test_team_tier_comes_first_and_both_are_labelled(self):
+        ctx = read_project_context(self.make(team="TEAM-RULE", developer="DEV-NOTE"))
+        self.assertLess(ctx.index("## Team context"), ctx.index("TEAM-RULE"))
+        self.assertLess(ctx.index("TEAM-RULE"), ctx.index("## Developer notes"))
+        self.assertLess(ctx.index("## Developer notes"), ctx.index("DEV-NOTE"))
+
+    def test_team_tier_alone_is_read(self):
+        self.assertIn("TEAM-RULE", read_project_context(self.make(team="TEAM-RULE")))
+
+    def test_developer_tier_alone_is_unchanged(self):
+        self.assertEqual(read_project_context(self.make(developer="DEV-NOTE")), "DEV-NOTE")
+
+    def test_team_tier_selects_capabilities(self):
+        root = self.make(team="We write PHP.")
+        (root / "cortex" / "agents" / "capabilities" / "languages").mkdir(parents=True)
+        (root / "cortex" / "agents" / "capabilities" / "languages" / "php.md").write_text("# PHP", encoding="utf-8")
+        self.assertEqual(derive_capabilities(root), ["languages/php.md"])
+
+
 if __name__ == "__main__":
     unittest.main()

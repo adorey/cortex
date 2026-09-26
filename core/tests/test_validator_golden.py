@@ -1,7 +1,8 @@
 """The overlay validator's behaviour, frozen — ADR-007 phase 2.
 
-``fixtures/validator/expected.json`` holds what the Bash implementation of
-``bin/validate-overlays.sh`` printed for every run of every case (see ``validator_harness.py``).
+``fixtures/validator/expected.json`` holds what the validator prints for every run of every case —
+captured from its Bash implementation, then re-captured for ADR-007 phase 4 (see
+``validator_harness.py``).
 These tests replay it through the script — now a shim over the core — and through the core
 directly, and check that it covers every verdict the validator can emit.
 """
@@ -20,7 +21,7 @@ from tests import validator_harness as harness  # noqa: E402
 EXPECTED = json.loads(harness.EXPECTED.read_text(encoding="utf-8"))
 ERRORS = {"MISSING_FIELD", "BASE_NOT_FOUND", "INVALID_SEMANTIC", "REPLACEMENT_OUTSIDE_WORKFLOWS",
           "PATH_MIRROR", "NON_OVERRIDABLE"}
-WARNINGS = {"UNKNOWN_LAYER", "SCOPE_MISMATCH", "SECTIONS_UNTAGGED"}
+WARNINGS = {"SCOPE_MISMATCH", "SECTIONS_UNTAGGED", "MISSING_HEADER"}
 
 
 def all_stdout_lines():

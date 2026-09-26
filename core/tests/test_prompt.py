@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cortex_core.prompt import build_system_prompt, layers_for  # noqa: E402
+from cortex_core.prompt import LAYER_SEPARATOR, build_system_prompt, layers_for  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ROOT = FIXTURES / "host"
@@ -56,6 +56,30 @@ class LayersForTests(unittest.TestCase):
 
     def test_unknown_role_keeps_theme_only(self):
         self.assertEqual(layers_for("ghost", "h2g2", ROOT), [("personalities", "h2g2/theme.md")])
+
+
+class ProjectContextTests(unittest.TestCase):
+    """#87 — the project context closes the prompt: who the agent is, how it works, what it
+    knows, then the project it works on."""
+
+    def test_the_context_comes_last_under_its_own_heading(self):
+        prompt = build_system_prompt("lead-backend", "svc-a", "h2g2", ROOT, project_context="We run PHP 8.3.")
+        self.assertTrue(prompt.endswith(LAYER_SEPARATOR + "# Project context\n\nWe run PHP 8.3."), prompt[-120:])
+        self.assertTrue(prompt.startswith(build_system_prompt("lead-backend", "svc-a", "h2g2", ROOT)))
+
+    def test_overview_then_services_then_context(self):
+        # #88: the order the editor's bootstrap reads them in — the vision, the services, the conventions.
+        prompt = build_system_prompt("lead-backend", None, None, ROOT, project_overview="VISION",
+                                     workspace_services="- `@api` — `svc-a/`", project_context="RULES")
+        tail = prompt.split(LAYER_SEPARATOR)[-3:]
+        self.assertEqual(tail, ["# Project overview\n\nVISION", "# Workspace services\n\n- `@api` — `svc-a/`",
+                                "# Project context\n\nRULES"])
+
+    def test_no_context_leaves_the_prompt_as_it_was(self):
+        for context in ("", "  \n"):
+            with self.subTest(context=context):
+                self.assertEqual(build_system_prompt("lead-backend", None, "h2g2", ROOT, project_context=context),
+                                 build_system_prompt("lead-backend", None, "h2g2", ROOT))
 
 
 class BuildSystemPromptTests(unittest.TestCase):

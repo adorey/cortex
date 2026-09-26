@@ -15,7 +15,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cortex_core.validate import (  # noqa: E402
-    Abort, Colors, Report, check_overlay, echo_e_line, find, main, overlay_roots, validate,
+    Colors, Report, check_overlay, find, main, overlay_roots, shown, validate,
 )
 from tests import validator_harness as harness  # noqa: E402
 
@@ -42,11 +42,10 @@ def core_verdicts(case):
                           if p.relative_to(project).parts[0] != "cortex" and p.name != "project-overview.md")
         out = io.StringIO()
         report = Report(out, Colors(False))
-        try:
-            for path in overlays:
-                check_overlay(str(path), str(project), str(project / "cortex"), report)
-        except Abort:
-            return None, out.getvalue().split("\n")[:-1]
+        for path in overlays:
+            parts = path.relative_to(project).parts
+            root = project.joinpath(*parts[:parts.index("agents")])
+            check_overlay(str(path), str(root), str(project), str(project / "cortex"), report)
         return report, out.getvalue().split("\n")[:-1]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -54,11 +53,8 @@ def core_verdicts(case):
 
 class VerdictTestCase(unittest.TestCase):
     def assert_case(self, case):
-        report, lines = core_verdicts(case)
-        expected = captured_verdicts(case)
-        if report is None:  # the script aborted before any verdict
-            self.assertEqual(EXPECTED[case]["default"]["code"], 1)
-        self.assertEqual(lines, expected)
+        _, lines = core_verdicts(case)
+        self.assertEqual(lines, captured_verdicts(case))
 
 
 class Tier1Tests(VerdictTestCase):
@@ -69,8 +65,8 @@ class Tier1Tests(VerdictTestCase):
 
 
 TIER_2 = ["non-overridable", "sections-untagged", "scope-service-at-root", "scope-workspace-in-service",
-          # depth 3 — a service overlay straight under its layer directory: the script does not warn
-          "scope-workspace-in-service-shallow", "unknown-layer"]
+          # a service overlay straight under its layer directory, with no category level (#84)
+          "scope-workspace-in-service-shallow"]
 
 
 class Tier2Tests(VerdictTestCase):
@@ -226,29 +222,183 @@ class MainTests(unittest.TestCase):
         self.assertIn(b"Usage: validate-overlays.sh", stdout.buffer.getvalue())
         self.assertIn(b"Unknown argument: --no-such-option", stderr.buffer.getvalue())
 
+class MissingHeaderTests(unittest.TestCase):
+    """ADR-007 §3.6 — a file without a header at the path of a base shadows it: it is an overlay."""
 
-class EchoTests(unittest.TestCase):
-    def test_bash_echo_e_escapes(self):
-        self.assertEqual(echo_e_line("a\\tb"), "a\tb\n")
-        self.assertEqual(echo_e_line("x\\cy"), "x")            # \c cuts the output and its newline
-        self.assertEqual(echo_e_line("p\\qz"), "p\\qz\n")      # an unknown escape stays as it is
-        self.assertEqual(echo_e_line("\\x41\\0102"), "AB\n")
+    def test_a_headerless_file_at_a_base_path_is_reported(self):
+        _, lines = core_verdicts("missing-header")
+        self.assertEqual(lines[0], "⚠ agents/roles/engineering/lead-backend.md")
+        self.assertTrue(lines[1].startswith("  MISSING_HEADER — "), lines[1])
+        self.assertEqual(len(lines), 2)
 
-    def test_incomplete_escapes_are_printed_as_they_are(self):
-        # What Bash prints — and a Windows-style Base: path, \users included, used to crash the port.
-        self.assertEqual(echo_e_line("a\\xyz"), "a\\xyz\n")
-        self.assertEqual(echo_e_line("\\users\\Ux"), "\\users\\Ux\n")
+    def test_a_header_below_line_10_is_said_to_be_too_low(self):
+        # The file has a header — on line 11: "no header" alone would send its author looking for
+        # a header that is there.
+        _, lines = core_verdicts("header-after-line-10")
+        self.assertIn("no <!-- OVERLAY --> header in its first 10 lines", lines[1])
 
-    def test_escapes_write_the_bytes_bash_writes(self):
-        # Measured with Bash under C.UTF-8. A byte that is not UTF-8 is carried as surrogateescape,
-        # which the output stream writes back as that very byte.
-        raw = lambda *bs: "".join(chr(0xDC00 + b) for b in bs)  # noqa: E731
-        self.assertEqual(echo_e_line("\\xe9\\0351"), raw(0xE9, 0xE9) + "\n")
-        self.assertEqual(echo_e_line("\\u00e9"), "\u00e9\n")
-        self.assertEqual(echo_e_line("\\uD800"), raw(0xED, 0xA0, 0x80) + "\n")
-        self.assertEqual(echo_e_line("\\U00110000"), raw(0xF4, 0x90, 0x80, 0x80) + "\n")
-        self.assertEqual(echo_e_line("\\U7FFFFFFF"), raw(0xFD, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF) + "\n")
-        self.assertEqual(echo_e_line("p\\UFFFFFFFFq"), "pq\n")
+    def test_a_headerless_file_at_a_base_path_in_a_service(self):
+        _, lines = core_verdicts("missing-header-in-service")
+        self.assertEqual(lines[0], "⚠ svc-a/agents/roles/engineering/lead-backend.md")
+        self.assertTrue(lines[1].startswith("  MISSING_HEADER — "), lines[1])
+
+    def test_a_readme_at_a_base_path_is_no_overlay(self):
+        # The resolver never reads a README, and the catalog leaves them out: documentation.
+        report, lines = core_verdicts("readme-in-layer")
+        self.assertEqual(lines, ["ℹ agents/roles/README.md (custom addition — no cortex base, skipping overlay checks)"])
+        self.assertEqual(report.warnings, 0)
+
+    def test_a_headerless_file_with_no_base_is_still_a_custom_addition(self):
+        _, lines = core_verdicts("custom-addition")
+        self.assertEqual(lines, ["ℹ agents/roles/engineering/my-own-role.md (custom addition — no cortex base, skipping overlay checks)"])
+
+
+class NonOverridableTests(unittest.TestCase):
+    """characters.md cannot be overridden: without a header it is the same error as with one."""
+
+    def test_a_headerless_characters_md_at_a_base_path_is_non_overridable(self):
+        report, lines = core_verdicts("non-overridable-without-header")
+        self.assertEqual(lines[0], "✗ agents/personalities/h2g2/characters.md")
+        self.assertTrue(lines[1].startswith("  NON_OVERRIDABLE — "), lines[1])
+        self.assertEqual(report.errors, 1)
+
+    def test_a_theme_of_the_projects_own_is_still_a_custom_addition(self):
+        # docs/creating-a-theme.md: a host project may carry its own theme under agents/personalities/.
+        _, lines = core_verdicts("custom-theme")
+        self.assertEqual(lines, ["ℹ agents/personalities/acme/characters.md (custom addition — no cortex base, skipping overlay checks)"])
+
+
+class MissingFieldTests(unittest.TestCase):
+    """#81 — a header key that is absent is reported like an empty one, and the run goes on."""
+
+    def test_an_absent_key_is_reported(self):
+        for case, field in (("absent-base-key", "Base"), ("absent-scope-key", "Scope"), ("absent-semantic-key", "Semantic")):
+            with self.subTest(case=case):
+                report, lines = core_verdicts(case)
+                self.assertIsNotNone(report, "the run was aborted")
+                self.assertEqual(lines, ["✗ agents/roles/engineering/lead-backend.md",
+                                         f"  MISSING_FIELD — {field}: is required in OVERLAY header"])
+
+    def test_the_other_overlays_are_still_checked(self):
+        report, lines = core_verdicts("absent-key-among-others")
+        self.assertIsNotNone(report, "the run was aborted")
+        self.assertIn("✓ agents/workflows/engineering/code-review.md", lines)
+        self.assertEqual((report.errors, report.checked), (1, 2))
+
+
+class SelfValidationTests(unittest.TestCase):
+    """ADR-007 §3.1 — when the base is the project root, its files are the base, not overlays of it."""
+
+    def test_the_base_is_not_an_overlay_of_itself(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        root = tmp / "cortex"
+        shutil.copytree(harness.FIXTURES / "base", root)
+        out = io.StringIO()
+        code = validate(str(root), str(root), "", True, out, Colors(False))
+        self.assertNotIn("MISSING_HEADER", out.getvalue())
+        self.assertEqual(code, 0)
+
+
+class PathTests(unittest.TestCase):
+    """#84 — the verdicts come from the root being scanned, not from where the project sits."""
+
+    def run_core(self, case, *args):
+        return harness.execute(case, list(args), harness.run_core)
+
+    def test_a_project_inside_a_directory_named_agents(self):
+        run = self.run_core("project-under-agents-dir")
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", run["stdout"])
+        at = run["stdout"].index("⚠ agents/roles/engineering/architect.md")
+        self.assertTrue(run["stdout"][at + 1].startswith("  MISSING_HEADER — "), run["stdout"][at + 1])
+
+    def test_a_project_inside_a_directory_named_cortex_has_its_services_checked(self):
+        run = self.run_core("project-under-cortex-dir", "--strict")
+        self.assertIn("✗ svc-a/agents/roles/engineering/lead-backend.md", run["stdout"])
+        self.assertEqual(run["code"], 1)
+
+    def test_a_replacement_outside_workflows_under_an_agents_workflows_directory(self):
+        run = self.run_core("replacement-under-agents-workflows-dir")
+        self.assertIn("  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
+                      run["stdout"])
+
+    def test_a_workspace_scope_on_a_service_overlay_with_no_category(self):
+        run = self.run_core("scope-workspace-in-service-shallow")
+        at = run["stdout"].index("⚠ svc-a/agents/roles/lead-backend.md")
+        self.assertTrue(run["stdout"][at + 1].startswith("  SCOPE_MISMATCH — "), run["stdout"][at + 1])
+
+    def test_the_base_is_skipped_by_its_location_whatever_its_name(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project, base = tmp / "host", tmp / "host" / ".cortex"
+        for root in (base, base / "tests" / "fixtures" / "host", project / "svc-a"):
+            (root / "agents").mkdir(parents=True)
+            (root / "project-overview.md").write_text("# overview\n", encoding="utf-8")
+        self.assertEqual(overlay_roots(str(project), str(base), ""), [f"{project}/svc-a"])
+
+    def test_a_git_directory_below_the_project_is_still_skipped(self):
+        # Not a fixture case: git refuses to track a directory named .git.
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = tmp / "host"
+        for root in (project / ".git" / "modules" / "svc-b", project / "svc-a"):
+            (root / "agents").mkdir(parents=True)
+            (root / "project-overview.md").write_text("# overview\n", encoding="utf-8")
+        self.assertEqual(overlay_roots(str(project), str(project / "cortex"), ""), [f"{project}/svc-a"])
+
+
+class OutputTests(unittest.TestCase):
+    """#85 — the validator prints what it read; its colours are the only escapes it emits."""
+
+    def test_the_workspace_section_is_headed_with_a_dot(self):
+        run = harness.execute("ok-additive", [], harness.run_core)
+        self.assertIn("── Scope: . ──", run["stdout"])
+
+    def test_a_backslash_sequence_in_a_value_is_printed_as_typed(self):
+        _, lines = core_verdicts("escape-in-field")
+        self.assertEqual(lines[1], "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\\tive')")
+
+    def test_a_control_character_in_a_value_is_shown_escaped(self):
+        _, lines = core_verdicts("control-char-in-field")
+        self.assertEqual(lines[1], "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'additive\\x1b[2K\\x1b[1A')")
+
+    def test_a_control_character_in_a_file_name_is_shown_escaped(self):
+        out = io.StringIO()
+        Report(out, Colors(True)).ok("agents/roles/x\x1b[2K.md")
+        self.assertEqual(out.getvalue(), "\x1b[0;32m✓\x1b[0m agents/roles/x\\x1b[2K.md\n")
+        for verdict, args in (("error", ("CODE", "got '\x1b'")), ("warning", ("CODE", "got '\x1b'")), ("info", ("a note",))):
+            with self.subTest(verdict=verdict):
+                out = io.StringIO()
+                getattr(Report(out, Colors(False)), verdict)("agents/roles/x\x1b[2K.md", *args)
+                self.assertNotIn("\x1b", out.getvalue())
+
+    def test_a_backslash_c_no_longer_cuts_the_output(self):
+        out = io.StringIO()
+        Report(out, Colors(False)).error("agents/roles/x.md", "INVALID_SEMANTIC", "got 'x\\cy'")
+        self.assertEqual(out.getvalue(), "✗ agents/roles/x.md\n  INVALID_SEMANTIC — got 'x\\cy'\n")
+
+    def test_control_characters_in_directory_names_are_shown_escaped(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = tmp / "host\x1b[2K"
+        shutil.copytree(harness.FIXTURES / "base", project / "cortex")
+        overlay = project / "svc\x1b[1A" / "agents" / "roles" / "engineering" / "lead-backend.md"
+        overlay.parent.mkdir(parents=True)
+        overlay.write_text("<!-- OVERLAY\n     Base: cortex/agents/roles/engineering/lead-backend.md\n"
+                           "     Scope: service @svc\n     Semantic: additive\n-->\n## Rules (additive)\n", encoding="utf-8")
+        (project / "svc\x1b[1A" / "project-overview.md").write_text("# svc\n", encoding="utf-8")
+        for service in ("", "svc\x1b[1A"):
+            with self.subTest(service=service):
+                out = io.StringIO()
+                validate(str(project), str(project / "cortex"), service, False, out, Colors(False))
+                self.assertNotIn("\x1b", out.getvalue())
+                self.assertIn("✓ svc\\x1b[1A/agents/roles/engineering/lead-backend.md", out.getvalue())
+
+    def test_only_control_characters_are_rewritten(self):
+        # Printable text, and a raw byte from a file name that is not valid UTF-8, stay as they are.
+        self.assertEqual(shown("\u00e9 — ✓ 🚫 \udce9"), "\u00e9 — ✓ 🚫 \udce9")
+        # C0, DEL, C1 — as a character, or as a raw byte of an invalid file name.
+        self.assertEqual(shown("\x00\t\x1b\x7f\x9b\udc9b"), "\\x00\\x09\\x1b\\x7f\\x9b\\x9b")
 
 
 if __name__ == "__main__":

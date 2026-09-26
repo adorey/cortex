@@ -8,7 +8,14 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Base: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -23,7 +30,62 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Base: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "absent-key-among-others": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Base: is required in OVERLAY header",
+    "✓ agents/workflows/engineering/code-review.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  2 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Base: is required in OVERLAY header",
+    "✓ agents/workflows/engineering/code-review.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  2 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -40,7 +102,14 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Scope: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -55,7 +124,14 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Scope: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -72,7 +148,14 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Semantic: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -87,7 +170,14 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  MISSING_FIELD — Semantic: is required in OVERLAY header",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
     ""
    ],
    "stderr": [
@@ -130,7 +220,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/ghost.md",
     "  BASE_NOT_FOUND — Base: 'cortex/agents/roles/engineering/ghost.md' does not exist (typo, or upstream removed it?)",
     "",
@@ -152,9 +242,55 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/ghost.md",
     "  BASE_NOT_FOUND — Base: 'cortex/agents/roles/engineering/ghost.md' does not exist (typo, or upstream removed it?)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "control-char-in-field": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'additive\\x1b[2K\\x1b[1A')",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'additive\\x1b[2K\\x1b[1A')",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
@@ -176,7 +312,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✓ agents/roles/engineering/lead-backend.md",
     "",
     "──────────────────────────────────────────",
@@ -197,7 +333,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✓ agents/roles/engineering/lead-backend.md",
     "",
     "──────────────────────────────────────────",
@@ -220,7 +356,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "ℹ agents/roles/engineering/my-own-role.md (custom addition — no cortex base, skipping overlay checks)",
     "",
     "──────────────────────────────────────────",
@@ -241,8 +377,52 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "ℹ agents/roles/engineering/my-own-role.md (custom addition — no cortex base, skipping overlay checks)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "custom-theme": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "ℹ agents/personalities/acme/characters.md (custom addition — no cortex base, skipping overlay checks)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "ℹ agents/personalities/acme/characters.md (custom addition — no cortex base, skipping overlay checks)",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
@@ -264,7 +444,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "  (no overlay files)",
     "",
     "──────────────────────────────────────────",
@@ -285,7 +465,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "  (no overlay files)",
     "",
     "──────────────────────────────────────────",
@@ -308,7 +488,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  MISSING_FIELD — Base: is required in OVERLAY header",
     "",
@@ -330,7 +510,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  MISSING_FIELD — Base: is required in OVERLAY header",
     "",
@@ -354,7 +534,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  MISSING_FIELD — Scope: is required in OVERLAY header",
     "",
@@ -376,7 +556,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  MISSING_FIELD — Scope: is required in OVERLAY header",
     "",
@@ -400,7 +580,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  MISSING_FIELD — Semantic: is required in OVERLAY header",
     "",
@@ -422,7 +602,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  MISSING_FIELD — Semantic: is required in OVERLAY header",
     "",
@@ -446,9 +626,9 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
-    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\tive')",
+    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\\tive')",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
@@ -468,9 +648,9 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
-    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\tive')",
+    "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\\tive')",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
@@ -492,7 +672,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\\xyz')",
     "",
@@ -514,7 +694,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'add\\xyz')",
     "",
@@ -538,13 +718,14 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
-    "ℹ agents/roles/engineering/lead-backend.md (custom addition — no cortex base, skipping overlay checks)",
+    "── Scope: . ──",
+    "⚠ agents/roles/engineering/lead-backend.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base 'cortex/agents/roles/engineering/lead-backend.md' — add the header at the top, or rename the file if it is not meant to extend that base",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
     "Errors:   0",
-    "Warnings: 0",
+    "Warnings: 1",
     ""
    ],
    "stderr": [
@@ -552,20 +733,22 @@
    ]
   },
   "--strict": {
-   "code": 0,
+   "code": 1,
    "stdout": [
     "Cortex overlay validator",
     "  Project root:  <TMP>/host",
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
-    "ℹ agents/roles/engineering/lead-backend.md (custom addition — no cortex base, skipping overlay checks)",
+    "── Scope: . ──",
+    "⚠ agents/roles/engineering/lead-backend.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base 'cortex/agents/roles/engineering/lead-backend.md' — add the header at the top, or rename the file if it is not meant to extend that base",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
     "Errors:   0",
-    "Warnings: 0",
+    "Warnings: 1",
+    "Strict mode: warnings count as errors.",
     ""
    ],
    "stderr": [
@@ -630,7 +813,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'merge')",
     "",
@@ -652,7 +835,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'merge')",
     "",
@@ -660,6 +843,100 @@
     "Checked:  1 files",
     "Errors:   1",
     "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "missing-header": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "⚠ agents/roles/engineering/lead-backend.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base 'cortex/agents/roles/engineering/lead-backend.md' — add the header at the top, or rename the file if it is not meant to extend that base",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 1",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "⚠ agents/roles/engineering/lead-backend.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base 'cortex/agents/roles/engineering/lead-backend.md' — add the header at the top, or rename the file if it is not meant to extend that base",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 1",
+    "Strict mode: warnings count as errors.",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "missing-header-in-service": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: svc-a ──",
+    "⚠ svc-a/agents/roles/engineering/lead-backend.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base 'cortex/agents/roles/engineering/lead-backend.md' — add the header at the top, or rename the file if it is not meant to extend that base",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 1",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: svc-a ──",
+    "⚠ svc-a/agents/roles/engineering/lead-backend.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base 'cortex/agents/roles/engineering/lead-backend.md' — add the header at the top, or rename the file if it is not meant to extend that base",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 1",
+    "Strict mode: warnings count as errors.",
     ""
    ],
    "stderr": [
@@ -710,7 +987,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/personalities/h2g2/characters.md",
     "  NON_OVERRIDABLE — characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)",
     "",
@@ -732,7 +1009,53 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
+    "✗ agents/personalities/h2g2/characters.md",
+    "  NON_OVERRIDABLE — characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "non-overridable-without-header": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "✗ agents/personalities/h2g2/characters.md",
+    "  NON_OVERRIDABLE — characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
     "✗ agents/personalities/h2g2/characters.md",
     "  NON_OVERRIDABLE — characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)",
     "",
@@ -756,7 +1079,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✓ agents/roles/engineering/lead-backend.md",
     "",
     "──────────────────────────────────────────",
@@ -777,7 +1100,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✓ agents/roles/engineering/lead-backend.md",
     "",
     "──────────────────────────────────────────",
@@ -800,7 +1123,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✓ agents/workflows/engineering/code-review.md",
     "",
     "──────────────────────────────────────────",
@@ -821,7 +1144,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✓ agents/workflows/engineering/code-review.md",
     "",
     "──────────────────────────────────────────",
@@ -844,7 +1167,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  PATH_MIRROR — overlay path 'agents/roles/engineering/lead-backend.md' must mirror base 'cortex/agents/roles/engineering/architect.md'",
     "",
@@ -866,13 +1189,152 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  PATH_MIRROR — overlay path 'agents/roles/engineering/lead-backend.md' must mirror base 'cortex/agents/roles/engineering/architect.md'",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
     "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "project-under-agents-dir": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/agents/host",
+    "  Cortex dir:    <TMP>/agents/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "⚠ agents/roles/engineering/architect.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base 'cortex/agents/roles/engineering/architect.md' — add the header at the top, or rename the file if it is not meant to extend that base",
+    "✓ agents/roles/engineering/lead-backend.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  2 files",
+    "Errors:   0",
+    "Warnings: 1",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/agents/host",
+    "  Cortex dir:    <TMP>/agents/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "⚠ agents/roles/engineering/architect.md",
+    "  MISSING_HEADER — no <!-- OVERLAY --> header in its first 10 lines, yet it shadows the base 'cortex/agents/roles/engineering/architect.md' — add the header at the top, or rename the file if it is not meant to extend that base",
+    "✓ agents/roles/engineering/lead-backend.md",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  2 files",
+    "Errors:   0",
+    "Warnings: 1",
+    "Strict mode: warnings count as errors.",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "project-under-cortex-dir": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/cortex/host",
+    "  Cortex dir:    <TMP>/cortex/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: svc-a ──",
+    "✗ svc-a/agents/roles/engineering/lead-backend.md",
+    "  BASE_NOT_FOUND — Base: 'cortex/agents/roles/engineering/lead-backend-v2.md' does not exist (typo, or upstream removed it?)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/cortex/host",
+    "  Cortex dir:    <TMP>/cortex/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: svc-a ──",
+    "✗ svc-a/agents/roles/engineering/lead-backend.md",
+    "  BASE_NOT_FOUND — Base: 'cortex/agents/roles/engineering/lead-backend-v2.md' does not exist (typo, or upstream removed it?)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "readme-in-layer": {
+  "default": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "ℹ agents/roles/README.md (custom addition — no cortex base, skipping overlay checks)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 0,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/host",
+    "  Cortex dir:    <TMP>/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
+    "ℹ agents/roles/README.md (custom addition — no cortex base, skipping overlay checks)",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   0",
     "Warnings: 0",
     ""
    ],
@@ -890,7 +1352,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
     "",
@@ -912,7 +1374,53 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  }
+ },
+ "replacement-under-agents-workflows-dir": {
+  "default": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/agents/workflows/host",
+    "  Cortex dir:    <TMP>/agents/workflows/host/cortex",
+    "  Strict mode:   false",
+    "",
+    "── Scope: . ──",
+    "✗ agents/roles/engineering/lead-backend.md",
+    "  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
+    "",
+    "──────────────────────────────────────────",
+    "Checked:  1 files",
+    "Errors:   1",
+    "Warnings: 0",
+    ""
+   ],
+   "stderr": [
+    ""
+   ]
+  },
+  "--strict": {
+   "code": 1,
+   "stdout": [
+    "Cortex overlay validator",
+    "  Project root:  <TMP>/agents/workflows/host",
+    "  Cortex dir:    <TMP>/agents/workflows/host/cortex",
+    "  Strict mode:   true",
+    "",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  REPLACEMENT_OUTSIDE_WORKFLOWS — Semantic: replacement is only allowed for files under agents/workflows/",
     "",
@@ -936,7 +1444,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "⚠ agents/roles/engineering/lead-backend.md",
     "  SCOPE_MISMATCH — Scope: 'service @api' but file is at workspace root — should be under {service}/agents/",
     "✓ agents/roles/engineering/lead-backend.md",
@@ -959,7 +1467,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "⚠ agents/roles/engineering/lead-backend.md",
     "  SCOPE_MISMATCH — Scope: 'service @api' but file is at workspace root — should be under {service}/agents/",
     "✓ agents/roles/engineering/lead-backend.md",
@@ -1035,12 +1543,14 @@
     "  Strict mode:   false",
     "",
     "── Scope: svc-a ──",
+    "⚠ svc-a/agents/roles/lead-backend.md",
+    "  SCOPE_MISMATCH — Scope: 'workspace' but file is not at workspace root (agents/...)",
     "✓ svc-a/agents/roles/lead-backend.md",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
     "Errors:   0",
-    "Warnings: 0",
+    "Warnings: 1",
     ""
    ],
    "stderr": [
@@ -1048,7 +1558,7 @@
    ]
   },
   "--strict": {
-   "code": 0,
+   "code": 1,
    "stdout": [
     "Cortex overlay validator",
     "  Project root:  <TMP>/host",
@@ -1056,12 +1566,15 @@
     "  Strict mode:   true",
     "",
     "── Scope: svc-a ──",
+    "⚠ svc-a/agents/roles/lead-backend.md",
+    "  SCOPE_MISMATCH — Scope: 'workspace' but file is not at workspace root (agents/...)",
     "✓ svc-a/agents/roles/lead-backend.md",
     "",
     "──────────────────────────────────────────",
     "Checked:  1 files",
     "Errors:   0",
-    "Warnings: 0",
+    "Warnings: 1",
+    "Strict mode: warnings count as errors.",
     ""
    ],
    "stderr": [
@@ -1078,7 +1591,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "⚠ agents/roles/engineering/lead-backend.md",
     "  SECTIONS_UNTAGGED — additive overlay should tag at least one section as '(additive)' or use '## 🚫 Disabled rules from base'",
     "✓ agents/roles/engineering/lead-backend.md",
@@ -1101,7 +1614,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "⚠ agents/roles/engineering/lead-backend.md",
     "  SECTIONS_UNTAGGED — additive overlay should tag at least one section as '(additive)' or use '## 🚫 Disabled rules from base'",
     "✓ agents/roles/engineering/lead-backend.md",
@@ -1127,7 +1640,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✓ agents/roles/engineering/lead-backend.md",
     "",
     "── Scope: svc-a ──",
@@ -1151,7 +1664,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✓ agents/roles/engineering/lead-backend.md",
     "",
     "── Scope: svc-a ──",
@@ -1320,7 +1833,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   false",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'additive ')",
     "",
@@ -1342,7 +1855,7 @@
     "  Cortex dir:    <TMP>/host/cortex",
     "  Strict mode:   true",
     "",
-    "── Scope: <TMP>/host ──",
+    "── Scope: . ──",
     "✗ agents/roles/engineering/lead-backend.md",
     "  INVALID_SEMANTIC — Semantic: must be 'additive' or 'replacement' (got 'additive ')",
     "",
@@ -1350,55 +1863,6 @@
     "Checked:  1 files",
     "Errors:   1",
     "Warnings: 0",
-    ""
-   ],
-   "stderr": [
-    ""
-   ]
-  }
- },
- "unknown-layer": {
-  "default": {
-   "code": 0,
-   "stdout": [
-    "Cortex overlay validator",
-    "  Project root:  <TMP>/agents/host",
-    "  Cortex dir:    <TMP>/agents/host/cortex",
-    "  Strict mode:   false",
-    "",
-    "── Scope: <TMP>/agents/host ──",
-    "⚠ agents/roles/engineering/lead-backend.md",
-    "  UNKNOWN_LAYER — 'host' is not a known layer (expected: roles capabilities personalities workflows)",
-    "✓ agents/roles/engineering/lead-backend.md",
-    "",
-    "──────────────────────────────────────────",
-    "Checked:  1 files",
-    "Errors:   0",
-    "Warnings: 1",
-    ""
-   ],
-   "stderr": [
-    ""
-   ]
-  },
-  "--strict": {
-   "code": 1,
-   "stdout": [
-    "Cortex overlay validator",
-    "  Project root:  <TMP>/agents/host",
-    "  Cortex dir:    <TMP>/agents/host/cortex",
-    "  Strict mode:   true",
-    "",
-    "── Scope: <TMP>/agents/host ──",
-    "⚠ agents/roles/engineering/lead-backend.md",
-    "  UNKNOWN_LAYER — 'host' is not a known layer (expected: roles capabilities personalities workflows)",
-    "✓ agents/roles/engineering/lead-backend.md",
-    "",
-    "──────────────────────────────────────────",
-    "Checked:  1 files",
-    "Errors:   0",
-    "Warnings: 1",
-    "Strict mode: warnings count as errors.",
     ""
    ],
    "stderr": [

@@ -59,6 +59,8 @@ There are **two ways** to put a file in your project's `agents/` tree:
 
 This guide focuses on **overlays**. For custom additions, you just place the file at the cascade path and the PM picks it up — no header needed. The `validate-overlays.sh` script logs custom additions as informational and skips overlay-specific checks for them.
 
+A file with no header that sits **at the path of a cortex base** is not a custom addition: it shadows that base, and the cascade stacks it as an overlay. The validator reports it as `MISSING_HEADER` — a warning, and an error under `--strict`. Add the header, or rename the file if it was never meant to extend the base. The one exception is `personalities/{theme}/characters.md`: it cannot be overridden at all, so a copy at the path of a base is `NON_OVERRIDABLE`, an error, header or not. A theme of your own, with no base of that name, is a custom addition. A `README.md` is documentation: the cascade never reads one, and the validator never reports it.
+
 Examples of custom additions:
 - A fully custom personality theme (you don't extend `h2g2`, you create your own)
 - A new role unique to your domain (e.g. `roles/data/ml-engineer.md`)
@@ -238,7 +240,7 @@ Before committing overlays, run:
 > The validator needs **Python 3.9 or later** — `python3` or `python` on `PATH`. It runs its checks from `cortex/core/`, with nothing to install; without a usable Python it exits `2` and says so. This lasts until the native binary of [ADR-008](https://github.com/adorey/cortex/issues/37).
 
 The validator catches the common mistakes:
-- Overlay header missing or malformed
+- Overlay header missing or malformed — including a headerless file at the path of a base (`MISSING_HEADER`)
 - `Base:` points to a non-existent file (typo, or upstream removed it)
 - Overlay path doesn't mirror the base path
 - Trying to override a non-overridable file (`characters.md`)

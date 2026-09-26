@@ -12,6 +12,12 @@ from typing import List, Optional
 from .resolver import _tiers
 
 
+def is_readme(name: str) -> bool:
+    """Whether a file name is a directory's README — documentation, in any case, never a card of
+    the cascade."""
+    return name.lower() == "readme.md"
+
+
 def capability_dirs(root: Path, service: Optional[str] = None, *, base_root: Optional[Path] = None) -> List[Path]:
     """The capability directories of the cascade, base first — one per tier, as the resolver
     counts them."""
@@ -25,7 +31,7 @@ def capability_catalog(root: Path, service: Optional[str] = None, *, base_root: 
         if not cap_dir.is_dir():
             continue
         for md in cap_dir.rglob("*.md"):
-            if md.name.lower() == "readme.md":
+            if is_readme(md.name):
                 continue
             found.add("/".join(md.relative_to(cap_dir).parts))
     return sorted(found)

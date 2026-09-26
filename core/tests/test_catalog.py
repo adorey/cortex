@@ -28,6 +28,11 @@ class CatalogTests(unittest.TestCase):
     def test_readme_is_not_a_capability(self):
         self.assertFalse(any(c.lower().endswith("readme.md") for c in capability_catalog(ROOT)))
 
+    def test_a_readme_in_any_case(self):
+        from cortex_core.catalog import is_readme
+        self.assertTrue(all(is_readme(n) for n in ("README.md", "Readme.md", "readme.md")))
+        self.assertFalse(any(is_readme(n) for n in ("README.txt", "my-readme.md", "php.md")))
+
     def test_omitted_base_root_equals_explicit_default(self):
         self.assertEqual(capability_catalog(ROOT, "svc-a"), capability_catalog(ROOT, "svc-a", base_root=ROOT / "cortex"))
 
