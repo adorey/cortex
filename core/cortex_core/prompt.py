@@ -1,6 +1,7 @@
 """Prompt assembly — an agent's system prompt, built from the cascade (ADR-002 §3.1, ADR-007).
 
-Order: personality identity → role protocol → capabilities → project context. Each part of the
+Order: personality identity → role protocol → capabilities → project overview → workspace
+services → project context — the editor's bootstrap order for the last three. Each part of the
 cascade is resolved and merged per its semantic; distinct parts are joined by ``LAYER_SEPARATOR``.
 """
 
@@ -52,14 +53,17 @@ def build_system_prompt(
     capabilities: Optional[Sequence[str]] = None,
     *,
     base_root: Optional[Path] = None,
+    project_overview: str = "",
+    workspace_services: str = "",
     project_context: str = "",
 ) -> str:
     """Assemble the resolved system prompt — additive merge per ADR-001 §3.2 / ADR-002 §3.1.
 
     ``capabilities`` are cascade-relative paths under ``capabilities/`` (e.g.
-    ``"languages/php.md"``); the stack→capability mapping lives upstream. ``project_context`` —
-    the project's ``project-context.md`` tiers, read upstream — closes the prompt under a
-    ``# Project context`` heading; empty, the prompt is what it was without it.
+    ``"languages/php.md"``); the stack→capability mapping lives upstream. The project's own
+    view, read upstream, closes the prompt: ``project_overview`` (its ``project-overview.md``
+    tiers), ``workspace_services`` (the index of the workspace's services) and ``project_context``
+    (its ``project-context.md`` tiers), each under its own heading. An empty one is left out.
     """
     parts: List[str] = []
     for layer, file in layers_for(role, theme, root, base_root=base_root):
@@ -72,7 +76,9 @@ def build_system_prompt(
         if merged.strip():
             parts.append(merged)
 
-    if project_context.strip():
-        parts.append("# Project context\n\n" + project_context)
+    for heading, text in (("# Project overview", project_overview), ("# Workspace services", workspace_services),
+                          ("# Project context", project_context)):
+        if text.strip():
+            parts.append(f"{heading}\n\n{text}")
 
     return LAYER_SEPARATOR.join(parts)

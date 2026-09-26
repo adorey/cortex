@@ -18,15 +18,15 @@ restated here: they come from the resolver, the one implementation the runtime r
 # ``python -I`` from the Cortex checkout, with nothing installed (see the shim).
 from __future__ import annotations
 
-import fnmatch
 import io
 import os
 import re
 import signal
 import sys
-from typing import List, Optional, TextIO, Tuple
+from typing import List, Optional, TextIO
 
 from . import catalog, resolver
+from .workspace import find, same_directory, services  # noqa: F401 — find is part of this module's API
 
 LAYERS = ("roles", "capabilities", "personalities", "workflows")
 
@@ -228,53 +228,6 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
 # --------------------------------------------------------------------------- #
 # Discovery — the script's two ``find`` calls
 # --------------------------------------------------------------------------- #
-def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: bool = False,
-         prune_names: Tuple[str, ...] = (), prune_paths: Tuple[str, ...] = (),
-         follow_links: bool = False) -> List[str]:
-    """``find TOP [-maxdepth N] -name NAME [-type f]``, in ``find``'s order, without entering the
-    directories below ``TOP`` that are named in ``prune_names`` or located at ``prune_paths``.
-
-    Depth first, each directory's entries in the order the file system returns them — the
-    order ``find`` prints, so the report lists files in the same sequence as the script did.
-    Pruning looks below ``TOP`` only: what the directories above it are called changes nothing.
-    With ``follow_links``, files and directories behind symbolic links count as the resolver
-    reads them — ``find -L`` — and a directory reached twice, a link loop, is entered once.
-    """
-    found: List[str] = []
-    pruned = {os.path.normpath(p) for p in prune_paths}
-    entered = set()
-
-    def visit(directory: str, depth: int) -> None:
-        if follow_links:
-            try:
-                key = (os.stat(directory).st_dev, os.stat(directory).st_ino)
-            except OSError:
-                return
-            if key in entered:
-                return
-            entered.add(key)
-        try:
-            entries = list(os.scandir(directory))
-        except OSError:
-            return                    # find reports it on stderr, which the script discards
-        for entry in entries:
-            path = f"{directory}/{entry.name}"
-            if (maxdepth is None or depth + 1 <= maxdepth) and fnmatch.fnmatchcase(entry.name, name) \
-                    and (not regular_files or entry.is_file(follow_symlinks=follow_links)):
-                found.append(path)
-            if entry.is_dir(follow_symlinks=follow_links) and (maxdepth is None or depth + 1 < maxdepth) \
-                    and entry.name not in prune_names and os.path.normpath(path) not in pruned:
-                visit(path, depth + 1)
-
-    visit(top, 0)
-    return found
-
-
-def _same_directory(a: str, b: str) -> bool:
-    try:
-        return os.path.samefile(a, b)
-    except OSError:
-        return os.path.normpath(a) == os.path.normpath(b)
 
 
 def overlay_roots(project_root: str, base_root: str, service: str) -> List[str]:
@@ -289,15 +242,9 @@ def overlay_roots(project_root: str, base_root: str, service: str) -> List[str]:
     """
     if service:
         return [service if os.path.isabs(service) else f"{project_root}/{service}"]
-    is_base = _same_directory(project_root, base_root)
+    is_base = same_directory(project_root, base_root)
     roots = [project_root] if os.path.isdir(f"{project_root}/agents") and not is_base else []
-    for overview in find(project_root, "project-overview.md", maxdepth=5,
-                         prune_names=("cortex", ".git"), prune_paths=(base_root,)):
-        service_dir = os.path.dirname(overview)
-        if service_dir == project_root or not os.path.isdir(f"{service_dir}/agents"):
-            continue
-        roots.append(service_dir)
-    return roots
+    return roots + [s for s in services(project_root, base_root) if os.path.isdir(f"{s}/agents")]
 
 
 # --------------------------------------------------------------------------- #
