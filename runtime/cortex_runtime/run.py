@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .context import derive_capabilities, read_project_context
+from cortex_core.workspace import service_index
+
+from .context import derive_capabilities, read_project_context, read_project_overview
 from .resolver import build_system_prompt, find_workflow_relpath, layers_for, read_resolved
 from .safety import ActionPolicy
 
@@ -68,6 +70,8 @@ def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> Res
         theme=theme,
         root=root,
         capabilities=capabilities,
+        project_overview=read_project_overview(root, req.service),
+        workspace_services=service_index(root, active=req.service),
         project_context=read_project_context(root, req.service),
     )
 
