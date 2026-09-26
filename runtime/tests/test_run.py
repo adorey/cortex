@@ -75,5 +75,15 @@ class ResolveRunTests(unittest.TestCase):
             resolve_run(req, ROOT)
 
 
+
+class ProjectContextInPromptTests(unittest.TestCase):
+    """#87 — the project context is the agent's context: it reaches the system prompt."""
+
+    def test_the_project_context_closes_the_system_prompt(self):
+        run = resolve_run(RunRequest(workspace="host", role="lead-backend"), ROOT, theme="h2g2")
+        context = (ROOT / "project-context.md").read_text(encoding="utf-8")
+        self.assertTrue(run.system_prompt.endswith("# Project context\n\n" + context), run.system_prompt[-200:])
+
+
 if __name__ == "__main__":
     unittest.main()
