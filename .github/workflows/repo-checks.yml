@@ -121,8 +121,9 @@ jobs:
           grep -q '✓ agents/roles/engineering/lead-backend.md' report.txt
 
           sed -i 's#engineering/lead-backend.md$#engineering/no-such-role.md#' agents/roles/engineering/lead-backend.md
-          if ./cortex/bin/validate-overlays.sh --strict; then
+          if ./cortex/bin/validate-overlays.sh --strict > broken.txt; then
             echo "a Base: pointing nowhere passed the checks"
             exit 1
           fi
+          grep -q 'BASE_NOT_FOUND' broken.txt || { echo "failed, but not on the broken Base:"; cat broken.txt; exit 1; }
           echo "✓ the checks ran"
