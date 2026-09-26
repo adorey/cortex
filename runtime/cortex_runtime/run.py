@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .context import derive_capabilities
+from .context import derive_capabilities, read_project_context
 from .resolver import build_system_prompt, find_workflow_relpath, layers_for, read_resolved
 from .safety import ActionPolicy
 
@@ -68,6 +68,7 @@ def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> Res
         theme=theme,
         root=root,
         capabilities=capabilities,
+        project_context=read_project_context(root, req.service),
     )
 
     workflow_text: Optional[str] = None
