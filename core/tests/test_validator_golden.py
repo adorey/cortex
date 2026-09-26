@@ -14,7 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tests import validator_harness as harness  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the harness, not a package named tests
+import validator_harness as harness  # noqa: E402
 
 EXPECTED = json.loads(harness.EXPECTED.read_text(encoding="utf-8"))
 ERRORS = {"MISSING_FIELD", "BASE_NOT_FOUND", "INVALID_SEMANTIC", "REPLACEMENT_OUTSIDE_WORKFLOWS",
