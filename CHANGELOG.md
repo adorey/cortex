@@ -21,6 +21,7 @@ release note under [`changelog/`](changelog/).
 - The overlay validator cut absolute paths at their first `/agents/` and skipped any path containing `/cortex/`. A project inside a directory named `agents` — on GitHub Actions, a repository named `agents` — failed every overlay with `PATH_MIRROR`; one inside a directory named `cortex` had none of its services checked, and passed, under `--strict` too. Paths now come from the root being scanned, and the base is skipped by its location, whatever it is called. `UNKNOWN_LAYER`, which only that bug could produce, is gone.
 - A service overlay with no category level — `svc/agents/roles/prompt-manager.md` — declaring `Scope: workspace` went unreported: it now gets `SCOPE_MISMATCH`, a warning, an error under `--strict`.
 - The overlay validator printed header values and file names through `echo -e`, so an overlay could write terminal control sequences to the console — erase a `✗`, print a `✓` in its place. They are printed as read, control characters shown escaped (`\x1b`). The workspace's section is headed `── Scope: . ──` instead of the project's absolute path.
+- The `claude-cli` backend passed the system prompt and the task as command-line arguments: past 128 KiB — Linux's cap on one argument — the CLI could not start, and the run failed on an unexplained `OSError`. The system prompt now goes in a private temporary file, removed after the run, and the task on stdin; a CLI that cannot start says so.
 
 ## [0.9.0] - 2026-09-23 — Beware of the Leopard _(Released)_
 [Full notes](changelog/0.9.0.md)
