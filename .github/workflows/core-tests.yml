@@ -49,4 +49,4 @@ jobs:
         working-directory: core
         run: |
           /usr/bin/python3 --version
-          /usr/bin/python3 -m unittest -v tests.test_package tests.test_resolver tests.test_catalog tests.test_prompt tests.test_self_hosting
+          /usr/bin/python3 -m unittest -v tests.test_package tests.test_core_resolver tests.test_catalog tests.test_prompt tests.test_boundaries tests.test_self_hosting
