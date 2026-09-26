@@ -271,20 +271,20 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
     Depth first, each directory's entries in the order the file system returns them — the
     order ``find`` prints, so the report lists files in the same sequence as the script did.
     With ``follow_links``, files and directories behind symbolic links count as the resolver
-    reads them — ``find -L`` — and a directory reached twice, a link loop, is entered once.
+    reads them — ``find -L`` — and, as there, a directory that is one of its own ancestors — a
+    link loop — is not entered again, while a second path to the same directory is listed too.
     """
     found: List[str] = []
-    entered = set()
 
-    def visit(directory: str, depth: int) -> None:
+    def visit(directory: str, depth: int, ancestors: frozenset = frozenset()) -> None:
         if follow_links:
             try:
-                key = (os.stat(directory).st_dev, os.stat(directory).st_ino)
+                st = os.stat(directory)
             except OSError:
                 return
-            if key in entered:
+            if (st.st_dev, st.st_ino) in ancestors:
                 return
-            entered.add(key)
+            ancestors = ancestors | {(st.st_dev, st.st_ino)}
         try:
             entries = list(os.scandir(directory))
         except OSError:
@@ -296,7 +296,7 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
                     and not any(fnmatch.fnmatchcase(path, pattern) for pattern in excludes):
                 found.append(path)
             if _is(entry.is_dir, follow_links) and (maxdepth is None or depth + 1 < maxdepth):
-                visit(path, depth + 1)
+                visit(path, depth + 1, ancestors)
 
     visit(top, 0)
     return found
