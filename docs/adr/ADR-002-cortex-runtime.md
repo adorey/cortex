@@ -323,3 +323,22 @@ means no repo boundary guarantees it).
 *detectable*, not *impossible*. **Planned:** make `validate-overlays.sh` a thin shell that
 delegates resolution to the Python resolver, making Python the single source of truth and
 retiring the parity test.
+
+## 9. Amendments
+
+### 2026-09 — the resolved identity carries the project's own view (§8.1)
+
+§8.1 splits a run's reads in two: the **resolved identity** — role, personality, capabilities — assembled into the system prompt, and the **investigated work** read through tools. The identity now carries a third part: the project's own view, the files meant to give an agent the whole project — what the Prompt Manager reads before anything else in the editor (ADR-006):
+
+- `# Project overview` — the `project-overview.md` tiers: team (`agents/`), developer (the root), the run's service;
+- `# Workspace services` — one line per service, its `@alias`, folder and title, the run's own marked;
+- `# Project context` — the `project-context.md` tiers, in the same order.
+
+Each tier is labelled as soon as two or more exist. The view closes the system prompt; with none of these files the prompt is what it was. The work itself still goes through tools. The run's service must name a folder inside the workspace — relative, never climbing out of it — or the request is refused (`422`): its files are now read into the prompt.
+
+**What it costs.** Measured on a real workspace, the view adds 44 to 66 KB to a system prompt — about 11,000 to 16,500 tokens a run: a backend lead's prompt went from 100 KB to 166 KB, an architect's from 92 KB to 136 KB. A workspace's budget (ADR-004) goes that much faster; with prompt caching, repeated runs pay it once per cache lifetime.
+
+**What leaves the machine.** The view is sent to the model provider on every run. That includes the developer tier — the untracked `project-overview.md` and `project-context.md` at the workspace root, personal notes by design (ADR-006) — and the service's. Write nothing there that should not reach the provider.
+
+Tracked as #87 and #88. Making the view an option — per deployment, workspace or run, whole or in parts — so that a run that does not need it spends a lighter prompt, is #89.
+
