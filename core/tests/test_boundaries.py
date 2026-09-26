@@ -7,6 +7,7 @@
 """
 
 import ast
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -59,6 +60,29 @@ class SpecFirewallTests(unittest.TestCase):
             if token in md.read_text(encoding="utf-8")
         ]
         self.assertEqual(offenders, [], "Spec Markdown must not depend on cortex-core (ADR-002 firewall):\n" + "\n".join(offenders))
+
+
+
+class TestLayoutTests(unittest.TestCase):
+    """The two suites share a repository, and IDE test explorers run them in one pytest session."""
+
+    REPO = Path(__file__).resolve().parents[2]
+
+    def test_core_and_runtime_test_modules_have_distinct_names(self):
+        # Two packages named ``tests``: a module name found in both is collected once, the other
+        # file silently never runs.
+        core = {p.name for p in (self.REPO / "core" / "tests").glob("test_*.py")}
+        runtime = {p.name for p in (self.REPO / "runtime" / "tests").glob("test_*.py")}
+        self.assertEqual(core & runtime, set())
+
+    def test_the_macos_job_runs_every_order_free_module(self):
+        # The macOS job lists its modules by name: a new one must be listed there, or be named
+        # here as depending on the order of an ext4 directory listing.
+        order_dependent = {"test_validate", "test_validator_golden", "test_shim"}
+        workflow = (self.REPO / ".github" / "workflows" / "core-tests.yml").read_text(encoding="utf-8")
+        listed = set(re.findall(r"\btests\.(test_\w+)", workflow))
+        present = {p.stem for p in (self.REPO / "core" / "tests").glob("test_*.py")}
+        self.assertEqual(present - order_dependent, listed)
 
 
 if __name__ == "__main__":
