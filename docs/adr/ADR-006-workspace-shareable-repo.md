@@ -113,6 +113,6 @@ No change to `bin/validate-overlays.sh` is needed: with exactly two tiers, both 
 
 ## 8. Amendments
 
-### ADR-007 phase 4 — the runtime reads the team tier, and when it labels it
+### ADR-007 phase 4 — the runtime reads the team tier, puts the context in the prompt, labels the tiers
 
-The runtime reads the team tier too since ADR-007 phase 4, first, as §3.3 orders. It labels the two tiers — `## Team context`, `## Developer notes` — only when **both** exist: with a single tier there is no scope to tell apart, and a workspace without a team tier sees its context unchanged. The Prompt Manager's protocol of §3.3 is unchanged. See [ADR-007 §9](ADR-007-cortex-core.md#9-amendments).
+The runtime reads the team tier too since ADR-007 phase 4, first, as §3.3 orders. The tiers reach the agent's system prompt, under `# Project context`. The runtime labels them — `## Team context`, `## Developer notes`, `## Service context — {service}` — as soon as two or more exist: with a single tier there is no scope to tell apart, and it reads as it always did. The Prompt Manager's protocol of §3.3 is unchanged. See [ADR-007 §9](ADR-007-cortex-core.md#9-amendments).
