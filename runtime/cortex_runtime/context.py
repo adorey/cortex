@@ -25,24 +25,20 @@ def read_project_context(root: Path, service: Optional[str] = None) -> str:
     """The project context, tier by tier: team, developer, then the service's own.
 
     ADR-006 splits the workspace context in two: the **team** tier ``agents/project-context.md``
-    and the **developer** tier ``project-context.md`` at the root, read in that order. When both
-    exist, each is labelled by scope (ADR-006 §3.3); with a single tier there is no scope to tell
-    apart, and the text stays exactly as it was.
+    and the **developer** tier ``project-context.md`` at the root, read in that order, then the
+    service's ``project-context.md``. When two or more exist, each is labelled by scope (ADR-006
+    §3.3) — the text reaches the agent's prompt, where the tiers must be told apart; with a
+    single tier there is no scope to tell apart, and the text stays exactly as it was.
     """
     root = Path(root)
-    team = root / "agents" / _CONTEXT_FILE
-    developer = root / _CONTEXT_FILE
-    parts = []
-    if team.is_file() and developer.is_file():
-        parts.append("## Team context\n\n" + team.read_text(encoding="utf-8"))
-        parts.append("## Developer notes\n\n" + developer.read_text(encoding="utf-8"))
-    else:
-        for ctx in (team, developer):
-            if ctx.is_file():
-                parts.append(ctx.read_text(encoding="utf-8"))
-    if service and (root / service / _CONTEXT_FILE).is_file():
-        parts.append((root / service / _CONTEXT_FILE).read_text(encoding="utf-8"))
-    return "\n\n".join(parts)
+    tiers = [("## Team context", root / "agents" / _CONTEXT_FILE),
+             ("## Developer notes", root / _CONTEXT_FILE)]
+    if service:
+        tiers.append((f"## Service context — {service}", root / service / _CONTEXT_FILE))
+    found = [(label, path.read_text(encoding="utf-8")) for label, path in tiers if path.is_file()]
+    if len(found) == 1:
+        return found[0][1]
+    return "\n\n".join(f"{label}\n\n{text}" for label, text in found)
 
 
 def derive_capabilities(root: Path, service: Optional[str] = None) -> List[str]:
