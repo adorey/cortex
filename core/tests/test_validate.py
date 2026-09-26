@@ -243,6 +243,14 @@ class UnreadableFileTests(unittest.TestCase):
 
 
 class MainTests(unittest.TestCase):
+    def test_what_the_caller_wrote_first_comes_out_first(self):
+        stdout = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        with mock.patch("sys.stdout", stdout):
+            stdout.write("BEFORE\n")
+            main(["--help"])
+            stdout.flush()
+        self.assertTrue(stdout.buffer.getvalue().startswith(b"BEFORE\nUsage: validate-overlays.sh"))
+
     def test_main_leaves_the_process_streams_open(self):
         # In one process — a test, a CLI embedding the core — whatever runs next still writes.
         stdout = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
