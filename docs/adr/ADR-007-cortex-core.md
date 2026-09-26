@@ -195,6 +195,8 @@ Freezing the Bash validator in phase 2 surfaced a third drift of the kind §3.6 
 
 §3.6 asks for the two workspace context tiers to be "labelled by scope". The runtime labels them when **both** exist: with a single tier there is no scope to tell apart, so a workspace without a team tier sees its context unchanged.
 
+Reading the team tier also feeds `derive_capabilities`, which selects capabilities for every role alike — narrowing them by role is still to come. The cost is real: measured on a workspace whose team context names ten technologies, the system prompt of an architect went from 10 KB to 92 KB, of a frontend lead from 24 KB to 93 KB, of a backend lead from 76 KB to 100 KB.
+
 ### Phase 4 — what the port kept of the script, fixed
 
 Phase 2 reproduced three behaviours of the Bash script as they were — a parity phase is no place to fix them — and #79 listed them. Once phase 3 had deleted the script, the maintainer asked for them to be fixed in phase 4, beside the drifts of §3.6:
