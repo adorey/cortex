@@ -169,7 +169,10 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
     # error with a header or without. A README is documentation, which the cascade never reads.
     # Anywhere else it is a custom addition.
     if not any("<!-- OVERLAY" in line for line in text.split("\n")[:10]):
-        if os.path.isfile(f"{base_root}/agents/{file_rel_to_agents}") and not catalog.is_readme(os.path.basename(file)):
+        if catalog.is_readme(os.path.basename(file)):
+            report.info(rel_path, "documentation — a README is never an overlay, skipping overlay checks")
+            return
+        if os.path.isfile(f"{base_root}/agents/{file_rel_to_agents}"):
             if rule is resolver.MergeSemantic.NOT_OVERRIDABLE:
                 report.error(rel_path, "NON_OVERRIDABLE", _NON_OVERRIDABLE)
                 return
