@@ -8,11 +8,13 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[2] / "bin" / "validate-overlays.sh"
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the harness, not a package named tests
 
 
 @unittest.skipIf(shutil.which("bash") is None, "bash not available")
@@ -58,7 +60,7 @@ class ShimIsolationTests(unittest.TestCase):
     """Code from the project under validation never runs — the validator is run from its root."""
 
     def test_modules_in_the_working_directory_are_not_imported(self):
-        from tests import validator_harness as harness
+        import validator_harness as harness
 
         tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
@@ -88,7 +90,7 @@ class ShimOptionsTests(unittest.TestCase):
     def test_the_roots_are_not_options(self):
         # The script knew --service, --strict and --help. A root given on the command line would
         # validate somewhere else — /nonexistent, found empty: a green run that checked nothing.
-        from tests import validator_harness as harness
+        import validator_harness as harness
 
         tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
@@ -106,7 +108,7 @@ class ShimLocationTests(unittest.TestCase):
     """The shim finds the core next to itself, however it is called."""
 
     def project(self):
-        from tests import validator_harness as harness
+        import validator_harness as harness
 
         tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
@@ -149,7 +151,7 @@ class ShimLocationTests(unittest.TestCase):
 class ShimPipeTests(unittest.TestCase):
     def test_a_reader_that_goes_away_ends_the_run_quietly(self):
         # validate-overlays.sh | head -1: the script died of SIGPIPE, in silence — no traceback.
-        from tests import validator_harness as harness
+        import validator_harness as harness
 
         tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)

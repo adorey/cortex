@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the harness, not a package named tests
 
 CORE_PKG = Path(__file__).resolve().parents[1] / "cortex_core"
 SPEC_DIR = Path(__file__).resolve().parents[2] / "agents"
@@ -90,7 +91,7 @@ class OneImplementationTests(unittest.TestCase):
 
     def run_validator(self, case):
         from cortex_core.validate import Colors, validate
-        from tests import validator_harness as harness
+        import validator_harness as harness
 
         tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
