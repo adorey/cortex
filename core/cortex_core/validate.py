@@ -104,6 +104,17 @@ def after_first(value: str, marker: str) -> str:
     return value[idx + len(marker):] if idx >= 0 else value
 
 
+def _stderr(text: str) -> None:
+    """``text`` on stderr as the script wrote it: a name that is not UTF-8 as its own bytes."""
+    buffer = getattr(sys.stderr, "buffer", None)
+    if buffer is None:
+        sys.stderr.write(text)
+        return
+    sys.stderr.flush()
+    buffer.write(text.encode("utf-8", "surrogateescape"))
+    buffer.flush()
+
+
 def read_text(path: str) -> str:
     with open(path, "rb") as fh:
         return fh.read().decode("utf-8", "surrogateescape")
@@ -176,7 +187,7 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
         text = read_text(file)
     except OSError as error:
         # The script's head failed, said so on stderr, and so found no header.
-        sys.stderr.write(f"head: cannot open '{file}' for reading: {error.strerror}\n")
+        _stderr(f"head: cannot open '{file}' for reading: {error.strerror}\n")
         text = ""
 
     # Tier 1.1 — header presence, in the first ten lines; otherwise a custom addition

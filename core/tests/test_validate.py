@@ -227,6 +227,15 @@ class UnreadableFileTests(unittest.TestCase):
         self.assertEqual(lines, ["ℹ agents/roles/engineering/my-own-role.md (custom addition — no cortex base, skipping overlay checks)"])
         self.assertRegex(err.getvalue(), r"^head: cannot open '.*/agents/roles/engineering/my-own-role.md' for reading: Permission denied\n$")
 
+    def test_a_name_that_is_not_utf8_reaches_stderr_as_its_bytes(self):
+        stderr = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")          # strict, as a pipe's is
+        report = Report(io.StringIO(), Colors(False))
+        with mock.patch("cortex_core.validate.read_text", side_effect=PermissionError(13, "Permission denied")), \
+                mock.patch("sys.stderr", stderr):
+            check_overlay("/p/agents/roles/caf\udce9.md", "/p", "/p/cortex", report)
+            stderr.flush()
+        self.assertEqual(stderr.buffer.getvalue(), b"head: cannot open '/p/agents/roles/caf\xe9.md' for reading: Permission denied\n")
+
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root reads any file")
     def test_a_file_without_read_permission(self):
         tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
