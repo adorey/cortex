@@ -26,6 +26,8 @@ class WorkspaceTests(unittest.TestCase):
             (root / folder).mkdir(parents=True)
             (root / folder / "project-overview.md").write_text(text, encoding="utf-8")
         (root / "project-overview.md").write_text("# The workspace itself\n", encoding="utf-8")
+        (root / "agents").mkdir()
+        (root / "agents" / "project-overview.md").write_text("# The team's overview — ADR-006's team tier\n", encoding="utf-8")
         return root
 
     def test_services_are_the_folders_with_an_overview(self):
