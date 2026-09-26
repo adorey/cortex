@@ -85,6 +85,18 @@ class ProjectContextInPromptTests(unittest.TestCase):
         self.assertTrue(run.system_prompt.endswith("# Project context\n\n" + context), run.system_prompt[-200:])
 
 
+class ServiceBoundaryTests(unittest.TestCase):
+    def test_a_service_is_a_folder_inside_the_workspace(self):
+        for service in ("../elsewhere", "/etc", "svc-a/../../elsewhere", "svc-a\\..\\..\\x"):
+            with self.subTest(service=service):
+                with self.assertRaisesRegex(ValueError, "inside the workspace"):
+                    resolve_run(RunRequest(workspace="host", role="lead-backend", service=service), ROOT)
+
+    def test_a_service_path_is_normalised(self):
+        run = resolve_run(RunRequest(workspace="host", role="lead-backend", service="./svc-a/"), ROOT)
+        self.assertEqual(run.system_prompt, resolve_run(RunRequest(workspace="host", role="lead-backend", service="svc-a"), ROOT).system_prompt)
+
+
 class WorkspaceViewInPromptTests(unittest.TestCase):
     """#88 — the agent sees what the Prompt Manager reads in the editor: the overviews, the
     workspace's services, then the contexts."""
