@@ -271,14 +271,15 @@ class EchoTests(unittest.TestCase):
         self.assertEqual(echo_e_line("\\users\\Ux"), "\\users\\Ux\n")
 
     def test_escapes_write_the_bytes_bash_writes(self):
-        # Measured with Bash under C.UTF-8. A byte that is not UTF-8 is carried as surrogateescape,
-        # which the output stream writes back as that very byte.
+        # Measured with Bash under LC_ALL=C, the locale the captures are taken in. A byte that is not
+        # UTF-8 is carried as surrogateescape, which the output stream writes back as that very byte.
         raw = lambda *bs: "".join(chr(0xDC00 + b) for b in bs)  # noqa: E731
         self.assertEqual(echo_e_line("\\xe9\\0351"), raw(0xE9, 0xE9) + "\n")
-        self.assertEqual(echo_e_line("\\u00e9"), "\u00e9\n")
-        self.assertEqual(echo_e_line("\\uD800"), raw(0xED, 0xA0, 0x80) + "\n")
-        self.assertEqual(echo_e_line("\\U00110000"), raw(0xF4, 0x90, 0x80, 0x80) + "\n")
-        self.assertEqual(echo_e_line("\\U7FFFFFFF"), raw(0xFD, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF) + "\n")
+        self.assertEqual(echo_e_line("a\\u0041\\u007f"), "aA\x7f\n")
+        self.assertEqual(echo_e_line("\\u00e9"), "\\u00E9\n")
+        self.assertEqual(echo_e_line("\\ue9b"), "\\u0E9B\n")                 # hex digits taken greedily
+        self.assertEqual(echo_e_line("\\uD800 \\U1F600b"), "\\uD800 \\U001F600B\n")
+        self.assertEqual(echo_e_line("\\U7FFFFFFF"), "\\U7FFFFFFF\n")
         self.assertEqual(echo_e_line("p\\UFFFFFFFFq"), "pq\n")
 
 

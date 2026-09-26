@@ -49,21 +49,15 @@ def _byte(value: int) -> str:
     return chr(value) if value < 0x80 else chr(0xDC00 + value)
 
 
-def _code_point(code: int) -> str:
-    """What Bash writes for ``\\u`` and ``\\U`` under a UTF-8 locale: the character, or, for a
-    surrogate or a code point past U+10FFFF, the bytes of UTF-8 extended as Bash's own encoder
-    extends it — up to six bytes, nothing past 0x7FFFFFFF."""
-    if code <= 0x10FFFF and not 0xD800 <= code <= 0xDFFF:
+def _code_point(head: str, code: int) -> str:
+    """What Bash writes for ``\\u`` and ``\\U`` in the C locale the port reproduces: the
+    character below U+0080; past it, the escape written out — ``\\u%04X``, ``\\U%08X`` — which
+    the C locale cannot encode; nothing past 0x7FFFFFFF."""
+    if code < 0x80:
         return chr(code)
     if code > 0x7FFFFFFF:
         return ""
-    count = next(n for n, limit in ((3, 0x10000), (4, 0x200000), (5, 0x4000000), (6, 0x80000000)) if code < limit)
-    tail = []
-    for _ in range(count - 1):
-        tail.insert(0, 0x80 | (code & 0x3F))
-        code >>= 6
-    lead = (0xE0, 0xF0, 0xF8, 0xFC)[count - 3] | code
-    return "".join(_byte(b) for b in [lead] + tail)
+    return ("\\u%04X" if head == "u" else "\\U%08X") % code
 
 
 def echo_e(text: str) -> Tuple[str, bool]:
@@ -84,7 +78,7 @@ def echo_e(text: str) -> Tuple[str, bool]:
         elif head == "x" and len(esc) > 1:
             out.append(_byte(int(esc[1:], 16)))
         elif head in ("u", "U") and len(esc) > 1:
-            out.append(_code_point(int(esc[1:], 16)))
+            out.append(_code_point(head, int(esc[1:], 16)))
         elif head in _SIMPLE:
             out.append(_SIMPLE[head])
         else:
