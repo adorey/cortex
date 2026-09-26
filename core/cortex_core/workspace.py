@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+# Where a workspace keeps its dependencies: never a service, and the bulk of its files.
+_DEPENDENCY_TREES = ("node_modules", "vendor", ".venv")
 _ALIAS = re.compile(r"<!--\s*@alias:\s*([^\s>]+)\s*-->")
 
 
@@ -87,13 +89,15 @@ def services(project_root: str, base_root: Optional[str] = None) -> List[str]:
 
     Services are looked for outside the base, wherever it is mounted and whatever it is called,
     outside the project root's own ``agents/`` — the cascade's tiers and ADR-006's team files,
-    no service — and outside any directory named ``cortex`` or ``.git`` below the project root:
-    a service may mount its own Cortex.
+    no service — outside any directory named ``cortex`` or ``.git`` below the project root — a
+    service may mount its own Cortex — and outside its dependency trees, ``node_modules``,
+    ``vendor``, ``.venv``.
     """
     project_root = str(project_root)
     base_root = str(base_root) if base_root is not None else f"{project_root}/cortex"
     found = find(project_root, "project-overview.md", maxdepth=5,
-                 prune_names=("cortex", ".git"), prune_paths=(base_root, f"{project_root}/agents"))
+                 prune_names=("cortex", ".git") + _DEPENDENCY_TREES,
+                 prune_paths=(base_root, f"{project_root}/agents"))
     return [d for d in (os.path.dirname(f) for f in found) if d != project_root]
 
 

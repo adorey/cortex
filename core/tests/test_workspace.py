@@ -41,6 +41,15 @@ class WorkspaceTests(unittest.TestCase):
                          "- `@web` — `svc-b/` — Web application\n"
                          "- `@batch` — `tools/batch/` — Nightly batch")
 
+    def test_dependency_trees_are_not_searched(self):
+        # node_modules, vendor, .venv: never a service, and the bulk of a workspace's files.
+        root = self.workspace()
+        for tree in ("svc-a/node_modules/pkg", "vendor/acme/lib", "svc-b/.venv/lib"):
+            (root / tree).mkdir(parents=True)
+            (root / tree / "project-overview.md").write_text("# not a service\n", encoding="utf-8")
+        self.assertEqual(sorted(Path(s).relative_to(root).as_posix() for s in services(str(root))),
+                         ["svc-a", "svc-b", "tools/batch"])
+
     def test_no_service_no_index(self):
         root = Path(tempfile.mkdtemp(prefix="cortex-workspace-"))
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
