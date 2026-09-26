@@ -22,6 +22,7 @@ release note under [`changelog/`](changelog/).
 - A service overlay with no category level — `svc/agents/roles/prompt-manager.md` — declaring `Scope: workspace` went unreported: it now gets `SCOPE_MISMATCH`, a warning, an error under `--strict`.
 - The overlay validator printed header values and file names through `echo -e`, so an overlay could write terminal control sequences to the console — erase a `✗`, print a `✓` in its place. They are printed as read, control characters shown escaped (`\x1b`). The workspace's section is headed `── Scope: . ──` instead of the project's absolute path.
 - The `claude-cli` backend passed the system prompt and the task as command-line arguments: past 128 KiB — Linux's cap on one argument — the CLI could not start, and the run failed on an unexplained `OSError`. The system prompt now goes in a private temporary file, removed after the run, and the task on stdin; a CLI that cannot start says so.
+- The overlay validator skipped what sits behind a symbolic link — a layer directory, a subdirectory, an overlay file — although the cascade reads through them. It now validates what the cascade reads, as `find -L` would: a link loop is not entered again, a link that leads nowhere is skipped.
 
 ## [0.9.0] - 2026-09-23 — Beware of the Leopard _(Released)_
 [Full notes](changelog/0.9.0.md)
