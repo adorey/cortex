@@ -138,6 +138,18 @@ class SymlinkTests(unittest.TestCase):
         self.assertEqual(code, 0, out.getvalue())
         self.assertIn("Checked:  1 files", out.getvalue())
 
+    def test_a_directory_reached_twice_is_listed_twice(self):
+        # find -L tells a loop from an alias by the ancestors only: agents/roles/team -> engineering
+        # is a second path to the same overlays, and both are listed — whatever scandir's order.
+        project, overlay = self.project()
+        (project / "agents").mkdir()
+        (project / "agents" / "roles").symlink_to(overlay.parent.parent, target_is_directory=True)
+        (overlay.parent.parent / "team").symlink_to("engineering", target_is_directory=True)
+        report = self.run_validator(project)
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", report)
+        self.assertIn("✗ agents/roles/team/lead-backend.md", report)
+        self.assertIn("Checked:  2 files", report)
+
     def test_a_link_loop_is_entered_once(self):
         project, overlay = self.project()
         (project / "agents").mkdir()
