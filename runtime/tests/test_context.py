@@ -91,6 +91,15 @@ class TeamContextTests(unittest.TestCase):
     def test_developer_tier_alone_is_unchanged(self):
         self.assertEqual(read_project_context(self.make(developer="DEV-NOTE")), "DEV-NOTE")
 
+    def test_a_label_selects_no_capability(self):
+        # The labels are for the prompt: a service named php-api that runs Go is no PHP project.
+        root = self.make(developer="Monorepo notes.", service="We write Go only.")
+        (root / "svc-a").rename(root / "php-api")
+        (root / "cortex" / "agents" / "capabilities" / "languages").mkdir(parents=True)
+        (root / "cortex" / "agents" / "capabilities" / "languages" / "php.md").write_text("# PHP", encoding="utf-8")
+        self.assertIn("## Service context — php-api", read_project_context(root, "php-api"))
+        self.assertEqual(derive_capabilities(root, "php-api"), [])
+
     def test_team_tier_selects_capabilities(self):
         root = self.make(team="We write PHP.")
         (root / "cortex" / "agents" / "capabilities" / "languages").mkdir(parents=True)
