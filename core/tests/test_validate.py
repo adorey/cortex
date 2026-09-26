@@ -123,6 +123,12 @@ class SymlinkTests(unittest.TestCase):
         (project / "agents" / "roles" / "engineering").symlink_to(overlay.parent, target_is_directory=True)
         self.assertIn("✓ agents/roles/engineering/lead-backend.md", self.run_validator(project))
 
+    def test_a_directory_named_like_an_overlay_is_not_one(self):
+        # find -type f: agents/roles/notes.md/ is a directory, whatever its name.
+        project, overlay = self.project()
+        (project / "agents" / "roles" / "notes.md").mkdir(parents=True)
+        self.assertIn("Checked:  0 files", self.run_validator(project))
+
     def test_links_that_lead_nowhere_are_skipped(self):
         # A loop of file links, a link to itself: stat fails with ELOOP. find -L skips them — and so
         # must the validator, instead of dying with a traceback.
