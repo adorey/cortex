@@ -75,6 +75,18 @@ class TestLayoutTests(unittest.TestCase):
         runtime = {p.name for p in (self.REPO / "runtime" / "tests").glob("test_*.py")}
         self.assertEqual(core & runtime, set())
 
+    def test_no_core_test_imports_the_tests_package_by_name(self):
+        # ``tests`` is the runtime's package name too: in one pytest session, ``from tests import
+        # validator_harness`` finds whichever was imported first.
+        offenders = [
+            f"{py.name}:{node.lineno}"
+            for py in sorted((self.REPO / "core" / "tests").glob("*.py"))
+            for node in ast.walk(ast.parse(py.read_text(encoding="utf-8")))
+            if (isinstance(node, ast.ImportFrom) and node.level == 0 and (node.module or "").split(".")[0] == "tests")
+            or (isinstance(node, ast.Import) and any(a.name.split(".")[0] == "tests" for a in node.names))
+        ]
+        self.assertEqual(offenders, [])
+
     def test_the_macos_job_runs_every_order_free_module(self):
         # The macOS job lists its modules by name: a new one must be listed there, or be named
         # here as depending on the order of an ext4 directory listing.
