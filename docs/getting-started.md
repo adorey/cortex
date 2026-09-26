@@ -12,6 +12,7 @@ This step-by-step guide covers installing the **design-time spec** in both modes
 
 - Git (to clone or submodule cortex itself)
 - An AI coding tool: GitHub Copilot, Cursor, Claude Code, OpenAI Codex, or any tool that supports a custom system instructions file
+- Python 3.9 or later — only to validate overlays with `cortex/bin/validate-overlays.sh`, which runs its checks from cortex's `core/` with nothing to install (until the native binary of [ADR-008](https://github.com/adorey/cortex/issues/37))
 - Either:
   - A Git repository (single project or monorepo) — cortex will be added as a **submodule**, **or**
   - A workspace folder containing several independent repos — cortex will sit alongside them as a **standalone clone** (the workspace itself doesn't need to be a git repo)

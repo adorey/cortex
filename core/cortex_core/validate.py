@@ -1,20 +1,28 @@
 """Overlay validation — ADR-001 Tier 1 and Tier 2 (ADR-007).
 
-A literal port of ``bin/validate-overlays.sh``: same checks in the same order, same messages,
-same exit codes, and output that is byte-identical to the script's. Literal means literal — the
-string arithmetic the script does on absolute paths (``${file#*/agents/}``, ``"$PROJECT_DIR/$base"``)
-and its ``echo -e`` escapes are reproduced as they are, so that nothing a host project relied on
-changes when the script becomes a shim over this module.
+``bin/validate-overlays.sh`` runs this module. It is a literal port of the Bash implementation
+that script held until Cortex 0.9.0: same checks in the same order, same messages, same exit
+codes, byte-identical output. Literal means literal — the string arithmetic the Bash code did on
+absolute paths (``${file#*/agents/}``, ``"$PROJECT_DIR/$base"``) and its ``echo -e`` escapes are
+reproduced as they were, so that nothing a host project relied on changed with the port.
+
+The cascade's own rules — which layer replaces, which file cannot be overridden — are not
+restated here: they come from the resolver, the one implementation the runtime runs too.
 """
 
+# The standard library and this package only: bin/validate-overlays.sh imports it under
+# ``python -I`` from the Cortex checkout, with nothing installed (see the shim).
 from __future__ import annotations
 
 import fnmatch
 import io
 import os
 import re
+import signal
 import sys
 from typing import List, Optional, TextIO, Tuple
+
+from . import resolver
 
 LAYERS = ("roles", "capabilities", "personalities", "workflows")
 
@@ -210,22 +218,27 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
         report.error(rel_path, "INVALID_SEMANTIC", f"Semantic: must be 'additive' or 'replacement' (got '{semantic}')")
         return
 
-    # Tier 1.5 — replacement only for workflows
-    if semantic == "replacement" and "/agents/workflows/" not in file:
+    # The file's layer, and its path within it, as the resolver sees them
+    file_rel_to_agents = after_first(file, "/agents/")
+    layer, _, file_in_layer = file_rel_to_agents.partition("/")
+    rule = resolver.semantic_for(layer, file_in_layer)
+
+    # Tier 1.5 — replacement only where the resolver replaces: workflows
+    if semantic == "replacement" and rule is not resolver.MergeSemantic.REPLACEMENT:
         report.error(rel_path, "REPLACEMENT_OUTSIDE_WORKFLOWS",
                      "Semantic: replacement is only allowed for files under agents/workflows/")
         return
 
     # Tier 1.6 — path mirroring
-    file_rel_to_agents = after_first(file, "/agents/")
     base_rel_to_agents = strip_prefix(base, "cortex/agents/")
     if file_rel_to_agents != base_rel_to_agents:
         report.error(rel_path, "PATH_MIRROR",
                      f"overlay path 'agents/{file_rel_to_agents}' must mirror base 'cortex/agents/{base_rel_to_agents}'")
         return
 
-    # Tier 2.1 — non-overridable: characters.md (reported as an error, as the script does)
-    if fnmatch.fnmatchcase(base, "*/personalities/*/characters.md"):
+    # Tier 2.1 — non-overridable, as the resolver says: characters.md (reported as an error,
+    # as the script does). Past the mirror check, the base and the file share this path.
+    if rule is resolver.MergeSemantic.NOT_OVERRIDABLE:
         report.error(rel_path, "NON_OVERRIDABLE",
                      "characters.md is not overridable; fork the theme instead (see docs/creating-a-theme.md)")
         return
@@ -297,7 +310,7 @@ def overlay_roots(project_root: str, base_root: str, service: str) -> List[str]:
     """The workspace, when it has ``agents/``, then every service that has both a
     ``project-overview.md`` and an ``agents/`` — or the one ``--service`` names."""
     if service:
-        return [service if service.startswith("/") else f"{project_root}/{service}"]
+        return [service if os.path.isabs(service) else f"{project_root}/{service}"]
     roots = [project_root] if os.path.isdir(f"{project_root}/agents") else []
     for overview in find(project_root, "project-overview.md", maxdepth=5, excludes=("*/cortex/*", "*/.git/*")):
         service_dir = os.path.dirname(overview)
@@ -364,17 +377,22 @@ def _stream(stream: TextIO) -> TextIO:
     return io.TextIOWrapper(stream.buffer, encoding="utf-8", errors="surrogateescape", newline="\n", write_through=True)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: Optional[List[str]] = None, *, project_root: Optional[str] = None,
+         base_root: Optional[str] = None) -> int:
     """``bin/validate-overlays.sh [--service PATH] [--strict] [-h|--help]``.
 
-    ``--project-root`` and ``--base-root`` are internal: the script passes the two roots it
-    derives from its own location. Left out, they are derived the same way from this file's
-    location in a Cortex checkout — ``{project}/cortex/core/cortex_core/validate.py``.
+    The two roots are no options: ``cli`` receives them from the script, which derives them from
+    its own location. Left out, they are derived the same way from this file's location in a
+    Cortex checkout — ``{project}/cortex/core/cortex_core/validate.py``.
     """
     args = sys.argv[1:] if argv is None else list(argv)
+    if base_root is None:
+        base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if project_root is None:
+        project_root = os.path.dirname(base_root)
     out, err = _stream(sys.stdout), _stream(sys.stderr)
     try:
-        return _main(args, out, err)
+        return _main(args, project_root, base_root, out, err)
     finally:
         # The wrappers borrow the process's own streams: detached, returning leaves stdout and
         # stderr open for whatever runs next in this process.
@@ -382,9 +400,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         err.detach()
 
 
-def _main(args: List[str], out: TextIO, err: TextIO) -> int:
-    base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    project_root: Optional[str] = None
+def _main(args: List[str], project_root: str, base_root: str, out: TextIO, err: TextIO) -> int:
     service, strict = "", False
     i = 0
     while i < len(args):
@@ -398,23 +414,27 @@ def _main(args: List[str], out: TextIO, err: TextIO) -> int:
         elif arg in ("-h", "--help"):
             out.write(USAGE)
             return 0
-        elif arg in ("--project-root", "--base-root"):
-            if i + 1 >= len(args):
-                err.write(f"{arg} needs a value\n")
-                return 2
-            if arg == "--project-root":
-                project_root = args[i + 1]
-            else:
-                base_root = args[i + 1]
-            i += 2
         else:
             err.write(f"Unknown argument: {arg}\n")
             err.write(USAGE)
             return 2
-    if project_root is None:
-        project_root = os.path.dirname(base_root)
     return validate(project_root, base_root, service, strict, out, Colors(out.isatty()))
 
 
+def cli() -> int:
+    """The command line ``bin/validate-overlays.sh`` runs: ``PROJECT_ROOT BASE_ROOT [OPTIONS]``,
+    the two roots from the script, the options from its caller.
+
+    A reader that goes away — ``| head`` — ends the run as it ended the script, by SIGPIPE and in
+    silence, not with a BrokenPipeError.
+    """
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    if len(sys.argv) < 3:
+        sys.stderr.write("usage: PROJECT_ROOT BASE_ROOT [OPTIONS] — run it as bin/validate-overlays.sh\n")
+        return 2
+    return main(sys.argv[3:], project_root=sys.argv[1], base_root=sys.argv[2])
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(cli())

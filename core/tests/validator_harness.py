@@ -1,9 +1,9 @@
 """Golden fixtures for the overlay validator — ADR-007 phase 2.
 
 Each case under ``fixtures/validator/cases/`` becomes a throwaway host project: the shared
-base goes to ``{project}/cortex/agents/``, the case's own files on top. The Bash validator's
-output for every run of every case was captured once into ``expected.json``; the Python port
-must reproduce it byte for byte, the temporary directory aside.
+base goes to ``{project}/cortex/agents/``, the case's own files on top. ``expected.json`` was
+captured from the Bash implementation of ``bin/validate-overlays.sh`` (Cortex 0.9.0), before it
+became a shim; the core must reproduce it byte for byte, the temporary directory aside.
 
 A case may carry a ``case.json``:
 
@@ -17,7 +17,8 @@ the script's grep and sed did in the C locale; under a UTF-8 locale they also to
 spaces for spaces (``unicode-space-in-field``). Pinning the locale measures the script in the
 one the port reproduces, whatever the machine running the tests (ADR-007 §9).
 
-Re-capture from the script — only meaningful while it still holds the logic:
+Re-capturing now records what the core prints, through the shim. Do it only for a deliberate
+change of the validator's behaviour, and review the diff of ``expected.json`` line by line:
 
     cd core && python3 -m tests.validator_harness --capture
 """
@@ -80,18 +81,21 @@ def _run(cmd, env=None):
 
 
 def run_script(project, args):
-    """The validator as host projects run it: ``{project}/cortex/bin/validate-overlays.sh``."""
+    """The validator as host projects run it: ``{project}/cortex/bin/validate-overlays.sh``, with
+    the core it runs from at ``{project}/cortex/core`` — where a Cortex checkout has it."""
     bin_dir = project / "cortex" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(SCRIPT, bin_dir / SCRIPT.name)
+    shutil.copytree(CORE / "cortex_core", project / "cortex" / "core" / "cortex_core",
+                    ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)
     return _run(["bash", str(bin_dir / SCRIPT.name), *args])
 
 
 def run_core(project, args):
-    """The Python port, from the core's source, given the two roots the script derives."""
+    """The Python port, from the core's source, given the two roots the script derives — as the
+    script hands them to it, ahead of the options."""
     env = dict(os.environ, PYTHONPATH=str(CORE))
-    return _run([sys.executable, "-m", "cortex_core.validate",
-                 "--project-root", str(project), "--base-root", str(project / "cortex"), *args], env=env)
+    return _run([sys.executable, "-m", "cortex_core.validate", str(project), str(project / "cortex"), *args], env=env)
 
 
 def execute(case, args, runner):
