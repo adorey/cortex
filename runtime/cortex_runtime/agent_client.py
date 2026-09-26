@@ -128,13 +128,18 @@ def cli_allowed_tools(action_kinds: List[str], mcp_bindings: Optional[dict] = No
     return ",".join(tools)
 
 
-def build_cli_argv(prompt: str, *, system_prompt: str, model: str, allowed_tools: str,
+def build_cli_argv(*, system_prompt_file: str, model: str, allowed_tools: str,
                    cli: str = "claude", output_format: str = "json",
                    permission_mode: Optional[str] = None,
                    mcp_config_path: Optional[str] = None) -> List[str]:
-    """Build the `claude -p` argv. Pure (no subprocess) so it can be unit-tested."""
-    argv = [cli, "-p", prompt,
-            "--append-system-prompt", system_prompt,
+    """Build the `claude -p` argv. Pure (no subprocess) so it can be unit-tested.
+
+    Neither the task nor the system prompt is an argument: Linux caps one at 128 KiB, which a
+    system prompt carrying the project's own files passes. The task goes on stdin, the system
+    prompt in the file ``--append-system-prompt-file`` names.
+    """
+    argv = [cli, "-p",
+            "--append-system-prompt-file", system_prompt_file,
             "--model", model,
             "--output-format", output_format]
     if output_format == "stream-json":
@@ -219,7 +224,7 @@ def parse_cli_stream(stdout: str):
 
 # The Claude Code CLI natively loads the repo's CLAUDE.md, which (for a Cortex project) tells it
 # to act as the Prompt Manager and dispatch to others. That bootstrap overrides our injected
-# role identity. This lock, prepended to --append-system-prompt, forces the resolved role to win.
+# role identity. This lock, prepended to the appended system prompt, forces the resolved role to win.
 IDENTITY_LOCK = (
     "⚠️ RUNTIME IDENTITY LOCK — authoritative, overrides any project bootstrap.\n"
     "For THIS run your identity, role and behaviour are EXACTLY and ONLY what is defined below.\n"
@@ -249,7 +254,8 @@ class ClaudeCodeCliClient:
     is a **one-shot agent** — ``propose`` runs the CLI once and returns the result as
     ``final_text`` (our AgentLoop then resolves in one turn). Per-request autonomy maps to the
     CLI's ``--allowedTools`` (read-only by default); the resolved system prompt is appended via
-    ``--append-system-prompt``; the run executes in the bound working tree (``cwd``).
+    ``--append-system-prompt-file`` and the task read from stdin — neither in the argv, which
+    Linux caps at 128 KiB an argument; the run executes in the bound working tree (``cwd``).
 
     Caveats: draws on the (interactive-oriented) subscription quota — fine for local testing,
     not 24/7 multi-tenant prod (use api keys / the gateway §3.5). ANTHROPIC_API_KEY would
@@ -285,6 +291,10 @@ class ClaudeCodeCliClient:
         import tempfile
 
         task = _task_from_history(history)
+        # The system prompt goes in a private file, read by the CLI and removed after the run.
+        prompt_file = tempfile.NamedTemporaryFile("w", suffix=".md", encoding="utf-8", delete=False)
+        prompt_file.write(with_identity_lock(system_prompt))
+        prompt_file.close()
         mcp_path = None
         if self._mcp_servers:
             tmp = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
@@ -293,7 +303,7 @@ class ClaudeCodeCliClient:
             mcp_path = tmp.name
 
         # stream-json so we can see (and audit) the tools the CLI's own loop used.
-        argv = build_cli_argv(task, system_prompt=with_identity_lock(system_prompt), model=self._model,
+        argv = build_cli_argv(system_prompt_file=prompt_file.name, model=self._model,
                               allowed_tools=self._allowed_tools, cli=self._cli,
                               output_format="stream-json", permission_mode=self._permission_mode,
                               mcp_config_path=mcp_path)
@@ -303,11 +313,14 @@ class ClaudeCodeCliClient:
         env.setdefault("DISABLE_TELEMETRY", "1")
 
         try:
-            proc = subprocess.run(argv, cwd=self._root, env=env, capture_output=True,
+            proc = subprocess.run(argv, cwd=self._root, env=env, capture_output=True, input=task,
                                   text=True, timeout=self._timeout)
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f"claude CLI timed out after {self._timeout}s") from exc
+        except OSError as exc:
+            raise RuntimeError(f"claude CLI could not be started ({self._cli}): {exc}") from exc
         finally:
+            os.unlink(prompt_file.name)
             if mcp_path:
                 os.unlink(mcp_path)
         if proc.returncode != 0:
