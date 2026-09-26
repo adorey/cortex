@@ -1,0 +1,52 @@
+name: core tests
+
+# cortex-core is the one implementation of the cascade in code (ADR-007). It also reads the
+# spec itself — the self-hosting test resolves Cortex's own agents/ — so spec changes run it.
+on:
+  push:
+    paths:
+      - "core/**"
+      - "agents/**"
+      - ".github/workflows/core-tests.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "agents/**"
+      - ".github/workflows/core-tests.yml"
+
+jobs:
+  test:
+    name: cortex-core (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor ADR-007 promises. A floor CI never runs on is a claim, not a guarantee.
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Nothing is installed, on purpose: the core must run from source (ADR-007 §3.3).
+      - name: Run the core suite
+        working-directory: core
+        run: python -m unittest discover -s tests -v
+
+  macos:
+    # Apple's own Python — the 3.9.6 of the Command Line Tools that ADR-007 §3.3 names — on a
+    # file system that ignores case, where two spellings of one directory must still be one.
+    # The resolver's tests only: the validator's captured outputs list files in the order the
+    # file system returns them, which is ext4's in the captures and not APFS's.
+    name: cortex-core (macOS, system Python)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the resolver's tests
+        working-directory: core
+        run: |
+          /usr/bin/python3 --version
+          /usr/bin/python3 -m unittest -v tests.test_package tests.test_resolver tests.test_catalog tests.test_prompt tests.test_self_hosting

@@ -170,3 +170,9 @@ Acceptance criteria:
 - [ADR-006 — Team and developer context](ADR-006-workspace-shareable-repo.md) — the team tier of §3.6
 - [docs/process/adr-implementation.md](../process/adr-implementation.md) — how the phases above are delivered
 - Roadmap epic [#36](https://github.com/adorey/cortex/issues/36)
+
+## 9. Amendments
+
+### Phase 1 — the firewall, extended from the core's side
+
+§3.3 extends the ADR-002 firewall test so that spec Markdown references neither the runtime nor the core. That test is `runtime/tests/test_firewall.py`, and phase 1 must pass with no runtime test modified. The core's tokens are therefore guarded by a test of the core's own, `core/tests/test_boundaries.py`, which also enforces the dependency direction; the runtime's test keeps guarding the runtime's. The guarantee is the one §3.3 asks for, held by two files instead of one.
