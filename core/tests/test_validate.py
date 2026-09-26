@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cortex_core.validate import (  # noqa: E402
     Abort, Colors, Report, check_overlay, echo_e_line, find, main, overlay_roots, validate,
 )
-from tests import validator_harness as harness  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the harness, not a package named tests
+import validator_harness as harness  # noqa: E402
 
 EXPECTED = json.loads(harness.EXPECTED.read_text(encoding="utf-8"))
 
