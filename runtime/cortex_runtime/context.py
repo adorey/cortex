@@ -20,16 +20,23 @@ from cortex_core.catalog import capability_catalog  # noqa: F401 — re-exported
 
 _CONTEXT_FILE = "project-context.md"
 _OVERVIEW_FILE = "project-overview.md"
+_CONTEXT_LABELS = ("## Team context", "## Developer notes", "## Service context")
 
 
-def _read_tiers(root: Path, service: Optional[str], name: str, labels) -> str:
-    """One file's tiers — team ``agents/{name}``, developer ``{name}``, then the service's own —
-    each labelled once two or more exist; a single tier reads as it always did."""
+def _tiers(root: Path, service: Optional[str], name: str, labels):
+    """One file's tiers that exist — team ``agents/{name}``, developer ``{name}``, then the
+    service's own — as (label, text) pairs, in that order."""
     root = Path(root)
     tiers = [(labels[0], root / "agents" / name), (labels[1], root / name)]
     if service:
         tiers.append((f"{labels[2]} — {service}", root / service / name))
-    found = [(label, path.read_text(encoding="utf-8")) for label, path in tiers if path.is_file()]
+    return [(label, path.read_text(encoding="utf-8")) for label, path in tiers if path.is_file()]
+
+
+def _read_tiers(root: Path, service: Optional[str], name: str, labels) -> str:
+    """The tiers of ``_tiers``, each labelled once two or more exist; a single tier reads as it
+    always did."""
+    found = _tiers(root, service, name, labels)
     if len(found) == 1:
         return found[0][1]
     return "\n\n".join(f"{label}\n\n{text}" for label, text in found)
@@ -44,7 +51,7 @@ def read_project_context(root: Path, service: Optional[str] = None) -> str:
     §3.3) — the text reaches the agent's prompt, where the tiers must be told apart; with a
     single tier there is no scope to tell apart, and the text stays exactly as it was.
     """
-    return _read_tiers(root, service, _CONTEXT_FILE, ("## Team context", "## Developer notes", "## Service context"))
+    return _read_tiers(root, service, _CONTEXT_FILE, _CONTEXT_LABELS)
 
 
 def read_project_overview(root: Path, service: Optional[str] = None) -> str:
@@ -59,7 +66,8 @@ def derive_capabilities(root: Path, service: Optional[str] = None) -> List[str]:
     Deterministic replacement for the Prompt Manager's manual stack cross-reference.
     Role-based narrowing (a frontend role ignoring DB capabilities) is a later refinement.
     """
-    context = read_project_context(root, service).lower()
+    # The files' own words: a label — ``## Service context — php-api`` — names no technology.
+    context = "\n\n".join(text for _, text in _tiers(root, service, _CONTEXT_FILE, _CONTEXT_LABELS)).lower()
     if not context.strip():
         return []
     selected = []
