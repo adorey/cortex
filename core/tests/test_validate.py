@@ -186,6 +186,19 @@ class DiscoveryTests(unittest.TestCase):
         out = subprocess.run(["find", *args], capture_output=True, text=True, check=True).stdout
         return out.splitlines()
 
+    def test_discovery_enters_the_root_but_no_link_below_it(self):
+        # The project root may itself be a link — the shim's own path resolves through it; below
+        # it, a service reached through a link is not one: discovery follows no link (ADR-007 §9).
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        for service in ("host/svc-a", "elsewhere/svc-b"):
+            (tmp / service / "agents").mkdir(parents=True)
+            (tmp / service / "project-overview.md").write_text("# s\n", encoding="utf-8")
+        (tmp / "host" / "linked").symlink_to(tmp / "elsewhere", target_is_directory=True)
+        (tmp / "link-to-host").symlink_to(tmp / "host", target_is_directory=True)
+        root = str(tmp / "link-to-host")
+        self.assertEqual(overlay_roots(root, f"{root}/cortex", ""), [f"{root}/svc-a"])
+
     def test_layer_files_come_in_finds_order(self):
         project = self.tree()
         for layer_dir in sorted(project.glob("*/agents/*")) + sorted(project.glob("tools/*/agents/*")):
