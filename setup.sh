@@ -266,11 +266,11 @@ if [ "$WORKSPACE_MODE" = true ]; then
         SERVICE_DIR="$TARGET_DIR/$SERVICE_NAME"
         mkdir -p "$SERVICE_DIR"
         if [ ! -f "$SERVICE_DIR/project-overview.md" ]; then
-            sed "s/<!-- @alias: mon-projet -->/<!-- @alias: $SERVICE_NAME -->/" "$OVERVIEW_TEMPLATE" > "$SERVICE_DIR/project-overview.md"
+            sed "s/<!-- @alias: my-project -->/<!-- @alias: $SERVICE_NAME -->/" "$OVERVIEW_TEMPLATE" > "$SERVICE_DIR/project-overview.md"
             echo -e "${GREEN}  ✅${NC} $SERVICE_NAME/project-overview.md"
         fi
         if [ ! -f "$SERVICE_DIR/project-context.md" ]; then
-            sed "s/<!-- @alias: mon-projet -->/<!-- @alias: $SERVICE_NAME -->/" "$CONTEXT_TEMPLATE" > "$SERVICE_DIR/project-context.md"
+            sed "s/<!-- @alias: my-project -->/<!-- @alias: $SERVICE_NAME -->/" "$CONTEXT_TEMPLATE" > "$SERVICE_DIR/project-context.md"
             echo -e "${GREEN}  ✅${NC} $SERVICE_NAME/project-context.md"
         fi
     done
