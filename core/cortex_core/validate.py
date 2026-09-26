@@ -438,6 +438,11 @@ def _main(args: List[str], project_root: str, base_root: str, out: TextIO, err: 
     return validate(project_root, base_root, service, strict, out, Colors(out.isatty()))
 
 
+def _default_sigpipe() -> None:
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+
 def cli() -> int:
     """The command line ``bin/validate-overlays.sh`` runs: ``PROJECT_ROOT BASE_ROOT [OPTIONS]``,
     the two roots from the script, the options from its caller.
@@ -445,8 +450,7 @@ def cli() -> int:
     A reader that goes away — ``| head`` — ends the run as it ended the script, by SIGPIPE and in
     silence, not with a BrokenPipeError.
     """
-    if hasattr(signal, "SIGPIPE"):
-        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    _default_sigpipe()
     if len(sys.argv) < 3:
         sys.stderr.write("usage: PROJECT_ROOT BASE_ROOT [OPTIONS] — run it as bin/validate-overlays.sh\n")
         return 2
@@ -454,4 +458,7 @@ def cli() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(cli())
+    # ``python3 -m cortex_core.validate [OPTIONS]`` from a checkout's core/ (ADR-007 §3.5): the
+    # roots come from where this file sits, as the shim derives them from where it sits.
+    _default_sigpipe()
+    sys.exit(main())

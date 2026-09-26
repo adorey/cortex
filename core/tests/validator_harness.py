@@ -38,6 +38,8 @@ REPO = CORE.parent
 SCRIPT = REPO / "bin" / "validate-overlays.sh"
 EXPECTED = FIXTURES / "expected.json"
 DEFAULT_RUNS = [[], ["--strict"]]
+# How bin/validate-overlays.sh runs the core — kept in step with the script.
+SHIM_CALL = "import sys; sys.path.insert(0, sys.argv.pop(1)); from cortex_core.validate import cli; sys.exit(cli())"
 
 
 def cases():
@@ -92,10 +94,9 @@ def run_script(project, args):
 
 
 def run_core(project, args):
-    """The Python port, from the core's source, given the two roots the script derives — as the
-    script hands them to it, ahead of the options."""
-    env = dict(os.environ, PYTHONPATH=str(CORE))
-    return _run([sys.executable, "-m", "cortex_core.validate", str(project), str(project / "cortex"), *args], env=env)
+    """The Python port, from the core's source, given the two roots the script derives — called
+    the way the script calls it."""
+    return _run([sys.executable, "-I", "-c", SHIM_CALL, str(CORE), str(project), str(project / "cortex"), *args])
 
 
 def execute(case, args, runner):

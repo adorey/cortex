@@ -104,6 +104,29 @@ class ShimOptionsTests(unittest.TestCase):
 
 
 @unittest.skipIf(shutil.which("bash") is None, "bash not available")
+class ModuleEntryTests(unittest.TestCase):
+    def test_the_harness_calls_the_core_as_the_shim_does(self):
+        import validator_harness as harness
+
+        self.assertIn(harness.SHIM_CALL, SCRIPT.read_text(encoding="utf-8"))
+
+    def test_the_module_run_from_core_is_the_shim(self):
+        # ADR-007 §3.5: `python3 -m cortex_core.validate`, run from the checkout's core/ — the
+        # roots come from where the module sits, as the shim derives them from where it sits.
+        import validator_harness as harness
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = harness.layout("base-not-found", tmp)
+        for args in (["--strict"], ["--service", ".", "--strict"]):
+            with self.subTest(args=args):
+                shim = harness.run_script(project, args)
+                module = subprocess.run([sys.executable, "-m", "cortex_core.validate", *args],
+                                        cwd=project / "cortex" / "core", capture_output=True)
+                self.assertEqual((module.returncode, module.stdout, module.stderr), shim)
+
+
+@unittest.skipIf(shutil.which("bash") is None, "bash not available")
 class ShimLocationTests(unittest.TestCase):
     """The shim finds the core next to itself, however it is called."""
 
