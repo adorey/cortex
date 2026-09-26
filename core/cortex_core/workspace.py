@@ -86,13 +86,14 @@ def services(project_root: str, base_root: Optional[str] = None) -> List[str]:
     holding a ``project-overview.md`` — in ``find``'s order.
 
     Services are looked for outside the base, wherever it is mounted and whatever it is called,
-    and outside any directory named ``cortex`` or ``.git`` below the project root — a service may
-    mount its own Cortex.
+    outside the project root's own ``agents/`` — the cascade's tiers and ADR-006's team files,
+    no service — and outside any directory named ``cortex`` or ``.git`` below the project root:
+    a service may mount its own Cortex.
     """
     project_root = str(project_root)
     base_root = str(base_root) if base_root is not None else f"{project_root}/cortex"
     found = find(project_root, "project-overview.md", maxdepth=5,
-                 prune_names=("cortex", ".git"), prune_paths=(base_root,))
+                 prune_names=("cortex", ".git"), prune_paths=(base_root, f"{project_root}/agents"))
     return [d for d in (os.path.dirname(f) for f in found) if d != project_root]
 
 

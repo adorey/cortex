@@ -110,6 +110,7 @@ class WorkspaceViewInPromptTests(unittest.TestCase):
                  "`@web` — `svc-b/` — Web application", "# Project context", "DEV-RULES"]
         at = [prompt.index(m) for m in marks]
         self.assertEqual(at, sorted(at))
+        self.assertNotIn("`agents/`", prompt)          # the team tier is no service
 
 
 if __name__ == "__main__":
