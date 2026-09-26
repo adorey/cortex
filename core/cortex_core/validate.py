@@ -256,15 +256,26 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
 # Discovery — the script's two ``find`` calls
 # --------------------------------------------------------------------------- #
 def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: bool = False,
-         excludes: Tuple[str, ...] = ()) -> List[str]:
+         excludes: Tuple[str, ...] = (), follow_links: bool = False) -> List[str]:
     """``find TOP [-maxdepth N] -name NAME [-type f] -not -path EXCLUDE…``, in ``find``'s order.
 
     Depth first, each directory's entries in the order the file system returns them — the
     order ``find`` prints, so the report lists files in the same sequence as the script did.
+    With ``follow_links``, files and directories behind symbolic links count as the resolver
+    reads them — ``find -L`` — and a directory reached twice, a link loop, is entered once.
     """
     found: List[str] = []
+    entered = set()
 
     def visit(directory: str, depth: int) -> None:
+        if follow_links:
+            try:
+                key = (os.stat(directory).st_dev, os.stat(directory).st_ino)
+            except OSError:
+                return
+            if key in entered:
+                return
+            entered.add(key)
         try:
             entries = list(os.scandir(directory))
         except OSError:
@@ -272,10 +283,10 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
         for entry in entries:
             path = f"{directory}/{entry.name}"
             if (maxdepth is None or depth + 1 <= maxdepth) and fnmatch.fnmatchcase(entry.name, name) \
-                    and (not regular_files or entry.is_file(follow_symlinks=False)) \
+                    and (not regular_files or entry.is_file(follow_symlinks=follow_links)) \
                     and not any(fnmatch.fnmatchcase(path, pattern) for pattern in excludes):
                 found.append(path)
-            if entry.is_dir(follow_symlinks=False) and (maxdepth is None or depth + 1 < maxdepth):
+            if entry.is_dir(follow_symlinks=follow_links) and (maxdepth is None or depth + 1 < maxdepth):
                 visit(path, depth + 1)
 
     visit(top, 0)
@@ -327,7 +338,7 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
                 layer_dir = f"{root}/agents/{layer}"
                 if not os.path.isdir(layer_dir):
                     continue
-                for path in find(layer_dir, "*.md", regular_files=True):
+                for path in find(layer_dir, "*.md", regular_files=True, follow_links=True):
                     check_overlay(path, project_root, base_root, report)
                     found += 1
             if found == 0:
