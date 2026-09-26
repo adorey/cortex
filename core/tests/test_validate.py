@@ -110,12 +110,27 @@ class SymlinkTests(unittest.TestCase):
         (project / "agents" / "roles").symlink_to(overlay.parent.parent, target_is_directory=True)
         self.assertIn("✓ agents/roles/engineering/lead-backend.md", self.run_validator(project))
 
-    def test_an_overlay_file_that_is_a_link_is_not_validated(self):
-        # find -type f, as the script ran it: a link is not a regular file.
+    def test_an_overlay_file_that_is_a_link_is_validated(self):
+        # The resolver reads the file behind the link; find -type f, as the script ran it, skipped it.
         project, overlay = self.project()
         (project / "agents" / "roles" / "engineering").mkdir(parents=True)
         (project / "agents" / "roles" / "engineering" / "lead-backend.md").symlink_to(overlay)
-        self.assertIn("Checked:  0 files", self.run_validator(project))
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", self.run_validator(project))
+
+    def test_a_subdirectory_that_is_a_link_is_validated(self):
+        project, overlay = self.project()
+        (project / "agents" / "roles").mkdir(parents=True)
+        (project / "agents" / "roles" / "engineering").symlink_to(overlay.parent, target_is_directory=True)
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", self.run_validator(project))
+
+    def test_a_link_loop_is_entered_once(self):
+        project, overlay = self.project()
+        (project / "agents").mkdir()
+        (project / "agents" / "roles").symlink_to(overlay.parent.parent, target_is_directory=True)
+        (overlay.parent / "again").symlink_to(overlay.parent.parent, target_is_directory=True)
+        report = self.run_validator(project)
+        self.assertIn("✓ agents/roles/engineering/lead-backend.md", report)
+        self.assertIn("Checked:  1 files", report)
 
 
 @unittest.skipIf(shutil.which("find") is None, "find not available")
