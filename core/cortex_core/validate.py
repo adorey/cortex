@@ -255,6 +255,15 @@ def check_overlay(file: str, project_root: str, base_root: str, report: Report) 
 # --------------------------------------------------------------------------- #
 # Discovery — the script's two ``find`` calls
 # --------------------------------------------------------------------------- #
+def _is(test, follow_links: bool) -> bool:
+    """``entry.is_file`` or ``entry.is_dir``, false when the link cannot be followed — a loop
+    (ELOOP), a target out of reach (EACCES) — as ``find -L`` treats it."""
+    try:
+        return test(follow_symlinks=follow_links)
+    except OSError:
+        return False
+
+
 def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: bool = False,
          excludes: Tuple[str, ...] = (), follow_links: bool = False) -> List[str]:
     """``find TOP [-maxdepth N] -name NAME [-type f] -not -path EXCLUDE…``, in ``find``'s order.
@@ -283,10 +292,10 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
         for entry in entries:
             path = f"{directory}/{entry.name}"
             if (maxdepth is None or depth + 1 <= maxdepth) and fnmatch.fnmatchcase(entry.name, name) \
-                    and (not regular_files or entry.is_file(follow_symlinks=follow_links)) \
+                    and (not regular_files or _is(entry.is_file, follow_links)) \
                     and not any(fnmatch.fnmatchcase(path, pattern) for pattern in excludes):
                 found.append(path)
-            if entry.is_dir(follow_symlinks=follow_links) and (maxdepth is None or depth + 1 < maxdepth):
+            if _is(entry.is_dir, follow_links) and (maxdepth is None or depth + 1 < maxdepth):
                 visit(path, depth + 1)
 
     visit(top, 0)
