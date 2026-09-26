@@ -375,6 +375,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     location in a Cortex checkout — ``{project}/cortex/core/cortex_core/validate.py``.
     """
     args = sys.argv[1:] if argv is None else list(argv)
+    # What the caller already wrote goes out first: the wrappers write under its buffers.
+    sys.stdout.flush()
+    sys.stderr.flush()
     out, err = _stream(sys.stdout), _stream(sys.stderr)
     try:
         return _main(args, out, err)
