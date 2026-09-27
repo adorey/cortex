@@ -7,6 +7,9 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-27 — Mostly Harmless _(Released)_
+[Full notes](changelog/0.10.1.md)
+
 ### Fixed
 - The delivery process showed several issues behind one closing keyword (`Closes #42, #43`), which closes the first one only; it now says one `Closes #NN` per issue — in the process, the `adr-implementation` workflow and the pull request template.
 
