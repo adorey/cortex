@@ -312,3 +312,24 @@ Acceptance criteria:
 
 - **The binaries are built where code integrates**, not on every pull request (§3.1). The binary workflow took about nine minutes a run, its Windows build most of it, on every pull request of a stack, where the tests from source run first anyway. It runs on a push to `main` or to a `release/**` branch, on a pull request into `main` — every one, whatever it changes — on a tag, and by hand. So a stack merges into its release branch, the binaries go green there, and only then does the release branch's pull request into `main` open: merged straight into `main`, a stack would skip the one build of what ships. A tag's push alone releases; a run started by hand on a tag builds and stops there.
 - **A pull request's run is cancelled when its branch is pushed again**, in every workflow; the tests' workflows run on a push only to `main` and `release/**`, since a pull request's branch already runs as a pull request.
+
+- **The glibc floor is measured in CI.** Each Linux binary runs on `debian:buster-slim`, whose glibc is 2.28 and which has no Python.
+
+### Phase 2 — the store, sync, and what a tool reads
+
+- **Measured: a link does not keep Claude Code inside the project** (§3.5). Claude Code 2.1.273, in its default permission mode:
+  - in `store` mode it reads the spec after asking once for permission, or with no prompt when the store is in its `permissions.additionalDirectories`;
+  - in `link` mode it asks too: it checks the path a link resolves to, and that path is outside the project;
+  - in `copy` mode it reads with no prompt.
+
+  The table of §3.5 said a link serves "a tool that reads only inside the workspace". For this tool it does not, and `copy` is the fallback. Copilot, Cursor and Codex are not measured yet. The table and how to measure are in [the migration guide](../migrating-to-the-binary.md).
+- **On Windows the store's directories take new files** (§3.3). The read-only attribute protects files, not directories. Modifying or deleting a file of the spec fails on every target. Creating a new file beside one succeeds on Windows, and only there. An access-control list that denies it would also stand in the way of removing a version, which #99 will do. None is set.
+- **`cortex validate` finds its roots itself** (§3.8):
+  - In a project, the roots are the project root and the spec `spec` names. It refuses a spec synced for another version than the pinned one — a teammate bumped `version` and this machine has not synced — rather than validating against a spec the project no longer uses.
+  - Without `cortex.toml`, it falls back to the `cortex/` of the current directory. That fallback lasts until phase 5 removes the submodule layout.
+  - In a checkout of Cortex, the checkout is the base (ADR-007 §3.1).
+  - When it cannot validate, it exits `2`, as the script did without a Python.
+- **The spec archive is `git archive` of the tag** — `agents/`, `templates/`, `docs/` as committed, never the working copy — and the binary embeds that same archive for its own version. Other versions are downloaded from `CORTEX_RELEASES_URL` when it is set, as for the install scripts. When the binary's built-in OpenSSL finds no certificates where the build machine kept them — AlmaLinux's `/etc/pki/tls` on a Debian — it loads the system's certificate bundle from where Linux distributions and macOS keep it.
+- **A source checkout stands for the version `CORTEX_SOURCE_VERSION` names**, for the tests that download. A build always carries its stamp and never reads it.
+- **`sync` also says** when `cortex/` in `link` or `copy` mode is missing from `.gitignore`, and when the active theme is neither in the spec nor in the project. Both are notes: it still syncs.
+
