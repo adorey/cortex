@@ -258,13 +258,22 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
     # A project keeps the version it pins — never another, older or newer; a new one takes this
     # binary's. A version newer than this binary is refused here.
     version = project.version if project else the_store.own
-    the_store.ensure(version)
-    spec = the_store.path(version)
+    if options.source:
+        # A contributor's checkout (§3.5, --from): its templates and its spec, no version checked.
+        spec = Path(os.path.abspath(options.source))
+        if not sync.is_checkout(spec):
+            raise InitError(f"--from {display(options.source)}: no Cortex checkout there — it holds no agents/, "
+                            "templates/ and docs/")
+        described = f"the checkout at {display(str(spec))}"
+    else:
+        the_store.ensure(version)
+        spec = the_store.path(version)
+        described = f"Cortex {version}"
     if project is None and theme is None:
         theme = "h2g2"
     if theme not in (None, "none") and not (spec / "agents" / "personalities" / theme).is_dir():
         themes = sorted(p.name for p in (spec / "agents" / "personalities").iterdir() if p.is_dir())
-        raise InitError(f"theme '{theme}' is not in Cortex {version} — the themes are: {', '.join(themes)}")
+        raise InitError(f"theme '{theme}' is not in {described} — the themes are: {', '.join(themes)}")
     # cortex.toml: a new one, or only the keys the options name.
     if project is None:
         values = {"version": str(version), "theme": theme, **({"sync": mode} if mode else {})}
@@ -288,7 +297,7 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
 
     # The spec, where the project finds it — then what git must ignore, asked of git once
     # cortex/ has its final form: a copy turned into a link is a file to git.
-    sync.sync(str(root), mode, None, out, err, notes=False)
+    sync.sync(str(root), mode, options.source, out, err, notes=False)
     spec_mode = mode or (project.sync if project else None) or "store"
     entries = {config.LOCAL_FILE: config.LOCAL_FILE}
     if spec_mode in ("link", "copy"):
@@ -408,6 +417,8 @@ def run(args: List[str]) -> int:
                         help="replace an existing instructions file, kept as FILE.bak (FILE.bak.N when a .bak is "
                              "there) — cortex.toml changes only "
                              "for the options given")
+    parser.add_argument("--from", dest="source", metavar="PATH",
+                        help="take the templates and the spec from a checkout of Cortex, as `cortex sync --from` does")
     options = parser.parse_args(args)
     if options.service and not options.workspace:
         parser.error("--service goes with --workspace")
