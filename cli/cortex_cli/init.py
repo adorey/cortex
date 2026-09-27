@@ -136,11 +136,19 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
     sync.existing_entry(root / sync.LINK, the_store, project or _blank(root))
     # The version the project pins, or — for a new project, or one --force rewrites — this binary's.
     version = project.version if project and not options.force else the_store.own
-    the_store.ensure(version)
-    spec = the_store.path(version)
+    if options.source:
+        # A contributor's checkout (§3.5, --from): its templates and its spec, no version checked.
+        spec = Path(os.path.abspath(options.source))
+        if not sync.is_checkout(spec):
+            raise InitError(f"--from {display(options.source)}: no Cortex checkout there — it holds no agents/ and templates/")
+        described = f"the checkout at {display(str(spec))}"
+    else:
+        the_store.ensure(version)
+        spec = the_store.path(version)
+        described = f"Cortex {version}"
     if personality and not (spec / "agents" / "personalities" / theme).is_dir():
         themes = sorted(p.name for p in (spec / "agents" / "personalities").iterdir() if p.is_dir())
-        raise InitError(f"theme '{theme}' is not in Cortex {version} — the themes are: {', '.join(themes)}")
+        raise InitError(f"theme '{theme}' is not in {described} — the themes are: {', '.join(themes)}")
 
     # cortex.toml, and what git must ignore
     if existing_project and not options.force:
@@ -158,7 +166,7 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         out.write(f"✓ .gitignore: {', '.join(ignored)}\n")
 
     # The spec, where the project finds it
-    sync.sync(str(root), mode, None, out, err)
+    sync.sync(str(root), mode, options.source, out, err)
 
     templates = spec / "templates"
     workspace = options.workspace
@@ -223,6 +231,8 @@ def run(args: List[str]) -> int:
     modes.add_argument("--link", action="store_true", help="link cortex/ to the spec: cortex.toml's sync = \"link\"")
     modes.add_argument("--copy", action="store_true", help="copy the spec into cortex/: cortex.toml's sync = \"copy\"")
     parser.add_argument("--force", action="store_true", help="replace an existing instructions file and cortex.toml")
+    parser.add_argument("--from", dest="source", metavar="PATH",
+                        help="take the templates and the spec from a checkout of Cortex, as `cortex sync --from` does")
     options = parser.parse_args(args)
     if options.service and not options.workspace:
         parser.error("--service goes with --workspace")
