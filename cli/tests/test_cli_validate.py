@@ -5,6 +5,7 @@ validator of Cortex 0.9.0. The command must reproduce them byte for byte, exit c
 on every platform, paths printed with ``/`` (§3.1), and from a checkout with CRLF line endings too.
 """
 
+import os
 import shutil
 import signal
 import subprocess
@@ -59,6 +60,28 @@ class GoldenTests(unittest.TestCase):
 
     def test_the_top_level_help_lists_it(self):
         self.assertIn(b"  validate ", harness.run("--help").stdout)
+
+
+class RootsTests(unittest.TestCase):
+    def test_this_repository_validates_itself(self):
+        # The base as its own project (ADR-007 §3.1): its agents/ is the base, never overlays of it.
+        proc = harness.run("validate", "--strict", cwd=harness.REPO)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        out = proc.stdout.decode()
+        repo = str(harness.REPO).replace(os.sep, "/")
+        self.assertIn(f"Project root:  {repo}\n", out)
+        self.assertIn(f"Cortex dir:    {repo}\n", out)
+        self.assertNotIn("── Scope: . ──", out)
+        self.assertNotIn("agents/roles/", out)
+
+    def test_a_submodule_project_is_told_to_move(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validate-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        (tmp / "cortex" / "agents").mkdir(parents=True)
+        proc = harness.run("validate", cwd=tmp)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn(b"no cortex.toml in", proc.stderr)
+        self.assertIn(b"`cortex init` says how to leave it", proc.stderr)
 
 
 class IsolationTests(unittest.TestCase):
