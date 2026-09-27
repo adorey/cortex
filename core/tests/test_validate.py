@@ -304,22 +304,22 @@ class MainTests(unittest.TestCase):
         stdout = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
         with mock.patch("sys.stdout", stdout):
             stdout.write("BEFORE\n")
-            main(["--help"])
+            main(["--help"], project_root=".", base_root="cortex")
             stdout.flush()
-        self.assertTrue(stdout.buffer.getvalue().startswith(b"BEFORE\nUsage: validate-overlays.sh"))
+        self.assertTrue(stdout.buffer.getvalue().startswith(b"BEFORE\nUsage: cortex validate"))
 
     def test_main_leaves_the_process_streams_open(self):
         # In one process — a test, a CLI embedding the core — whatever runs next still writes.
         stdout = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
         stderr = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
         with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
-            self.assertEqual(main(["--help"]), 0)
-            self.assertEqual(main(["--no-such-option"]), 2)
+            self.assertEqual(main(["--help"], project_root=".", base_root="cortex"), 0)
+            self.assertEqual(main(["--no-such-option"], project_root=".", base_root="cortex"), 2)
         self.assertFalse(stdout.closed)
         self.assertFalse(stderr.closed)
         stdout.write("still open\n")
         stdout.flush()
-        self.assertIn(b"Usage: validate-overlays.sh", stdout.buffer.getvalue())
+        self.assertIn(b"Usage: cortex validate", stdout.buffer.getvalue())
         self.assertIn(b"Unknown argument: --no-such-option", stderr.buffer.getvalue())
 
 class MissingHeaderTests(unittest.TestCase):

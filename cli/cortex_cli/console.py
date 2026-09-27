@@ -7,10 +7,15 @@ UTF-8 whatever the console's code page, ``\\n`` line endings where Windows would
 from __future__ import annotations
 
 import os
+import signal
 import sys
 
 
 def setup() -> None:
+    # A reader that goes away — `cortex validate | head` — ends the run by SIGPIPE, in silence,
+    # as a shell command's does, not with a BrokenPipeError and its traceback.
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     for stream, errors in ((sys.stdout, "surrogateescape"), (sys.stderr, "backslashreplace")):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
