@@ -14,7 +14,15 @@ from .version import VERSION
 
 # name -> (summary, handler). Handlers import their module when called — statically, so that
 # PyInstaller sees every module the binary needs.
-COMMANDS: Dict[str, Tuple[str, Callable[[List[str]], int]]] = {}
+def _validate(args: List[str]) -> int:
+    from . import validate
+
+    return validate.run(args)
+
+
+COMMANDS: Dict[str, Tuple[str, Callable[[List[str]], int]]] = {
+    "validate": ("Check the project's overlays against the spec (ADR-001)", _validate),
+}
 
 
 def usage() -> str:
