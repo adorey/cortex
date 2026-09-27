@@ -189,6 +189,29 @@ print(json.dumps({{"type": "result", "result": "done", "usage": {{}}}}))
         self.assertGreater(got["system"], 300_000)
         self.assertFalse(os.path.exists(got["file"]), "the system prompt file outlived the run")
 
+    def test_no_temporary_file_outlives_a_failed_run(self):
+        # The prompt file is written, and the MCP config, before the CLI runs: a failure there —
+        # a prompt that does not encode, a config that does not serialise — must not leave them.
+        import shutil
+        import tempfile
+        from unittest import mock
+        from cortex_runtime.agent_client import ClaudeCodeCliClient
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-cli-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        scratch = tmp / "tmpdir"
+        scratch.mkdir()
+        fake = tmp / "claude"
+        fake.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake.chmod(0o755)
+        cases = ((ClaudeCodeCliClient(cli=str(fake), root=tmp), "caf\udce9"),
+                 (ClaudeCodeCliClient(cli=str(fake), root=tmp, mcp_servers={"x": object()}), "fine"))
+        for client, system_prompt in cases:
+            with self.subTest(system_prompt=system_prompt), mock.patch.object(tempfile, "tempdir", str(scratch)):
+                with self.assertRaises(Exception):
+                    client.propose(system_prompt, [{"role": "input", "content": "t"}])
+                self.assertEqual(sorted(p.name for p in scratch.iterdir()), [])
+
     def test_a_cli_that_cannot_start_says_so(self):
         import shutil
         import tempfile
