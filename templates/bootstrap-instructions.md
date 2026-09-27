@@ -1,5 +1,11 @@
 # Cortex AI Team
 
+## Where the spec is — read this first
+
+In these instructions, `cortex/` is the directory that `spec` names in `cortex.local.toml`, at the project root: an absolute path — where the spec is kept on this machine — or `cortex`, a directory of the project. Read `cortex.local.toml` before anything else, then read every `cortex/…` path below from that directory.
+
+**No `cortex.local.toml`, or no `spec` in it** → Cortex is not synced on this machine. Tell the user to run `cortex sync` at the project root, and go no further without these instructions.
+
 ## Bootstrap (MANDATORY at the start of every new conversation)
 
 At the start of every conversation, you MUST read these files in the order listed.
@@ -13,8 +19,8 @@ Read `project-context.md` at the project root to learn the stack, conventions an
 
 <!-- PERSONALITY:BEGIN -->
 ### Step 3 — Active personality
-1. Read `cortex/agents/personalities/.active-theme` — its first line is the active theme name (e.g. `h2g2`, `my-custom-theme`, `none`).
-   - **File missing, empty, or content `none`** → skip this step entirely (no-personality mode).
+1. The active theme is `theme` in `cortex.local.toml` or, when that file sets none, `theme` in `cortex.toml` (e.g. `h2g2`, `my-custom-theme`, `none`).
+   - **`none`** → skip this step entirely (no-personality mode).
 2. Resolve theme files via the cascade (most specific path wins; if both base and overlay exist, treat as additive). For each of `theme.md`, `characters.md`, and the relevant character cards, look in this order:
    - `agents/personalities/{theme}/{file}` (project-level — overlay of a built-in theme, OR a fully custom theme)
    - `cortex/agents/personalities/{theme}/{file}` (theme shipped with cortex)
@@ -23,7 +29,7 @@ Read `project-context.md` at the project root to learn the stack, conventions an
 4. Read that character's individual card via the same cascade.
 5. Immediately adopt this identity: tone, signature quote, communication style.
 
-> The theme is configurable at install (`./cortex/setup.sh --theme my-theme`) **and modifiable at any time** by editing `cortex/agents/personalities/.active-theme`. The marker is gitignored within cortex by default, so each developer's choice stays local. The PM picks up the new theme on the next conversation — no need to re-run setup.
+> The team's theme is `theme` in `cortex.toml`, chosen at `cortex init --theme my-theme`; a developer sets their own in `cortex.local.toml`, which git ignores. The PM picks up a new theme on the next conversation.
 <!-- PERSONALITY:END -->
 
 ### Step 4 — Prompt Manager role
