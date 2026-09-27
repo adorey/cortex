@@ -69,7 +69,7 @@ def prepare(project, files):
             subprocess.run(["git", "init", "-q", str(project / path)], check=True)
         else:
             (project / path).parent.mkdir(parents=True, exist_ok=True)
-            (project / path).write_text(content, encoding="utf-8")
+            (project / path).write_text(content, encoding="utf-8", newline="")     # LF on Windows too
 
 
 def snapshot(project, skip=("cortex",)):
