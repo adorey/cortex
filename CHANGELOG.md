@@ -14,6 +14,7 @@ release note under [`changelog/`](changelog/).
 
 ### Changed
 - The validator lists files in name order — not in the file system's — so that its report is the same on every platform.
+- **The runtime takes a project's base from its `cortex.toml`** ([ADR-002 §9](docs/adr/ADR-002-cortex-runtime.md#9-amendments)): the store's copy of the version it pins, which `deploy/compose.yaml` mounts read-only from `CORTEX_STORE_PATH`. A project without `cortex.toml` resolves as before; a version the store lacks is refused, `422`.
 
 ## [0.10.1] - 2026-09-27 — Mostly Harmless _(Released)_
 [Full notes](changelog/0.10.1.md)
