@@ -161,8 +161,8 @@ record.
 
 **Definition of ready.** An issue is not ready to be picked up until it has: a milestone, an
 `adr:` label, a `phase:` label, a `type:` label, and **an acceptance criterion that can fail**.
-"Add a resolver" is not a criterion; "`bin/validate-overlays.sh --strict` exits 0 on a host
-project scaffolded without a `cortex/` directory" is.
+"Add a resolver" is not a criterion; "`cortex validate --strict` exits 0 on a host project
+scaffolded by `cortex init`" is.
 
 **Pull requests carry labels too** — the same ones as the issues they deliver. Every pull request
 has at least one `type:*`; ADR work adds its `adr:NNN`, its `phase:N` and, when the phase gates the
