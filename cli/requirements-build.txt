@@ -1,0 +1,2 @@
+# The build of the cortex binary (cli/build.py). Pinned: a release is built from exactly these.
+pyinstaller==6.22.3
