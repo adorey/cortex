@@ -14,6 +14,11 @@ npm install -g @anthropic-ai/claude-code
 claude --version        # verify it's on PATH
 ```
 
+The runtime hands the CLI its system prompt in a file, `--append-system-prompt-file`, and the task
+on stdin — neither fits Linux's 128 KiB cap on one argument once the prompt carries the project's
+files. An older CLI without that option fails the run with *unknown option*: check that
+`claude --help` lists it — verified with `claude` 2.1.273.
+
 ## Step 2 — Authenticate with your subscription (one-time)
 
 ```bash
