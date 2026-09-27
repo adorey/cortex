@@ -131,7 +131,9 @@ class ModuleEntryTests(unittest.TestCase):
         # roots come from where the module sits, as the shim derives them from where it sits.
         import validator_harness as harness
 
-        tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
+        # Resolved: the shim prints the path bash's pwd gives, the module the one Python's getcwd
+        # gives, and on macOS the temporary directory is behind a link — /var is /private/var.
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-")).resolve()
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         project = harness.layout("base-not-found", tmp)
         for args in (["--strict"], ["--service", ".", "--strict"]):
