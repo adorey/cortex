@@ -310,3 +310,8 @@ Acceptance criteria:
 - **A source checkout stands for the version `CORTEX_SOURCE_VERSION` names**, for the tests that download. A build always carries its stamp and never reads it.
 - **`sync` also says** when `cortex/` in `link` or `copy` mode is missing from `.gitignore`, and when the active theme is neither in the spec nor in the project. Both are notes: it still syncs.
 
+### Phase 3 — the store the runtime is given
+
+- **`CORTEX_STORE_PATH` names the host's store** in `deploy/.env` (§3.6). Compose mounts it read-only at `/cortex-home` and sets `CORTEX_HOME` to that path. Unset, it mounts an empty directory of this repository, `deploy/no-store/`. Docker creates a missing bind source, owned by root, and a root-owned `~/.cortex` would then refuse the developer's own `cortex sync` and install scripts. A project without `cortex.toml` needs no store, and a pinned version is refused with the variable named.
+- **The runtime checks the pinned version itself.** It must be `X.Y.Z` or a pre-release — never a path — before it names a directory of the store. The runtime does not import the command's package: ADR-016 will have the command drive the runtime over HTTP.
+
