@@ -1,8 +1,9 @@
 """``cortex.toml`` and ``cortex.local.toml`` — ADR-008 §3.4.
 
 ``cortex.toml`` is committed at the project root: the Cortex ``version`` it uses, the team's
-``theme``, and optionally how ``sync`` brings the spec to it. ``cortex.local.toml``, next to it and
-ignored by git, is this developer on this machine: a ``theme`` of their own, and the ``spec``
+``theme``, and optionally how ``sync`` brings the spec to it and whether Claude Code may read it
+without asking (``claude_access``). ``cortex.local.toml``, next to it and ignored by git, is this
+developer on this machine: a ``theme`` and a ``claude_access`` of their own, and the ``spec``
 ``cortex sync`` writes. An unknown key is an error, never a warning: these are the files a later
 ADR extends, and a typo that silently does nothing is the failure they must not start with.
 """
@@ -38,10 +39,16 @@ class Project:
     sync: Optional[str]        # cortex.toml's sync, when set
     local_theme: Optional[str]
     spec: Optional[str]        # cortex.local.toml's spec, when synced
+    claude_access: bool = False                 # cortex.toml's
+    local_claude_access: Optional[bool] = None  # cortex.local.toml's, which wins
 
     @property
     def active_theme(self) -> str:
         return self.local_theme or self.theme
+
+    @property
+    def active_claude_access(self) -> bool:
+        return self.claude_access if self.local_claude_access is None else self.local_claude_access
 
     def spec_directory(self) -> Optional[str]:
         """The directory ``spec`` names: absolute as written, or relative to the project root."""
@@ -88,7 +95,8 @@ def load(root: str) -> Project:
     except project.ProjectFileError as error:
         raise ConfigError(str(error))
     return Project(root=root, version=Version(data["version"]), theme=data["theme"], sync=data.get("sync"),
-                   local_theme=local.get("theme"), spec=local.get("spec"))
+                   local_theme=local.get("theme"), spec=local.get("spec"),
+                   claude_access=data.get("claude_access", False), local_claude_access=local.get("claude_access"))
 
 
 def toml_string(value: str) -> str:
@@ -175,6 +183,12 @@ def render_spec(root: str, spec: str) -> str:
                     {"spec": "written by `cortex sync`"})
 
 
+def render_local(root: str, key: str, value, comment: str = "") -> str:
+    """``cortex.local.toml`` with ``key`` set — see ``set_keys``."""
+    return set_keys(_read_text(os.path.join(root, LOCAL_FILE)), {key: value}, LOCAL_FILE, LOCAL_HEADER,
+                    {key: comment} if comment else None)
+
+
 def render_project(root: str, values: Dict[str, object]) -> str:
     """``cortex.toml`` with each key of ``values`` set — a new file when there is none — checked
     against the grammar before anything is written."""
@@ -203,6 +217,11 @@ def write_local_text(root: str, text: str) -> None:
     write_text(os.path.join(root, LOCAL_FILE), text)
 
 
+def write_local(root: str, key: str, value, comment: str = "") -> None:
+    """Set ``key`` in ``cortex.local.toml``, creating the file if needed."""
+    write_local_text(root, render_local(root, key, value, comment))
+
+
 def write_spec(root: str, spec: str) -> None:
     """Set ``spec`` in ``cortex.local.toml``, creating the file if needed."""
-    write_local_text(root, render_spec(root, spec))
+    write_local(root, "spec", spec, "written by `cortex sync`")
