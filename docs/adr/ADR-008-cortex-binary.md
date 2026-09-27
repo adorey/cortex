@@ -442,3 +442,16 @@ Across it, `cortex init` writes what `setup.sh` wrote, byte for byte. The `.acti
 - **`cortex validate` has no fallback to `./cortex` any more.** A project without `cortex.toml` is refused (exit `2`), and when a `cortex/` submodule or clone is there, the message sends to `cortex init`, which says how to leave it. This repository validates itself as the base, in CI (`repo-checks`, job *Cortex validates itself*) and in the CLI's tests.
 - **The core's validator lost its script entry points** — `cli()` and `python -m cortex_core.validate` — along with the script. `main()` takes its two roots from its caller, the `cortex` command. The golden outputs changed in one line, deliberately: the help names `cortex validate`. The parity matrix of `cortex init`, re-captured from the command once the templates changed, came out identical to the one captured from the script: there was no drift to record.
 
+### After the delivery — the maintainer's arbitration (2026-09-27)
+
+- **Claude Code reads the store without asking, on request** (#136). Phase 2 measured a permission prompt in `store` mode, and in `link` mode too. The maintainer chose an option over a default:
+  - **Who decides.** `claude_access = true` in `cortex.toml`, for the team, or in `cortex.local.toml`, for one developer — whose value wins.
+  - **Where it is set.** `cortex init --tool claude` offers it on a terminal, and `--claude-access` sets it unattended. `cortex sync --claude-access` and `--no-claude-access` write a developer's own.
+  - **What sync does.** It keeps the store's path of the pinned version in `.claude/settings.local.json`, under `permissions.additionalDirectories`. That file is Claude Code's settings of this developer on this machine, which git ignores. It is the place for a path of this machine, where the committed `.claude/settings.json` is not.
+  - **Every entry inside the store's `versions/` is Cortex's.** Sync replaces it when the version changes, and removes it when access is off or the spec is copied into the project; every other setting is kept. In `link` mode the entry is the store's too, the path the link resolves to.
+  - **The result, measured.** A real conversation on a project made by `cortex init --tool claude --claude-access` reached the Prompt Manager's card with no prompt.
+- **The measurement of phase 2 is met for Claude Code** (#116). Copilot, Cursor and Codex, for which no account is available yet, move to #137, outside this ADR's release gate.
+- **The version stays 1.0.0**, as §5 decides: one version for the release and the binary.
+- **The Windows executable stays unsigned** for 1.0.0 (§3.1, §7). Measured on a throwaway pre-release, on Windows 11: installed by `install.ps1`, `cortex.exe` carries no Mark of the Web, so SmartScreen does not step in, and Defender let it run. A zip downloaded with a browser would carry it.
+- **The release path ran on that pre-release.** It found one bug: the publish job gathered the assets in the repository's own `assets/`, so the README's logo shipped with the release. It now works in `$RUNNER_TEMP`.
+
