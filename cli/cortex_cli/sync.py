@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, TextIO
 
-from . import config, store
+from . import claude, config, store
 from .paths import display, working_directory
 
 LINK = "cortex"
@@ -180,12 +180,17 @@ def is_checkout(path: Path) -> bool:
 # The command
 # --------------------------------------------------------------------------- #
 
-def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO) -> None:
+def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO,
+         claude_access: Optional[bool] = None) -> None:
     root = config.find_project(cwd)
     if root is None:
         raise SyncError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory "
                         "a Cortex project")
     project = config.load(root)
+    if claude_access is not None:
+        # This developer's choice, kept for the next syncs: cortex.local.toml's wins over the team's.
+        config.write_local(root, "claude_access", claude_access)
+        project = config.load(root)
     mode = mode or project.sync or "store"
     the_store = store.Store()
     target = Path(root) / LINK
@@ -230,11 +235,43 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
     if mode != "store" and not _ignored(Path(root)):
         err.write(f"note: {LINK}/ is not in {Path(root).name}/.gitignore — add a `/{LINK}/` line, so that git "
                   "does not track it\n")
+    _claude(Path(root), project, the_store, None if mode == "copy" else spec_source, out, err)
     theme = project.active_theme
     if theme != "none" and not any((base / "agents" / "personalities" / theme).is_dir()
                                    for base in (spec_source, Path(root))):
         err.write(f'warning: theme "{theme}" is neither in the spec nor in agents/personalities/ — '
                   "the Prompt Manager would not find it\n")
+
+
+def _claude(root: Path, project: config.Project, the_store: store.Store, spec: Optional[Path],
+            out: TextIO, err: TextIO) -> None:
+    """Keep Claude Code's permission to read the spec without asking, when the project or the
+    developer asks for it (``claude_access``). A copy is inside the project: nothing to allow."""
+    allow = display(str(spec)) if project.active_claude_access and spec is not None else None
+    try:
+        said = claude.update(root, the_store.versions, allow)
+    except claude.ClaudeSettingsError as error:
+        err.write(f"warning: {error}\n")
+        return
+    if said:
+        out.write(f"{said}\n")
+    if allow is not None:
+        added = add_to_gitignore(root, [claude.SETTINGS])
+        if added:
+            out.write(f".gitignore: {', '.join(added)}\n")
+
+
+def add_to_gitignore(root: Path, lines: List[str]) -> List[str]:
+    """Add the ``lines`` ``.gitignore`` does not have yet, and return them."""
+    path = root / ".gitignore"
+    existing = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    missing = [line for line in lines if line not in (entry.strip() for entry in existing)]
+    if missing:
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if text and not text.endswith("\n"):
+            text += "\n"
+        path.write_text(text + "".join(f"{line}\n" for line in missing), encoding="utf-8", newline="")
+    return missing
 
 
 def _ignored(root: Path) -> bool:
@@ -259,9 +296,15 @@ def run(args: List[str]) -> int:
                        help="copy it into cortex/, read-only")
     parser.add_argument("--from", dest="source", metavar="PATH",
                         help="use a checkout of Cortex instead of the store: no version is checked")
+    access = parser.add_mutually_exclusive_group()
+    access.add_argument("--claude-access", dest="claude_access", action="store_const", const=True,
+                        help="let Claude Code read the spec without asking, from now on, for you: "
+                             "claude_access = true in cortex.local.toml")
+    access.add_argument("--no-claude-access", dest="claude_access", action="store_const", const=False,
+                        help="stop it: claude_access = false in cortex.local.toml")
     options = parser.parse_args(args)
     try:
-        sync(working_directory(), options.mode, options.source, sys.stdout, sys.stderr)
+        sync(working_directory(), options.mode, options.source, sys.stdout, sys.stderr, options.claude_access)
     except (config.ConfigError, store.StoreError, SyncError) as error:
         sys.stdout.flush()
         sys.stderr.write(f"cortex sync: {error}\n")

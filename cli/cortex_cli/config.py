@@ -1,8 +1,9 @@
 """``cortex.toml`` and ``cortex.local.toml`` — ADR-008 §3.4.
 
 ``cortex.toml`` is committed at the project root: the Cortex ``version`` it uses, the team's
-``theme``, and optionally how ``sync`` brings the spec to it. ``cortex.local.toml``, next to it and
-ignored by git, is this developer on this machine: a ``theme`` of their own, and the ``spec``
+``theme``, and optionally how ``sync`` brings the spec to it and whether Claude Code may read it
+without asking (``claude_access``). ``cortex.local.toml``, next to it and ignored by git, is this
+developer on this machine: a ``theme`` and a ``claude_access`` of their own, and the ``spec``
 ``cortex sync`` writes. An unknown key is an error, never a warning: these are the files a later
 ADR extends, and a typo that silently does nothing is the failure they must not start with.
 """
@@ -24,7 +25,9 @@ LOCAL_FILE = "cortex.local.toml"
 MODES = ("store", "link", "copy")
 # A theme names a directory: a name, never a path.
 _THEME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-_SPEC_LINE = re.compile(r"""^[ \t]*(?:spec|"spec"|'spec')[ \t]*=""")
+PROJECT_KEYS = ("version", "theme", "sync", "claude_access")
+LOCAL_KEYS = ("theme", "spec", "claude_access")
+BOOLEAN_KEYS = ("claude_access",)
 LOCAL_HEADER = ("# This developer, on this machine — ignored by git (ADR-008 §3.4).\n"
                 "# `cortex sync` writes spec. A theme set here overrides cortex.toml's.\n")
 
@@ -41,10 +44,16 @@ class Project:
     sync: Optional[str]        # cortex.toml's sync, when set
     local_theme: Optional[str]
     spec: Optional[str]        # cortex.local.toml's spec, when synced
+    claude_access: bool = False                 # cortex.toml's
+    local_claude_access: Optional[bool] = None  # cortex.local.toml's, which wins
 
     @property
     def active_theme(self) -> str:
         return self.local_theme or self.theme
+
+    @property
+    def active_claude_access(self) -> bool:
+        return self.claude_access if self.local_claude_access is None else self.local_claude_access
 
     def spec_directory(self) -> Optional[str]:
         """The directory ``spec`` names: absolute as written, or relative to the project root."""
@@ -87,6 +96,10 @@ def _check_keys(name: str, data: Dict, allowed: Tuple[str, ...], required: Tuple
         if key not in data:
             raise ConfigError(f'{name}: "{key}" is required')
     for key, value in data.items():
+        if key in BOOLEAN_KEYS:
+            if not isinstance(value, bool):
+                raise ConfigError(f'{name}: "{key}" must be true or false, without quotes')
+            continue
         if not isinstance(value, str):
             raise ConfigError(f'{name}: "{key}" must be a string, in quotes')
         if not value:
@@ -105,7 +118,7 @@ def _check_theme(name: str, theme: str) -> None:
 def load(root: str) -> Project:
     """Read and validate both files of the project at ``root``."""
     data = _read(os.path.join(root, PROJECT_FILE))
-    _check_keys(PROJECT_FILE, data, ("version", "theme", "sync"), ("version", "theme"))
+    _check_keys(PROJECT_FILE, data, PROJECT_KEYS, ("version", "theme"))
     if not Version.valid(data["version"]):
         raise ConfigError(f'{PROJECT_FILE}: version "{data["version"]}" is no version — X.Y.Z, for instance 1.0.0')
     _check_theme(PROJECT_FILE, data["theme"])
@@ -114,11 +127,12 @@ def load(root: str) -> Project:
     local = {}
     if os.path.isfile(os.path.join(root, LOCAL_FILE)):
         local = _read(os.path.join(root, LOCAL_FILE))
-        _check_keys(LOCAL_FILE, local, ("theme", "spec"), ())
+        _check_keys(LOCAL_FILE, local, LOCAL_KEYS, ())
         if "theme" in local:
             _check_theme(LOCAL_FILE, local["theme"])
     return Project(root=root, version=Version(data["version"]), theme=data["theme"], sync=data.get("sync"),
-                   local_theme=local.get("theme"), spec=local.get("spec"))
+                   local_theme=local.get("theme"), spec=local.get("spec"),
+                   claude_access=data.get("claude_access", False), local_claude_access=local.get("claude_access"))
 
 
 def toml_string(value: str) -> str:
@@ -127,21 +141,28 @@ def toml_string(value: str) -> str:
 
 
 def write_spec(root: str, spec: str) -> None:
-    """Set ``spec`` in ``cortex.local.toml``, creating the file if needed.
+    """Set ``spec`` in ``cortex.local.toml`` — see ``write_local``."""
+    write_local(root, "spec", spec, "written by `cortex sync`")
 
-    ``tomllib`` reads TOML but does not write it: the one line that holds ``spec`` is rewritten,
+
+def write_local(root: str, key: str, value, comment: str = "") -> None:
+    """Set ``key`` in ``cortex.local.toml``, creating the file if needed.
+
+    ``tomllib`` reads TOML but does not write it: the one line that holds ``key`` is rewritten,
     or added, and every other line — the developer's ``theme``, their comments — is kept as it
-    was. The result is read back: a ``spec`` written some way a line cannot hold is refused.
+    was. The result is read back: a value written some way a line cannot hold is refused.
     """
     path = os.path.join(root, LOCAL_FILE)
-    line = f"spec = {toml_string(spec)}    # written by `cortex sync`"
+    rendered = ("true" if value else "false") if isinstance(value, bool) else toml_string(value)
+    line = f"{key} = {rendered}" + (f"    # {comment}" if comment else "")
+    key_line = re.compile(rf"""^[ \t]*(?:{key}|"{key}"|'{key}')[ \t]*=""")
     if os.path.isfile(path):
         with open(path, "rb") as fh:
             text = fh.read().decode("utf-8-sig")
         newline = "\r\n" if "\r\n" in text else "\n"
         lines = text.splitlines(keepends=True)
         for index, existing in enumerate(lines):
-            if _SPEC_LINE.match(existing):
+            if key_line.match(existing):
                 ending = existing[len(existing.rstrip("\r\n")):]
                 lines[index] = line + ending
                 break
@@ -156,8 +177,8 @@ def write_spec(root: str, spec: str) -> None:
         written = tomllib.loads(text)
     except tomllib.TOMLDecodeError:
         written = {}
-    if written.get("spec") != spec:
-        raise ConfigError(f"{LOCAL_FILE}: its spec is written in a way cortex sync cannot rewrite — "
+    if written.get(key) != value:
+        raise ConfigError(f"{LOCAL_FILE}: its {key} is written in a way cortex sync cannot rewrite — "
                           "remove that line and run cortex sync again")
     temporary = f"{path}.{os.getpid()}.tmp"
     with open(temporary, "w", encoding="utf-8", newline="") as fh:

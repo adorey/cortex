@@ -82,6 +82,13 @@ def service_path(name: str) -> str:
     return str(path)
 
 
+def ask(out: TextIO, question: str) -> bool:
+    """A yes-or-no on the terminal, yes by default."""
+    out.write(question)
+    out.flush()
+    return sys.stdin.readline().strip().lower() not in ("n", "no")
+
+
 def prompt_services(out: TextIO) -> List[str]:
     out.write("   Enter the names of the services to create (empty entry to stop):\n")
     names = []
@@ -98,18 +105,6 @@ def prompt_services(out: TextIO) -> List[str]:
 # --------------------------------------------------------------------------- #
 # The command
 # --------------------------------------------------------------------------- #
-
-def add_to_gitignore(root: Path, lines: List[str]) -> List[str]:
-    path = root / ".gitignore"
-    existing = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-    missing = [line for line in lines if line not in (entry.strip() for entry in existing)]
-    if missing:
-        text = path.read_text(encoding="utf-8") if path.is_file() else ""
-        if text and not text.endswith("\n"):
-            text += "\n"
-        path.write_text(text + "".join(f"{line}\n" for line in missing), encoding="utf-8", newline="")
-    return missing
-
 
 def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> None:
     root = Path(os.path.join(cwd, options.dir) if options.dir else cwd)
@@ -154,18 +149,30 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         raise InitError(f"theme '{theme}' is neither in {described} nor in agents/personalities/ — "
                         f"the themes are: {', '.join(themes)}")
 
+    # Claude Code asks before it reads the store (ADR-008 §9): on a terminal, offer the team setting.
+    writes_project = not existing_project or options.force
+    claude_access = options.claude_access
+    if claude_access is None and options.tool == "claude" and writes_project and sys.stdin is not None \
+            and sys.stdin.isatty():
+        claude_access = ask(out, "Let Claude Code read the Cortex spec without asking for permission — "
+                                 "claude_access = true in cortex.toml? [Y/n] ")
+
     # cortex.toml, and what git must ignore
-    if existing_project and not options.force:
+    if not writes_project:
         out.write(f"✓ {config.PROJECT_FILE} kept, at Cortex {version} — --force rewrites it\n")
+        if claude_access is not None:
+            out.write("  `cortex sync --claude-access` sets claude_access for you only, in cortex.local.toml\n")
     else:
         text = f'version = "{version}"\ntheme = "{theme}"\n'
         if mode:
             text += f'sync = "{mode}"\n'
+        if claude_access:
+            text += "claude_access = true\n"
         (root / config.PROJECT_FILE).write_text(
             "# Written by `cortex init`. Committed: the Cortex version this project uses, and the team's theme.\n"
             + text, encoding="utf-8", newline="")
         out.write(f"✓ {config.PROJECT_FILE}: Cortex {version}, theme {theme}\n")
-    ignored = add_to_gitignore(root, [config.LOCAL_FILE] + ([f"/{sync.LINK}/"] if mode else []))
+    ignored = sync.add_to_gitignore(root, [config.LOCAL_FILE] + ([f"/{sync.LINK}/"] if mode else []))
     if ignored:
         out.write(f"✓ .gitignore: {', '.join(ignored)}\n")
 
@@ -208,6 +215,9 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
                 if not (agents / file).exists():
                     (agents / file).write_bytes(content)
                     out.write(f"✓ agents/{file} — the team's, agents/ is its own git repository (ADR-006)\n")
+    if options.tool == "claude" and claude_access is None and not config.load(str(root)).active_claude_access:
+        out.write("\ntip: Claude Code asks before it reads the spec in the store. `claude_access = true` in "
+                  "cortex.toml lets it read without asking — for the team; `cortex sync --claude-access`, for you.\n")
     out.write(f"\nCortex {version} is ready in {display(str(root))}.\n")
 
 
@@ -237,6 +247,12 @@ def run(args: List[str]) -> int:
     parser.add_argument("--force", action="store_true", help="replace an existing instructions file and cortex.toml")
     parser.add_argument("--from", dest="source", metavar="PATH",
                         help="take the templates and the spec from a checkout of Cortex, as `cortex sync --from` does")
+    access = parser.add_mutually_exclusive_group()
+    access.add_argument("--claude-access", dest="claude_access", action="store_const", const=True,
+                        help="let Claude Code read the spec without asking: claude_access = true in cortex.toml — "
+                             "asked on a terminal with --tool claude")
+    access.add_argument("--no-claude-access", dest="claude_access", action="store_const", const=False,
+                        help="do not ask, and leave it off")
     options = parser.parse_args(args)
     if options.service and not options.workspace:
         parser.error("--service goes with --workspace")
