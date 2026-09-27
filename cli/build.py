@@ -6,6 +6,13 @@ writes ``cli/build/dist/cortex`` — ``cortex.exe`` on Windows — and, next to 
 of the machine's target: ``cortex-{target}.tar.gz``, a ``.zip`` on Windows, holding the binary,
 ``LICENSE`` and ``NOTICE``. It needs PyInstaller (``cli/requirements-build.txt``) and nothing else.
 
+    python cli/build.py --spec-archive DIR
+
+writes ``DIR/cortex-spec.tar.gz``, the spec archive of the release (§3.3): ``agents/``,
+``templates/`` and ``docs/`` as the commit checked out holds them — from git, never from the
+working copy, where a stray file must not ship. The binary embeds the same archive: its own
+version, written to the store without a network.
+
     python cli/build.py --checksums DIR
 
 writes ``DIR/SHA256SUMS`` over the release assets in ``DIR``.
@@ -35,6 +42,8 @@ BUILD = CLI / "build"
 STAMP = CLI / "cortex_cli" / "_stamp.py"
 VERSION = re.compile(r"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$")
 # (operating system, machine) as Python names them -> the target's name in the release (§3.1)
+SPEC_TREES = ("agents", "templates", "docs")
+SPEC_ARCHIVE = "cortex-spec.tar.gz"
 TARGETS = {
     ("linux", "x86_64"): "linux-x86_64",
     ("linux", "aarch64"): "linux-aarch64",
@@ -50,8 +59,18 @@ def machine_target() -> str:
     return TARGETS[key]
 
 
+def spec_archive(directory: Path) -> Path:
+    """The spec archive of the commit checked out, into ``directory``."""
+    directory.mkdir(parents=True, exist_ok=True)
+    archive = directory / SPEC_ARCHIVE
+    subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar.gz", f"--output={archive}", "HEAD", *SPEC_TREES],
+                   check=True)
+    return archive
+
+
 def build(version: str) -> Path:
     """Run PyInstaller and return the binary it wrote."""
+    embedded = spec_archive(BUILD)
     STAMP.write_text(f'"""Written by cli/build.py for one build — never committed."""\n\nVERSION = "{version}"\n',
                      encoding="utf-8")
     try:
@@ -60,6 +79,8 @@ def build(version: str) -> Path:
             "--onefile", "--name", "cortex", "--console", "--clean", "--noconfirm",
             # The core and the command, from this checkout: nothing is installed.
             "--paths", str(REPO / "core"), "--paths", str(CLI),
+            # The spec of this version, which the binary writes to the store (§3.3).
+            "--add-data", f"{embedded}{os.pathsep}.",
             "--distpath", str(BUILD / "dist"), "--workpath", str(BUILD / "work"), "--specpath", str(BUILD),
             str(CLI / "cortex_cli" / "__main__.py"),
         ], check=True)
@@ -111,8 +132,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build the cortex binary (ADR-008 §3.1).")
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--version", help="build the binary: the release's version, X.Y.Z, or a pre-release")
+    action.add_argument("--spec-archive", metavar="DIR", type=Path, help=f"write DIR/{SPEC_ARCHIVE} from the commit checked out")
     action.add_argument("--checksums", metavar="DIR", type=Path, help="write DIR/SHA256SUMS over the assets in DIR")
     args = parser.parse_args()
+    if args.spec_archive:
+        print(spec_archive(args.spec_archive))
+        return 0
     if args.checksums:
         print(checksums(args.checksums).read_text(encoding="utf-8"), end="")
         return 0
