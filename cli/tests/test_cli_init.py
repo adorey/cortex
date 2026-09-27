@@ -179,6 +179,41 @@ class OptionTests(InitTestCase):
                 self.assertIn(message, proc.err)
         self.assertFalse((self.tmp / "init" / "out").exists())
 
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_submodule_is_refused_and_the_commands_printed(self):
+        # A real submodule: the superproject's git state is exactly what the commands would change.
+        upstream = self.tmp / "upstream"
+        subprocess.run(["git", "init", "-q", str(upstream)], check=True)
+        (upstream / "README.md").write_text("cortex\n", encoding="utf-8")
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-c", "protocol.file.allow=always"]
+        subprocess.run([*git, "-C", str(upstream), "add", "."], check=True)
+        subprocess.run([*git, "-C", str(upstream), "commit", "-q", "-m", "x"], check=True)
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        subprocess.run([*git, "-C", str(self.project), "submodule", "add", "-q", str(upstream), "cortex"], check=True)
+        before = {p.relative_to(self.project).as_posix(): p.read_bytes() for p in self.project.rglob("*") if p.is_file()}
+        for command in (["init"], ["sync"]):
+            with self.subTest(command=command[0]):
+                if command == ["sync"]:
+                    (self.project / "cortex.toml").write_text(f'version = "{OWN}"\ntheme = "h2g2"\n', encoding="utf-8")
+                    before["cortex.toml"] = (self.project / "cortex.toml").read_bytes()
+                proc = harness.run(*command, cwd=self.project, env=self.env)
+                err = proc.stderr.decode()
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn("cortex/ is a git submodule", err)
+                for line in ("git submodule deinit -f cortex", "git rm cortex",
+                             "Remove-Item -Recurse -Force .git/modules/cortex" if os.name == "nt" else "rm -rf .git/modules/cortex"):
+                    self.assertIn(f"    {line}\n", err)
+                after = {p.relative_to(self.project).as_posix(): p.read_bytes() for p in self.project.rglob("*") if p.is_file()}
+                self.assertEqual(after, before)
+
+    def test_a_clone_is_refused_and_its_removal_printed(self):
+        (self.project / "cortex" / ".git").mkdir(parents=True)
+        proc = self.init()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a git clone", proc.err)
+        self.assertIn("Remove-Item -Recurse -Force cortex" if os.name == "nt" else "    rm -rf cortex\n", proc.err)
+        self.assertEqual(sorted(p.name for p in self.project.iterdir()), ["cortex"])
+
     def test_the_team_tier_is_its_own_repository_not_the_projects(self):
         # setup.sh asked git whether agents/ was in a working tree — true inside the project's own
         # repository too. The team tier is for an agents/ that is a repository of its own.
