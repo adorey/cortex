@@ -140,12 +140,20 @@ class OptionTests(InitTestCase):
         self.assertIn('theme = "acme"', self.read("cortex.toml"))
         self.assertIn("kept", proc.out)
 
-    def test_a_theme_the_spec_does_not_have(self):
+    def test_a_theme_found_nowhere(self):
         proc = self.init("--theme", "no-such-theme")
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("theme 'no-such-theme' is not in", proc.err)
+        self.assertIn("theme 'no-such-theme' is neither in", proc.err)
         self.assertIn("acme, h2g2", proc.err)
         self.assertEqual(list(self.project.iterdir()), [])
+
+    def test_a_theme_of_the_projects_own(self):
+        # docs/creating-a-theme.md: a custom theme lives in the project, with no base in Cortex.
+        (self.project / "agents" / "personalities" / "ours").mkdir(parents=True)
+        proc = self.init("--theme", "ours")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn('theme = "ours"', self.read("cortex.toml"))
+        self.assertNotIn("warning: theme", proc.err)
 
     def test_from_a_checkout_its_templates_and_its_spec(self):
         # CONTRIBUTING's loop: a template edited in a checkout reaches the project at once.

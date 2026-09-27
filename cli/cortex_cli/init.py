@@ -146,9 +146,13 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         the_store.ensure(version)
         spec = the_store.path(version)
         described = f"Cortex {version}"
-    if personality and not (spec / "agents" / "personalities" / theme).is_dir():
-        themes = sorted(p.name for p in (spec / "agents" / "personalities").iterdir() if p.is_dir())
-        raise InitError(f"theme '{theme}' is not in {described} — the themes are: {', '.join(themes)}")
+    # A theme Cortex ships, or one of the project's own, in its agents/personalities/.
+    own_themes = root / "agents" / "personalities"
+    if personality and not any((base / theme).is_dir() for base in (spec / "agents" / "personalities", own_themes)):
+        themes = sorted({p.name for base in (spec / "agents" / "personalities", own_themes) if base.is_dir()
+                         for p in base.iterdir() if p.is_dir()})
+        raise InitError(f"theme '{theme}' is neither in {described} nor in agents/personalities/ — "
+                        f"the themes are: {', '.join(themes)}")
 
     # cortex.toml, and what git must ignore
     if existing_project and not options.force:
