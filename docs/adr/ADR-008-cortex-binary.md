@@ -315,3 +315,21 @@ Acceptance criteria:
 - **`CORTEX_STORE_PATH` names the host's store** in `deploy/.env` (§3.6). Compose mounts it read-only at `/cortex-home` and sets `CORTEX_HOME` to that path. Unset, it mounts an empty directory of this repository, `deploy/no-store/`. Docker creates a missing bind source, owned by root, and a root-owned `~/.cortex` would then refuse the developer's own `cortex sync` and install scripts. A project without `cortex.toml` needs no store, and a pinned version is refused with the variable named.
 - **The runtime checks the pinned version itself.** It must be `X.Y.Z` or a pre-release — never a path — before it names a directory of the store. The runtime does not import the command's package: ADR-016 will have the command drive the runtime over HTTP.
 
+### Phase 4 — where `cortex init` parts from `setup.sh`
+
+The parity matrix has 13 cases:
+- single and workspace mode;
+- the five `--tool` values;
+- `--no-personality` and a non-default `--theme`;
+- services in a subfolder;
+- a git-backed `agents/`;
+- files already there.
+
+Across it, `cortex init` writes what `setup.sh` wrote, byte for byte. The `.active-theme` marker is the one exception: the theme goes to `cortex.toml` instead. Beyond the two differences §3.7 decides, the command parts from the script on purpose where the script had an edge wrong:
+
+- **The team tier is scaffolded when `agents/` is a repository of its own** — a `.git` entry in it, directory or file — as ADR-006 and the script's own comment say. The script asked `git -C agents rev-parse`, which also answers yes for an `agents/` inside the project's own repository. The command no longer calls git.
+- **A service is a folder inside the workspace**: `--service ../elsewhere` or an absolute path is refused, as the runtime refuses such a service. The script created the folder wherever the name led.
+- **A second `cortex init` keeps `cortex.toml`**, and reads the templates of the version it pins. `--force` rewrites it at the binary's version, and replaces the instructions file.
+- **`--instructions-file` without `--tool custom` is refused**; the script ignored it. As in the script, a relative path is taken from the current directory.
+- **Leaving a submodule** (§3.10): the path to remove under `.git/modules/` is read from the submodule's own `.git` file — it is not always `.git/modules/cortex`. A standalone clone gets its one command, to remove it once checked. On Windows the removal is printed as PowerShell's `Remove-Item -Recurse -Force`.
+
