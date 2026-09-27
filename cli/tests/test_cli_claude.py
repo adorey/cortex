@@ -169,7 +169,8 @@ class CommandTests(unittest.TestCase):
     def test_init_on_a_terminal_asks(self):
         import pty
 
-        for answer, expected in ((b"\n", True), (b"n\n", False)):
+        # Enter says yes; no, and a stdin that ends before any answer (Ctrl-D), say no.
+        for answer, expected in ((b"\n", True), (b"n\n", False), (b"\x04", False)):
             with self.subTest(answer=answer):
                 shutil.rmtree(self.project)
                 self.project.mkdir()
