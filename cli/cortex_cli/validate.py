@@ -64,8 +64,7 @@ def roots(cwd: str) -> Tuple[str, str]:
         return root, base
     if os.path.isdir(os.path.join(cwd, "cortex")):
         return cwd, f"{cwd}/cortex"
-    if all(os.path.isdir(os.path.join(cwd, tree)) for tree in ("agents", "templates")) \
-            and os.path.isfile(os.path.join(cwd, "templates", "bootstrap-instructions.md")):
+    if sync.is_checkout(Path(cwd)) and os.path.isfile(os.path.join(cwd, "templates", "bootstrap-instructions.md")):
         return cwd, cwd
     raise RootsError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory a "
                      "Cortex project")
