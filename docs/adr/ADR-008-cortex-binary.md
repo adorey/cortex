@@ -264,8 +264,8 @@ Acceptance criteria:
 
 ## 7. Follow-ups (out of scope for this ADR)
 
-1. **The configuration cascade and the IDE modes** — organisation policy ▸ project ▸ project-local ▸ machine, of which `cortex.toml` and `cortex.local.toml` are the first two files; rendering the resolved prompts for the IDE, which removes the cascade the LLM follows from the templates; a mode for a Cortex extension. Formerly in this ADR's epic; needs an epic of its own.
-2. **`cortex.lock` and upgrade tooling** — a resolved manifest, `cortex upgrade`, pruning unused versions from the store.
+1. **The configuration cascade and the IDE modes** — organisation policy ▸ project ▸ project-local ▸ machine, of which `cortex.toml` and `cortex.local.toml` are the first two files; rendering the resolved prompts for the IDE, which removes the cascade the LLM follows from the templates; a mode for a Cortex extension. Formerly in this ADR's epic; now [#98](https://github.com/adorey/cortex/issues/98).
+2. **`cortex.lock` and upgrade tooling** — a resolved manifest, `cortex upgrade`, pruning unused versions from the store — [#99](https://github.com/adorey/cortex/issues/99).
 3. **Other models, local ones included** — the provider abstraction, ADR-011 ([#40](https://github.com/adorey/cortex/issues/40)). It inherits the store and the runtime's binding as they are; its endpoints go in the machine tier, `~/.cortex/config.toml`.
 4. **The CLI drives the runtime** — `cortex run`, `watch`, `runtime up` over the unified client protocol, ADR-016 ([#45](https://github.com/adorey/cortex/issues/45)).
 5. **More channels and platforms** — Homebrew, winget, a signed Windows executable, Intel macOS, a PyPI wheel wrapping the binary if a Python consumer appears — under `cortex-ai`, the name the command falls back to, free on PyPI on 2026-09-26 (`cortex` is taken). [#86](https://github.com/adorey/cortex/issues/86) still reserves `cortex-core` meanwhile: `runtime/pyproject.toml` depends on it by name.
