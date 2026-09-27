@@ -114,6 +114,27 @@ jobs:
           CORTEX_HOME="$RUNNER_TEMP/cortex-home" CORTEX_RELEASES_URL=http://127.0.0.1:8765 sh install.sh --name cortex
           test "$("$RUNNER_TEMP/cortex-home/bin/cortex" --version)" = "cortex ${{ steps.version.outputs.version }}"
 
+      # The same on Windows, through install.ps1 under Windows PowerShell 5.1 — the shell
+      # `irm … | iex` meets on a machine nobody set up.
+      - name: The install script installs this binary (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $release = Join-Path $env:RUNNER_TEMP "release"
+          $download = Join-Path $release "latest\download"
+          New-Item -ItemType Directory -Force $download | Out-Null
+          Copy-Item "cli\build\dist\cortex-windows-x86_64.zip" $download
+          python cli\build.py --checksums $download
+          Start-Process python -ArgumentList "-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", $release -WindowStyle Hidden
+          foreach ($i in 1..10) { try { Invoke-WebRequest http://127.0.0.1:8765/ -UseBasicParsing | Out-Null; break } catch { Start-Sleep 1 } }
+          $env:CORTEX_HOME = Join-Path $env:RUNNER_TEMP "cortex-home"
+          $env:CORTEX_RELEASES_URL = "http://127.0.0.1:8765"
+          & .\install.ps1 -Name cortex
+          $installed = & (Join-Path $env:CORTEX_HOME "bin\cortex.exe") --version
+          if ($installed -ne "cortex $env:VERSION") { throw "the installed binary says: $installed" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: cortex-${{ matrix.target }}
