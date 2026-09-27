@@ -69,6 +69,12 @@ jobs:
         with:
           persist-credentials: false   # nothing here pushes: the token stays out of .git/config
 
+      # The container runs as root and the checkout belongs to the runner's user: git refuses it
+      # as "dubious ownership" — and the build takes the spec from git (cli/build.py).
+      - name: Trust the checkout (AlmaLinux 8)
+        if: matrix.container != ''
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         if: matrix.container == ''
         with:
