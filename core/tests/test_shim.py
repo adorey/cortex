@@ -105,6 +105,22 @@ class ShimOptionsTests(unittest.TestCase):
 
 @unittest.skipIf(shutil.which("bash") is None, "bash not available")
 class ModuleEntryTests(unittest.TestCase):
+    def test_an_installed_module_does_not_guess_its_roots(self):
+        # pip install ./core puts the module in site-packages, three levels below no checkout:
+        # derived from there, the roots are lib/ and lib/pythonX.Y — a green run over nothing.
+        import validator_harness as harness
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-shim-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        site = tmp / "lib" / "python3" / "site-packages"
+        shutil.copytree(harness.CORE / "cortex_core", site / "cortex_core", ignore=shutil.ignore_patterns("__pycache__"))
+        project = harness.layout("base-not-found", tmp / "work")
+        module = subprocess.run([sys.executable, "-m", "cortex_core.validate", "--strict"], cwd=project,
+                                capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=str(site)))
+        self.assertEqual(module.returncode, 2, module.stdout)
+        self.assertIn("bin/validate-overlays.sh", module.stderr)
+        self.assertEqual(module.stdout, "")
+
     def test_the_harness_calls_the_core_as_the_shim_does(self):
         import validator_harness as harness
 
