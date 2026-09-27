@@ -157,46 +157,48 @@ jobs:
       contents: write        # upload the assets
       id-token: write        # sign the attestations
       attestations: write    # store them
+    # Assets and binaries are gathered outside the checkout, in $RUNNER_TEMP: its own assets/ — the
+    # README's logo — would otherwise ship with the release (found by the pre-release 0.0.0-test.1).
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          path: assets
+          path: ${{ runner.temp }}/release-assets
           pattern: cortex-*
           merge-multiple: true
 
       # The spec of the release, from the tag's tree — what `cortex sync` downloads for a project
       # pinned to this version by a newer binary (ADR-008 §3.3).
       - name: The spec archive
-        run: python3 cli/build.py --spec-archive assets
+        run: python3 cli/build.py --spec-archive "$RUNNER_TEMP/release-assets"
 
       # Asset names carry no version, so that releases/latest/download/<asset> always names the
       # latest release's: the release itself is the version.
       - name: SHA256SUMS
-        run: python3 cli/build.py --checksums assets
+        run: python3 cli/build.py --checksums "$RUNNER_TEMP/release-assets"
 
       # The archives, and the binaries inside them: `gh attestation verify ~/.cortex/bin/cortex
       # --repo adorey/cortex` then checks the installed file itself.
       - name: The binaries inside the archives
         run: |
-          mkdir -p binaries
-          for archive in assets/cortex-linux-*.tar.gz assets/cortex-macos-*.tar.gz; do
+          for archive in "$RUNNER_TEMP/release-assets"/cortex-linux-*.tar.gz "$RUNNER_TEMP/release-assets"/cortex-macos-*.tar.gz; do
             target="$(basename "$archive" .tar.gz)"
-            mkdir -p "binaries/$target" && tar -xzf "$archive" -C "binaries/$target" cortex
+            mkdir -p "$RUNNER_TEMP/release-binaries/$target" && tar -xzf "$archive" -C "$RUNNER_TEMP/release-binaries/$target" cortex
           done
-          for archive in assets/cortex-*.zip; do
+          for archive in "$RUNNER_TEMP/release-assets"/cortex-*.zip; do
             target="$(basename "$archive" .zip)"
-            mkdir -p "binaries/$target" && unzip -q "$archive" cortex.exe -d "binaries/$target"
+            mkdir -p "$RUNNER_TEMP/release-binaries/$target" && unzip -q "$archive" cortex.exe -d "$RUNNER_TEMP/release-binaries/$target"
           done
+          ls -l "$RUNNER_TEMP/release-assets" "$RUNNER_TEMP/release-binaries"/*
 
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            assets/*
-            binaries/*/cortex*
+            ${{ runner.temp }}/release-assets/*
+            ${{ runner.temp }}/release-binaries/*/cortex*
 
       - name: Attach the assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" assets/* --clobber --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/release-assets"/* --clobber --repo "$GITHUB_REPOSITORY"
