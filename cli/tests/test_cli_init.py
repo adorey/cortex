@@ -1,8 +1,8 @@
-"""``cortex init`` — ``setup.sh``, at parity (ADR-008 §3.7, phase 4).
+"""``cortex init`` — the setup script of Cortex 0.x, at parity (ADR-008 §3.7, phase 4).
 
-The matrix (``init_matrix``) is what ``setup.sh`` writes, captured. ``cortex init`` must write the
-same files, byte for byte, plus its own three. The script replays the matrix too, until phase 5
-deletes it.
+The matrix (``init_matrix``) is what the script wrote, captured, and — since the script is gone —
+what the command writes. ``cortex init`` must write the same files, byte for byte, plus its own
+three.
 """
 
 import json
@@ -76,7 +76,7 @@ class InitTestCase(unittest.TestCase):
 
 
 class MatrixTests(InitTestCase):
-    def test_cortex_init_writes_what_setup_sh_wrote(self):
+    def test_cortex_init_writes_the_matrix(self):
         for case in matrix.CASES:
             if "git" in matrix.CASES[case][2].values() and not HAS_GIT:
                 continue
@@ -102,19 +102,6 @@ class MatrixTests(InitTestCase):
 
     def test_the_matrix_was_captured_for_every_case(self):
         self.assertEqual(sorted(EXPECTED), sorted(matrix.CASES))
-
-
-@unittest.skipIf(os.name == "nt" or shutil.which("bash") is None or not HAS_GIT, "setup.sh is a Bash script")
-@unittest.skipUnless((matrix.REPO / "setup.sh").is_file(), "setup.sh is gone")
-class SetupShTests(unittest.TestCase):
-    def test_setup_sh_still_writes_the_matrix(self):
-        for case in matrix.CASES:
-            with self.subTest(case=case):
-                tmp = Path(tempfile.mkdtemp(prefix="cortex-init-"))
-                try:
-                    self.assertEqual(matrix.run_setup(case, tmp, matrix.build_spec(tmp)), EXPECTED[case])
-                finally:
-                    shutil.rmtree(tmp, ignore_errors=True)
 
 
 class OptionTests(InitTestCase):
@@ -491,7 +478,7 @@ class OptionTests(InitTestCase):
         self.assertNotIn("submodule deinit", proc.err)
 
     def test_the_team_tier_is_its_own_repository_not_the_projects(self):
-        # setup.sh asked git whether agents/ was in a working tree — true inside the project's own
+        # The setup script asked git whether agents/ was in a working tree — true inside the project's own
         # repository too. The team tier is for an agents/ that is a repository of its own.
         if not HAS_GIT:
             self.skipTest("needs git")

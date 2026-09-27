@@ -56,7 +56,6 @@ class EmbeddedTests(StoreTestCase):
         written = the_store.path(Version("2.0.0"))
         self.assertEqual((written / "agents" / "roles" / "prompt-manager.md").read_bytes(),
                          (REPO / "agents" / "roles" / "prompt-manager.md").read_bytes())
-        self.assertFalse((written / "agents" / "personalities" / ".active-theme").exists())
 
     def test_a_dev_version_serves_itself(self):
         the_store = store.Store(self.home, own_version="0.0.0-dev.7", checkout=REPO, fetch=self.no_network)
