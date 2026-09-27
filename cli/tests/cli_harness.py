@@ -46,6 +46,11 @@ def environment(**extra):
 
 
 def run(*args, cwd=None, env=None, stdin=subprocess.DEVNULL):
-    """Run ``cortex ARGS`` and return the completed process, its output as bytes."""
-    return subprocess.run(command(*args), cwd=cwd, env=environment() if env is None else env,
-                          stdin=stdin, capture_output=True)
+    """Run ``cortex ARGS`` in ``cwd`` and return the completed process, its output as bytes.
+
+    ``PWD`` names ``cwd``, as a shell that changed into it would set it.
+    """
+    env = environment() if env is None else dict(env)
+    if cwd is not None:
+        env.setdefault("PWD", str(cwd))
+    return subprocess.run(command(*args), cwd=cwd, env=env, stdin=stdin, capture_output=True)

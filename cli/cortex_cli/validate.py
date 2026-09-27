@@ -10,12 +10,13 @@ where the script found it.
 
 from __future__ import annotations
 
-import os
 from typing import List
 
 from cortex_core import validate
 
+from .paths import working_directory
+
 
 def run(args: List[str]) -> int:
-    project = os.getcwd()
+    project = working_directory()
     return validate.main(args, project_root=project, base_root=f"{project}/cortex", prog="cortex validate")

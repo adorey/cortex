@@ -3,6 +3,7 @@
 import ast
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -68,6 +69,38 @@ class HelpTests(unittest.TestCase):
 
     def test_lines_end_with_lf_on_every_platform(self):
         self.assertNotIn(b"\r\n", harness.run("--help").stdout)
+
+
+@unittest.skipIf(os.name == "nt", "a symbolic link needs a privilege on Windows")
+class WorkingDirectoryTests(unittest.TestCase):
+    """The project root is the directory as the user's shell names it (paths.working_directory)."""
+
+    def setUp(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-cwd-")).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        (tmp / "real" / "cortex").mkdir(parents=True)
+        (tmp / "link").symlink_to(tmp / "real", target_is_directory=True)
+        self.tmp = tmp
+
+    def project_root(self, pwd):
+        env = harness.environment()
+        if pwd is not None:
+            env["PWD"] = pwd
+        out = harness.run("validate", cwd=self.tmp / "link", env=env).stdout.decode()
+        return next(line.split(":", 1)[1].strip() for line in out.splitlines() if "Project root:" in line)
+
+    def test_through_a_link_the_shells_name_is_kept(self):
+        self.assertEqual(self.project_root(str(self.tmp / "link")), str(self.tmp / "link"))
+
+    def test_a_pwd_naming_another_directory_is_ignored(self):
+        self.assertEqual(self.project_root(str(self.tmp)), str(self.tmp / "real"))
+
+    def test_without_pwd_the_directory_is_resolved(self):
+        # subprocess passes no PWD of its own: harness.run sets one only from cwd, and here the
+        # environment is given, without it.
+        env = harness.environment()
+        out = subprocess.run(harness.command("validate"), cwd=self.tmp / "link", env=env, capture_output=True).stdout
+        self.assertIn(f"Project root:  {self.tmp / 'real'}".encode(), out)
 
 
 def absolute_imports(source):
