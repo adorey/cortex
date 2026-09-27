@@ -291,3 +291,22 @@ Acceptance criteria:
 - **The binaries are attested, not only the archives** (§3.1): the attestation of an archive names the archive's digest, which nobody holds once it is unpacked. The binary inside each one is attested too, so that `gh attestation verify ~/.cortex/bin/cortex --repo adorey/cortex` checks the installed file itself.
 - **The install scripts** (§3.2): both take `CORTEX_RELEASES_URL` for a mirror serving the releases' layout — how CI installs the binary it has just built, from a local server. `install.sh` runs from a function called on its last line — piped from `curl`, a download cut short runs nothing — and runs the binary once before moving it into place, from a directory inside `$CORTEX_HOME`: a binary that cannot run — an older glibc — is never installed, and `/tmp` may be mounted `noexec`. `install.ps1` takes PowerShell's `-Version` and `-Name` for `install.sh`'s `VERSION` and `--name`, writes the user's `PATH` in the registry as it is stored — `%VARIABLES%` unexpanded — and can leave it alone, with `-NoModifyPath` or `CORTEX_NO_MODIFY_PATH=1`. On Windows on ARM it installs the `x86_64` build, which Windows runs under emulation; no build of its own is made.
 - **The project root is the directory as the shell names it** — `$PWD` when that is the current directory — not as `getcwd` resolves it. macOS keeps its temporary directories behind a link, `/var` to `/private/var`: resolved, the root was no longer a prefix of the paths the user typed, and `--service $PWD/api` printed whole.
+
+### Phase 2 — the store, sync, and what a tool reads
+
+- **Measured: a link does not keep Claude Code inside the project** (§3.5). Claude Code 2.1.273, in its default permission mode:
+  - in `store` mode it reads the spec after asking once for permission, or with no prompt when the store is in its `permissions.additionalDirectories`;
+  - in `link` mode it asks too: it checks the path a link resolves to, and that path is outside the project;
+  - in `copy` mode it reads with no prompt.
+
+  The table of §3.5 said a link serves "a tool that reads only inside the workspace". For this tool it does not, and `copy` is the fallback. Copilot, Cursor and Codex are not measured yet. The table and how to measure are in [the migration guide](../migrating-to-the-binary.md).
+- **On Windows the store's directories take new files** (§3.3). The read-only attribute protects files, not directories. Modifying or deleting a file of the spec fails on every target. Creating a new file beside one succeeds on Windows, and only there. An access-control list that denies it would also stand in the way of removing a version, which #99 will do. None is set.
+- **`cortex validate` finds its roots itself** (§3.8):
+  - In a project, the roots are the project root and the spec `spec` names. It refuses a spec synced for another version than the pinned one — a teammate bumped `version` and this machine has not synced — rather than validating against a spec the project no longer uses.
+  - Without `cortex.toml`, it falls back to the `cortex/` of the current directory. That fallback lasts until phase 5 removes the submodule layout.
+  - In a checkout of Cortex, the checkout is the base (ADR-007 §3.1).
+  - When it cannot validate, it exits `2`, as the script did without a Python.
+- **The spec archive is `git archive` of the tag** — `agents/`, `templates/`, `docs/` as committed, never the working copy — and the binary embeds that same archive for its own version. Other versions are downloaded from `CORTEX_RELEASES_URL` when it is set, as for the install scripts. When the binary's built-in OpenSSL finds no certificates where the build machine kept them — AlmaLinux's `/etc/pki/tls` on a Debian — it loads the system's certificate bundle from where Linux distributions and macOS keep it.
+- **A source checkout stands for the version `CORTEX_SOURCE_VERSION` names**, for the tests that download. A build always carries its stamp and never reads it.
+- **`sync` also says** when `cortex/` in `link` or `copy` mode is missing from `.gitignore`, and when the active theme is neither in the spec nor in the project. Both are notes: it still syncs.
+
