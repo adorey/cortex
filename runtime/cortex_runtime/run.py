@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from cortex_core.workspace import service_index
 
+from .base import base_root_for
 from .context import derive_capabilities, read_project_context, read_project_overview
 from .resolver import build_system_prompt, find_workflow_relpath, layers_for, read_resolved
 from .safety import ActionPolicy
@@ -76,27 +77,31 @@ def _service_inside(service: Optional[str]) -> Optional[str]:
 
 def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> ResolvedRun:
     """Compile a request into a resolved bundle. ``theme`` is the workspace's active theme
-    (deployment config — NOT the gitignored local ``.active-theme`` marker)."""
+    (deployment config — NOT the gitignored local ``.active-theme`` marker). The base is the
+    store's copy of the version the project's ``cortex.toml`` pins, or ``{root}/cortex`` without
+    one (ADR-008 §3.6): a version the store lacks is a ``ValueError``, as a bad service is."""
     root = Path(root)
     req = replace(req, service=_service_inside(req.service))
+    base_root = base_root_for(root)
 
-    capabilities = derive_capabilities(root, req.service)
+    capabilities = derive_capabilities(root, req.service, base_root=base_root)
     system_prompt = build_system_prompt(
         role=req.role,
         service=req.service,
         theme=theme,
         root=root,
+        base_root=base_root,
         capabilities=capabilities,
         project_overview=read_project_overview(root, req.service),
-        workspace_services=service_index(root, active=req.service),
+        workspace_services=service_index(root, base_root, active=req.service),
         project_context=read_project_context(root, req.service),
     )
 
     workflow_text: Optional[str] = None
     if req.workflow:
-        wf_rel = find_workflow_relpath(req.workflow, root)
+        wf_rel = find_workflow_relpath(req.workflow, root, base_root=base_root)
         if wf_rel:
-            workflow_text = read_resolved("workflows", wf_rel, req.service, root) or None
+            workflow_text = read_resolved("workflows", wf_rel, req.service, root, base_root=base_root) or None
 
     # Validate & normalise the per-request autonomy (raises ValueError on an unknown action).
     policy = ActionPolicy.from_names(req.autonomy)
@@ -105,7 +110,7 @@ def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> Res
         system_prompt=system_prompt,
         capabilities=capabilities,
         workflow=workflow_text,
-        layers=layers_for(req.role, theme, root),
+        layers=layers_for(req.role, theme, root, base_root=base_root),
         model=req.model,
         allowed_actions=sorted(k.value for k in policy.allowed),
     )
