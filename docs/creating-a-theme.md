@@ -23,12 +23,14 @@ A theme is a **personality layer** that sits on top of the technical roles and c
 ## 📁 Theme structure
 
 ```
-cortex/agents/personalities/{theme-name}/
+agents/personalities/{theme-name}/
 ├── README.md         # Theme description and instructions
 ├── theme.md          # Global tone, communication rules, narrative context
 ├── characters.md     # Role → character mapping + traits + quotes
 └── {Character}.md    # (optional) Individual card per character
 ```
+
+A theme of your own lives in your project's `agents/personalities/` (see *Where can custom themes live?* below). The themes Cortex ships have the same structure, at `cortex/agents/personalities/` in the spec.
 
 > **Note on roles:** Cortex roles are organised by category in `roles/`.
 > Paths in character cards follow the pattern `../../roles/{category}/{role}.md`.
@@ -39,8 +41,10 @@ cortex/agents/personalities/{theme-name}/
 ### 1. Create the folder
 
 ```bash
-mkdir -p cortex/agents/personalities/my-theme
+mkdir -p agents/personalities/my-theme
 ```
+
+At the project root — or under `{workspace_root}/` or `{service}/` in workspace mode. Not under `cortex/`: the spec is read-only. To ship the theme with Cortex, create it in a checkout of the Cortex repository, test it in a host project with `cortex sync --from PATH`, then open a PR.
 
 ### 2. Create `theme.md`
 
@@ -139,45 +143,35 @@ Project context is in `../../project-overview.md` (vision & business) and `../..
 [Short description of the theme]
 
 ## Usage
-Activate this theme with:
-\`\`\`bash
-./cortex/setup.sh --theme my-theme
+Activate this theme in `cortex.toml` (the team's) or `cortex.local.toml` (yours only):
+\`\`\`toml
+theme = "my-theme"
 \`\`\`
 ```
 
 ### 5. Activate the theme
 
-**At install time:**
+**For the team** — `theme` in `cortex.toml`, committed:
 
-```bash
-./cortex/setup.sh --theme my-theme
+```toml
+theme = "my-theme"
 ```
 
-This regenerates the bootstrap file for your AI tool (e.g. `.github/copilot-instructions.md` for Copilot, `CLAUDE.md` for Claude Code, etc.) and writes `my-theme` to `agents/personalities/.active-theme`.
+`cortex init --theme my-theme` writes it at install time; after that, edit it by hand. `cortex init --theme` checks that the theme exists in the Cortex version it pins, so for a theme of your project's own, run `cortex init` with the default theme, then set `theme` in `cortex.toml`.
 
-**Switch theme post-install (no setup re-run needed):**
+**For yourself only** — `theme` in `cortex.local.toml`, which git ignores. It overrides the team's:
 
-The active theme is stored in a single marker file **inside cortex**:
-
-```bash
-echo "my-theme" > cortex/agents/personalities/.active-theme
+```toml
+theme = "star-wars"
 ```
 
-The PM reads this file at the start of every conversation. The new theme takes effect immediately on the next prompt — no regeneration of `CLAUDE.md` / `copilot-instructions.md` required.
+**Disable personality entirely** — `theme = "none"`, in either file. It is what `cortex init --no-personality` writes in `cortex.toml`. That flag also leaves the personality step out of the instructions file it writes, so a developer's own `theme` then has no effect.
 
-**Disable personality entirely:**
+The PM reads the theme at the start of every conversation: a change takes effect on the next conversation — no regeneration of `CLAUDE.md` / `copilot-instructions.md` required. `cortex sync` warns when the active theme is found neither in the spec nor in `agents/personalities/`.
 
-```bash
-echo "none" > cortex/agents/personalities/.active-theme
-```
-
-(Equivalent to having run `./cortex/setup.sh --no-personality`.)
-
-> **Why is the marker inside cortex but gitignored?**
+> **Why two files?**
 >
-> The marker is a **cortex concern** — it tells the framework which theme to load. So it lives in `cortex/agents/personalities/.active-theme`. But cortex's own [`.gitignore`](../.gitignore) excludes it, because the choice is **per-developer** (like editor color scheme), not framework state. Alice can prefer H2G2 humor while Bob runs in no-personality mode — neither pollutes git diffs.
->
-> If your team explicitly *wants* a shared default theme, remove the line from `cortex/.gitignore` and commit the marker. (You'll need to push that change to your fork of cortex if you maintain one.)
+> The team's default theme is a **project** decision, so it lives in the committed `cortex.toml` — a fresh clone gets it. A developer's own choice is **per-developer** (like editor color scheme), so it lives in `cortex.local.toml`, which git ignores. Alice can prefer H2G2 humor while Bob runs in no-personality mode — neither pollutes git diffs.
 
 ## 🎭 Where can custom themes live?
 
@@ -193,7 +187,7 @@ A custom theme can live in **any** of these places (the cascade resolves at boot
 A theme that exists **only** in your overlay tree (no cortex base) is fully supported. The PM walks the cascade and finds the files wherever they are. You don't need to PR your theme upstream just to use it.
 
 When you add a custom theme:
-- Set its name in the marker: `echo "my-theme" > cortex/agents/personalities/.active-theme`
+- Set its name as `theme` in `cortex.toml` by hand (`cortex init --theme` only accepts the themes of the pinned Cortex version), or in `cortex.local.toml` for yourself only
 - Add `theme.md` and `characters.md` (and optional character cards) at one of the cascade paths above
 - No `<!-- OVERLAY -->` header is needed for fully custom themes — that header is only for **extending** an existing cortex theme
 
