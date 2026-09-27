@@ -60,6 +60,13 @@ class ApiTests(unittest.TestCase):
         r = self.client.post("/run", json={"workspace": "host"})
         self.assertEqual(r.status_code, 422)
 
+    def test_a_service_outside_the_workspace_422(self):
+        # The service names a folder of the workspace: its files reach the prompt, a neighbour's must not.
+        for service in ("../elsewhere", "/etc", "svc-a/../../elsewhere"):
+            with self.subTest(service=service):
+                r = self.client.post("/run", json={"workspace": "host", "role": "lead-backend", "service": service})
+                self.assertEqual(r.status_code, 422, r.text)
+
     def test_unknown_workspace_404(self):
         r = self.client.post("/run", json={"workspace": "ghost", "role": "lead-backend"})
         self.assertEqual(r.status_code, 404)

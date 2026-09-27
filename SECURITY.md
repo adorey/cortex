@@ -64,9 +64,13 @@ with no demonstrated impact.
 Cortex composes instructions that an LLM then acts on. Two classes of issue are worth
 reporting even though they are not memory-safety bugs:
 
-- **Instruction injection through a layer** — content in a role, capability, personality or
-  overlay file that can make an agent ignore its guardrails, escalate its own permissions,
-  or exfiltrate context.
+- **Instruction injection through a layer or a project file** — content that can make an
+  agent ignore its guardrails, escalate its own permissions, or exfiltrate context, in a role,
+  capability, personality or overlay file, or in a project's own files: every
+  `project-overview.md` and `project-context.md` of the workspace and of its services — each
+  versioned in its own repository, not Cortex's — and the title of every service's overview,
+  which the runtime's service index shows. They all reach the system prompt of an agent that
+  holds tools, and a run can be started by a webhook (ADR-002 §9).
 - **Cascade escape** — an overlay or template able to read or write outside the host
   project's expected paths.
 

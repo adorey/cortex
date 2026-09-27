@@ -54,6 +54,15 @@ class AsyncApiTests(unittest.TestCase):
             self.assertEqual(rec["lifecycle"], "done")
             self.assertEqual(rec["state"], "resolved")
 
+    def test_a_request_the_run_would_refuse_is_refused_before_it_is_queued(self):
+        # Refused at once, 422 — not accepted, 202, then left queued for ever by a failing worker.
+        with TestClient(self.app) as client:
+            for extra in ({"service": "../elsewhere"}, {"autonomy": ["no-such-action"]}):
+                with self.subTest(extra=extra):
+                    r = client.post("/run", json={"workspace": "host", "role": "support-engineer", "subject": "R", **extra})
+                    self.assertEqual(r.status_code, 422, r.text)
+            self.assertEqual(client.get("/runs?workspace=host").json(), {"runs": []})
+
     def test_queued_record_is_visible_before_completion(self):
         with TestClient(self.app) as client:
             run_id = client.post("/run", json={"workspace": "host", "role": "support-engineer",

@@ -14,6 +14,11 @@ npm install -g @anthropic-ai/claude-code
 claude --version        # verify it's on PATH
 ```
 
+The runtime hands the CLI its system prompt in a file, `--append-system-prompt-file`, and the task
+on stdin — neither fits Linux's 128 KiB cap on one argument once the prompt carries the project's
+files. An older CLI without that option fails the run with *unknown option*: check that
+`claude --help` lists it — verified with `claude` 2.1.273.
+
 ## Step 2 — Authenticate with your subscription (one-time)
 
 ```bash
@@ -38,7 +43,7 @@ export DISABLE_TELEMETRY=1        # optional, for a service
 ```bash
 cd runtime
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[serve]"        # if venv fails: sudo apt install python3-venv
+pip install -e ../core -e ".[serve]"   # cortex-core first; if venv fails: sudo apt install python3-venv
 ```
 
 ## Step 5 — Run the service against your project

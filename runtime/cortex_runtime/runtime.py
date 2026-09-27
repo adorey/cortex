@@ -114,9 +114,12 @@ class Runtime:
         """Validate + create a **queued** run record and return its id, WITHOUT executing
         (ADR-005). The async API returns this immediately (202); a worker then calls
         :meth:`execute`. ``run_id`` lets the caller supply a pre-minted id (an idempotency
-        claim). Validation (unknown workspace/role) still fails fast, synchronously."""
+        claim). Validation still fails fast, synchronously: the request is resolved here as the
+        run will resolve it — an unknown workspace is a 404, a service outside the workspace or an
+        unknown autonomy action a 422 — before any record is queued."""
         req = build_run_request(payload, alias)
-        self._workspace(req.workspace)        # validate now → 404 before enqueueing
+        wcfg = self._workspace(req.workspace)
+        resolve_run(req, wcfg.root, wcfg.theme)
         subject = self._subject(req)
         run_id = self.cfg.store.start_run(req.workspace, req.role, subject, req.model, run_id=run_id)
         return {"run_id": run_id, "subject": subject}
