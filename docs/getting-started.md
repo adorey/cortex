@@ -93,7 +93,7 @@ cortex sync
 
 `sync = "link"` or `sync = "copy"` in `cortex.toml` makes a mode the team's default — `cortex init --link` or `--copy` writes it, and adds `cortex/` to `.gitignore`; a flag overrides it for one run. `cortex sync --from PATH` uses a checkout of Cortex instead of the store, with no version check: it is for contributors testing an unreleased spec.
 
-Which mode a tool needs is measured, not assumed — the table is in [Moving to the `cortex` binary](migrating-to-the-binary.md). So far only Claude Code is measured: in `store` mode it asks for permission to read the store once per session, or not at all when `~/.cortex/versions` is in its `permissions.additionalDirectories`; `copy` needs nothing.
+Which mode a tool needs is measured, not assumed — the table is in [Moving to the `cortex` binary](migrating-to-the-binary.md). So far only Claude Code is measured: in `store` mode it asks for permission to read the store once per session, and `copy` needs nothing. With `claude_access = true` in `cortex.toml` — `cortex init --tool claude --claude-access`, or the question `cortex init` asks on a terminal — `cortex sync` writes the store's path in `.claude/settings.local.json`, and Claude Code reads it without asking. `cortex sync --claude-access` does the same for you alone.
 
 ### Step 3 — Fill in the context files
 
