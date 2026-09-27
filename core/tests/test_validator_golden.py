@@ -103,6 +103,15 @@ class CoreTests(unittest.TestCase):
                 with self.subTest(case=case, run=harness.run_key(args)):
                     self.assertEqual(harness.execute(case, args, harness.run_core), EXPECTED[case][harness.run_key(args)])
 
+    def test_a_crlf_checkout_gives_the_same_report(self):
+        # What git checks out on Windows with core.autocrlf — the base's files and the project's
+        # alike — reads as the LF files it was committed as (ADR-008 §3.1).
+        for case in harness.cases():
+            for args in harness.runs(case):
+                with self.subTest(case=case, run=harness.run_key(args)):
+                    self.assertEqual(harness.execute(case, args, harness.run_core, crlf=True),
+                                     EXPECTED[case][harness.run_key(args)])
+
 
 if __name__ == "__main__":
     unittest.main()

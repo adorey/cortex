@@ -165,14 +165,13 @@ class TestLayoutTests(unittest.TestCase):
         ]
         self.assertEqual(offenders, [])
 
-    def test_the_macos_job_runs_every_order_free_module(self):
-        # The macOS job lists its modules by name: a new one must be listed there, or be named
-        # here as depending on the order of an ext4 directory listing.
-        order_dependent = {"test_validate", "test_validator_golden", "test_shim"}
+    def test_the_macos_job_runs_the_whole_suite(self):
+        # It once listed its modules by name, leaving out those that depended on the order of an
+        # ext4 directory listing. The validator now lists in name order (ADR-008 §3.1): a module
+        # added later must run on macOS too, without anyone listing it.
         workflow = (self.REPO / ".github" / "workflows" / "core-tests.yml").read_text(encoding="utf-8")
-        listed = set(re.findall(r"\btests\.(test_\w+)", workflow))
-        present = {p.stem for p in (self.REPO / "core" / "tests").glob("test_*.py")}
-        self.assertEqual(present - order_dependent, listed)
+        self.assertIn("/usr/bin/python3 -m unittest discover -s tests", workflow)
+        self.assertEqual(re.findall(r"\btests\.(test_\w+)", workflow), [])
 
 
 if __name__ == "__main__":
