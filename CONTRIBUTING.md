@@ -49,6 +49,7 @@ cortex/
 
 - Git (for cloning your fork)
 - Bash 4+ (for testing `setup.sh`)
+- Python 3.9 or later (for `bin/validate-overlays.sh`, which runs its checks from `core/` — until the native binary of ADR-008)
 - A test host project where you can mount your fork — either as a Git submodule or as a standalone clone
 
 ### Clone & test loop
@@ -83,6 +84,8 @@ cat CLAUDE.md   # (or .github/copilot-instructions.md, etc.)
 ./cortex/bin/validate-overlays.sh           # checks overlay file integrity (host projects)
 bash bin/check-english.sh                   # in the cortex repository: tracked content is English (CI gate)
 ```
+
+`validate-overlays.sh` needs Python 3.9 or later: it runs its checks from the `core/` of the Cortex checkout, with nothing to install.
 
 If you change a base file under `cortex/agents/`, run `validate-overlays.sh` against any host project that uses overlays — your rename may break their files.
 

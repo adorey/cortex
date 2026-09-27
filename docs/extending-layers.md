@@ -235,6 +235,8 @@ Before committing overlays, run:
 ./cortex/bin/validate-overlays.sh --strict                            # warnings → errors
 ```
 
+> The validator needs **Python 3.9 or later** — `python3` or `python` on `PATH`. It runs its checks from `cortex/core/`, with nothing to install; without a usable Python it exits `2` and says so. This lasts until the native binary of [ADR-008](https://github.com/adorey/cortex/issues/37).
+
 The validator catches the common mistakes:
 - Overlay header missing or malformed
 - `Base:` points to a non-existent file (typo, or upstream removed it)
