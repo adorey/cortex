@@ -271,9 +271,14 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         described = f"Cortex {version}"
     if project is None and theme is None:
         theme = "h2g2"
-    if theme not in (None, "none") and not (spec / "agents" / "personalities" / theme).is_dir():
-        themes = sorted(p.name for p in (spec / "agents" / "personalities").iterdir() if p.is_dir())
-        raise InitError(f"theme '{theme}' is not in {described} — the themes are: {', '.join(themes)}")
+    # A theme Cortex ships, or one of the project's own, in its agents/personalities/.
+    own_themes = root / "agents" / "personalities"
+    if theme not in (None, "none") and not any((base / theme).is_dir()
+                                               for base in (spec / "agents" / "personalities", own_themes)):
+        themes = sorted({p.name for base in (spec / "agents" / "personalities", own_themes) if base.is_dir()
+                         for p in base.iterdir() if p.is_dir()})
+        raise InitError(f"theme '{theme}' is neither in {described} nor in agents/personalities/ — "
+                        f"the themes are: {', '.join(themes)}")
     # cortex.toml: a new one, or only the keys the options name.
     if project is None:
         values = {"version": str(version), "theme": theme, **({"sync": mode} if mode else {})}
