@@ -7,6 +7,13 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+- **The `cortex` command** ([ADR-008](docs/adr/ADR-008-cortex-binary.md)): a native binary for Linux (`x86_64`, `aarch64`, glibc 2.28 or later), macOS (Apple silicon) and Windows (`x86_64`) that needs no Python. `cortex validate` runs the overlay checks of `bin/validate-overlays.sh` — same options, same report, same exit codes.
+- **A one-line install**: `curl -fsSL …/install.sh | sh` on Linux and macOS, `irm …/install.ps1 | iex` on Windows. Both check the download against the release's `SHA256SUMS` and install into `~/.cortex/bin`, as `cortex-ai` when another `cortex` comes first on `PATH`. Each release carries the binaries, their `SHA256SUMS` and a build-provenance attestation for each.
+
+### Changed
+- The validator lists files in name order — not in the file system's — so that its report is the same on every platform.
+
 ## [0.10.1] - 2026-09-27 — Mostly Harmless _(Released)_
 [Full notes](changelog/0.10.1.md)
 
