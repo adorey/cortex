@@ -1,7 +1,7 @@
 """``cortex validate`` — ADR-007's validator, run by the command (ADR-008 §3.8).
 
-Same checks, same report, same exit codes as ``bin/validate-overlays.sh``: the options are the
-core's own, and the core parses them. The command only says which two roots it validates:
+Same checks, same report, same exit codes as the validator script it replaces: the options are
+the core's own, and the core parses them. The command only says which two roots it validates:
 
 - in a project — the nearest directory holding ``cortex.toml`` — the project root, and the spec
   ``cortex.local.toml`` names: the pinned version, or a checkout ``cortex sync --from`` gave;

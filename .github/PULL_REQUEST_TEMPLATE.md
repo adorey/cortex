@@ -23,7 +23,7 @@ Closes #
 
 ```bash
 bash bin/check-english.sh
-shellcheck --severity=warning setup.sh bin/*.sh
+shellcheck --severity=warning bin/*.sh && shellcheck --shell=sh install.sh
 (cd runtime && python -m pytest -q)
 ```
 

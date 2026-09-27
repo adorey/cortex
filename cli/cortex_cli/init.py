@@ -1,7 +1,7 @@
-"""``cortex init`` — ``setup.sh``, at parity (ADR-008 §3.7).
+"""``cortex init`` — the setup script of Cortex 0.x, at parity (ADR-008 §3.7).
 
 Same options, the same defaults for a new project (``--theme h2g2``, ``--tool copilot``), same files at the same paths
-as ``setup.sh``: the tool's instructions file, the root ``project-overview.md`` and
+as the script: the tool's instructions file, the root ``project-overview.md`` and
 ``project-context.md`` when missing, and in workspace mode a pair per service carrying its
 ``@alias`` — the basename of its folder — plus the team tier when ``agents/`` is its own git
 working tree. The files are written byte for byte as the script wrote them, from the templates of
@@ -53,7 +53,7 @@ class InitError(Exception):
 
 
 # --------------------------------------------------------------------------- #
-# The files, byte for byte as setup.sh wrote them
+# The files, byte for byte as the setup script wrote them
 # --------------------------------------------------------------------------- #
 
 def instructions(template: bytes, personality: bool) -> bytes:
@@ -80,7 +80,7 @@ def with_alias(template: bytes, alias: str) -> bytes:
 
 def is_git_working_tree(directory: Path) -> bool:
     """``agents/`` is its own git working tree: it holds a ``.git`` — a directory, or the file a
-    worktree or a submodule has. ``setup.sh`` asked ``git -C agents rev-parse``, which is also true
+    worktree or a submodule has. The setup script asked ``git -C agents rev-parse``, which is also true
     of any ``agents/`` inside the project's own repository (ADR-008 §9)."""
     return (directory / ".git").exists()
 
@@ -390,7 +390,7 @@ def run(args: List[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="cortex init",
         description="Make a directory a Cortex project: its cortex.toml, the AI tool's instructions file, "
-                    "project-overview.md and project-context.md — setup.sh, at parity (ADR-008 §3.7).")
+                    "project-overview.md and project-context.md (ADR-008 §3.7).")
     parser.add_argument("dir", nargs="?", metavar="DIR", help="the project's root (default: the current directory)")
     parser.add_argument("--theme", help="the team's personality theme (default: h2g2, or the one cortex.toml names)")
     parser.add_argument("--no-personality", action="store_true", help="no personality layer — wins over --theme")

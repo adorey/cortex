@@ -59,7 +59,7 @@ body:
     attributes:
       label: Files or area touched
       description: Best guess — it helps spot two tasks that will conflict in the same stack.
-      placeholder: runtime/cortex_runtime/resolver.py, bin/validate-overlays.sh
+      placeholder: runtime/cortex_runtime/resolver.py, cli/cortex_cli/sync.py
 
   - type: textarea
     id: notes

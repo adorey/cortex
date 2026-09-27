@@ -2,13 +2,14 @@
 
 Each case under ``fixtures/validator/cases/`` becomes a throwaway host project: the shared
 base goes to ``{project}/cortex/agents/``, the case's own files on top. ``expected.json`` was
-captured from the Bash implementation of ``bin/validate-overlays.sh`` (Cortex 0.9.0), before it
-became a shim, then re-captured deliberately for each behaviour change of ADR-007 phase 4 —
+captured from the Bash validator of Cortex 0.9.0, before the port replaced it, then re-captured
+deliberately for each behaviour change of ADR-007 phase 4 —
 ``missing-header`` and ``header-after-line-10`` (#76), the ``absent-*`` cases (#81), the projects
 inside a directory named ``agents`` or ``cortex`` and ``scope-workspace-in-service-shallow`` (#84),
 the workspace's ``── Scope: . ──`` header, ``escape-in-field`` and ``control-char-in-field`` (#85),
 then the review's fixes to #76 — ``non-overridable-without-header``, ``custom-theme``,
-``readme-in-layer``, ``missing-header-in-service`` and the wording of ``MISSING_HEADER``.
+``readme-in-layer``, ``missing-header-in-service`` and the wording of ``MISSING_HEADER`` — and once
+for ADR-008, whose ``cortex validate`` the help now names.
 The core must reproduce it byte for byte, the temporary directory aside.
 
 A case may carry a ``case.json``:
@@ -27,8 +28,8 @@ the script's grep and sed did in the C locale; under a UTF-8 locale they also to
 spaces for spaces (``unicode-space-in-field``). Pinning the locale measures the script in the
 one the port reproduces, whatever the machine running the tests (ADR-007 §9).
 
-Re-capturing now records what the core prints, through the shim. Do it only for a deliberate
-change of the validator's behaviour, and review the diff of ``expected.json`` line by line:
+Re-capturing records what the core prints. Do it only for a deliberate change of the
+validator's behaviour, and review the diff of ``expected.json`` line by line:
 
     cd core && python3 -m tests.validator_harness --capture
 """
@@ -45,11 +46,12 @@ HERE = Path(__file__).resolve().parent
 FIXTURES = HERE / "fixtures" / "validator"
 CORE = HERE.parent
 REPO = CORE.parent
-SCRIPT = REPO / "bin" / "validate-overlays.sh"
 EXPECTED = FIXTURES / "expected.json"
 DEFAULT_RUNS = [[], ["--strict"]]
-# How bin/validate-overlays.sh runs the core — kept in step with the script.
-SHIM_CALL = "import sys; sys.path.insert(0, sys.argv.pop(1)); from cortex_core.validate import cli; sys.exit(cli())"
+# The core from source, isolated — no working directory, no PYTHONPATH on sys.path — given the
+# two roots as the cortex command gives them.
+CORE_CALL = ("import sys; sys.path.insert(0, sys.argv.pop(1)); from cortex_core.validate import main; "
+             "sys.exit(main(sys.argv[3:], project_root=sys.argv[1], base_root=sys.argv[2]))")
 
 
 def cases():
@@ -101,21 +103,9 @@ def _run(cmd, env=None, cwd=None):
     return proc.returncode, proc.stdout, proc.stderr
 
 
-def run_script(project, args):
-    """The validator as host projects run it: ``{project}/cortex/bin/validate-overlays.sh``, with
-    the core it runs from at ``{project}/cortex/core`` — where a Cortex checkout has it."""
-    bin_dir = project / "cortex" / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy(SCRIPT, bin_dir / SCRIPT.name)
-    shutil.copytree(CORE / "cortex_core", project / "cortex" / "core" / "cortex_core",
-                    ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)
-    return _run(["bash", str(bin_dir / SCRIPT.name), *args])
-
-
 def run_core(project, args):
-    """The Python port, from the core's source, given the two roots the script derives — called
-    the way the script calls it."""
-    return _run([sys.executable, "-I", "-c", SHIM_CALL, str(CORE), str(project), str(project / "cortex"), *args])
+    """The validator from the core's source, given the project and its base at ``cortex/``."""
+    return _run([sys.executable, "-I", "-c", CORE_CALL, str(CORE), str(project), str(project / "cortex"), *args])
 
 
 def spellings(tmp):
@@ -149,7 +139,7 @@ def execute(case, args, runner, crlf=False):
 
 
 def capture():
-    expected = {case: {run_key(a): execute(case, a, run_script) for a in runs(case)} for case in cases()}
+    expected = {case: {run_key(a): execute(case, a, run_core) for a in runs(case)} for case in cases()}
     EXPECTED.write_text(json.dumps(expected, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     return expected
 

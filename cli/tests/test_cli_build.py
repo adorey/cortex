@@ -36,8 +36,8 @@ class SpecArchiveTests(unittest.TestCase):
         self.assertEqual({m.name.split("/")[0] for m in self.members()}, {"agents", "templates", "docs"})
 
     def test_it_holds_what_git_tracks_and_nothing_else(self):
-        # From the commit, never the working copy: a file nobody committed — the active-theme
-        # marker setup.sh writes, a draft — does not ship.
+        # From the commit, never the working copy: a file nobody committed — a draft, a local
+        # note — does not ship.
         stray = REPO / "docs" / "cortex-build-test-stray.md"
         stray.write_text("not committed\n", encoding="utf-8")
         self.addCleanup(stray.unlink)

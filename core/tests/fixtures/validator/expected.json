@@ -193,7 +193,7 @@
    ],
    "stderr": [
     "Unknown argument: --nope",
-    "Usage: validate-overlays.sh [OPTIONS]",
+    "Usage: cortex validate [OPTIONS]",
     "",
     "Options:",
     "  --service PATH     Validate overlays under a specific service folder only",
@@ -760,7 +760,7 @@
   "--help": {
    "code": 0,
    "stdout": [
-    "Usage: validate-overlays.sh [OPTIONS]",
+    "Usage: cortex validate [OPTIONS]",
     "",
     "Options:",
     "  --service PATH     Validate overlays under a specific service folder only",
@@ -783,7 +783,7 @@
   "-h": {
    "code": 0,
    "stdout": [
-    "Usage: validate-overlays.sh [OPTIONS]",
+    "Usage: cortex validate [OPTIONS]",
     "",
     "Options:",
     "  --service PATH     Validate overlays under a specific service folder only",
