@@ -4,6 +4,7 @@ The live ``AnthropicAgentClient.propose`` needs the SDK + a key and is not exerc
 ``interpret_response`` and ``tool_schemas`` carry the SDK-agnostic logic and are tested in full.
 """
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -74,16 +75,16 @@ class ClaudeCliHelpersTests(unittest.TestCase):
         self.assertEqual(cli_allowed_tools(["db-read", "issue-create", "internal-comment"]), "")
 
     def test_build_argv_shape(self):
-        argv = build_cli_argv("do it", system_prompt="you are X", model="claude-opus-4-8",
+        argv = build_cli_argv(system_prompt_file="/tmp/sp.md", model="claude-opus-4-8",
                               allowed_tools="Read,Grep")
-        self.assertEqual(argv[:3], ["claude", "-p", "do it"])
-        self.assertIn("--append-system-prompt", argv)
+        self.assertEqual(argv[:2], ["claude", "-p"])
+        self.assertEqual(argv[argv.index("--append-system-prompt-file") + 1], "/tmp/sp.md")
         self.assertIn("--allowedTools", argv)
         self.assertEqual(argv[argv.index("--allowedTools") + 1], "Read,Grep")
         self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-4-8")
 
     def test_build_argv_omits_empty_allowed_tools(self):
-        argv = build_cli_argv("x", system_prompt="s", model="m", allowed_tools="")
+        argv = build_cli_argv(system_prompt_file="/tmp/sp.md", model="m", allowed_tools="")
         self.assertNotIn("--allowedTools", argv)
 
     def test_parse_result_extracts_text_and_usage(self):
@@ -95,7 +96,7 @@ class ClaudeCliHelpersTests(unittest.TestCase):
         self.assertEqual(usage["input_tokens"], 100)
 
     def test_build_argv_stream_json_adds_verbose(self):
-        argv = build_cli_argv("x", system_prompt="s", model="m", allowed_tools="Read",
+        argv = build_cli_argv(system_prompt_file="/tmp/sp.md", model="m", allowed_tools="Read",
                               output_format="stream-json")
         self.assertIn("--verbose", argv)
 
@@ -114,7 +115,7 @@ class ClaudeCliHelpersTests(unittest.TestCase):
         self.assertIn("# Support Engineer", out)          # the resolved role still follows
 
     def test_build_argv_passes_mcp_config(self):
-        argv = build_cli_argv("x", system_prompt="s", model="m", allowed_tools="Read",
+        argv = build_cli_argv(system_prompt_file="/tmp/sp.md", model="m", allowed_tools="Read",
                               mcp_config_path="/tmp/mcp.json")
         self.assertEqual(argv[argv.index("--mcp-config") + 1], "/tmp/mcp.json")
 
@@ -150,6 +151,80 @@ class ClaudeCliHelpersTests(unittest.TestCase):
         _, _, actions = parse_cli_stream(stream)
         # Bash was refused (not in allowedTools) → gated=True; Read ran → gated=False
         self.assertEqual(actions, [("Bash", "code-write", True), ("Read", "code-read", False)])
+
+
+
+class CliArgumentSizeTests(unittest.TestCase):
+    """Linux caps one argument at 128 KiB (MAX_ARG_STRLEN): a system prompt or a task past it made
+    the claude CLI fail to start. Neither travels in the argv any more — the system prompt goes in
+    a file, the task on stdin."""
+
+    def test_a_prompt_past_the_argument_limit_reaches_the_cli(self):
+        import os
+        import shutil
+        import stat
+        import tempfile
+        from cortex_runtime.agent_client import ClaudeCodeCliClient
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-cli-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        seen = tmp / "seen.json"
+        fake = tmp / "claude"
+        fake.write_text(f"""#!{sys.executable}
+import json, sys
+argv = sys.argv[1:]
+system = open(argv[argv.index("--append-system-prompt-file") + 1], encoding="utf-8").read()
+json.dump({{"longest_arg": max(map(len, argv)), "system": len(system), "system_tail": system[-5:],
+           "task": len(sys.stdin.read()), "file": argv[argv.index("--append-system-prompt-file") + 1]}},
+          open({str(seen)!r}, "w"))
+print(json.dumps({{"type": "result", "result": "done", "usage": {{}}}}))
+""", encoding="utf-8")
+        fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+        client = ClaudeCodeCliClient(cli=str(fake), root=tmp, timeout=20)   # a task left unsent: fails, not hangs
+        turn = client.propose("S" * 300_000 + "-END-", [{"role": "input", "content": "T" * 300_000}])
+        got = json.loads(seen.read_text(encoding="utf-8"))
+        self.assertEqual(turn.final_text, "done")
+        self.assertLess(got["longest_arg"], 4096)
+        self.assertEqual((got["system_tail"], got["task"]), ("-END-", 300_000))
+        self.assertGreater(got["system"], 300_000)
+        self.assertFalse(os.path.exists(got["file"]), "the system prompt file outlived the run")
+
+    def test_no_temporary_file_outlives_a_failed_run(self):
+        # The prompt file is written, and the MCP config, before the CLI runs: a failure there —
+        # a prompt that does not encode, a config that does not serialise — must not leave them.
+        import shutil
+        import tempfile
+        from unittest import mock
+        from cortex_runtime.agent_client import ClaudeCodeCliClient
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-cli-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        scratch = tmp / "tmpdir"
+        scratch.mkdir()
+        fake = tmp / "claude"
+        fake.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake.chmod(0o755)
+        cases = ((ClaudeCodeCliClient(cli=str(fake), root=tmp), "caf\udce9"),
+                 (ClaudeCodeCliClient(cli=str(fake), root=tmp, mcp_servers={"x": object()}), "fine"))
+        for client, system_prompt in cases:
+            with self.subTest(system_prompt=system_prompt), mock.patch.object(tempfile, "tempdir", str(scratch)):
+                with self.assertRaises(Exception):
+                    client.propose(system_prompt, [{"role": "input", "content": "t"}])
+                self.assertEqual(sorted(p.name for p in scratch.iterdir()), [])
+
+    def test_a_cli_that_cannot_start_says_so(self):
+        import shutil
+        import tempfile
+        from cortex_runtime.agent_client import ClaudeCodeCliClient
+
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-cli-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        fake = tmp / "claude"
+        fake.write_text("#!/nonexistent/interpreter\n", encoding="utf-8")
+        fake.chmod(0o755)
+        client = ClaudeCodeCliClient(cli=str(fake), root=tmp)
+        with self.assertRaisesRegex(RuntimeError, "claude CLI could not be started"):
+            client.propose("s", [{"role": "input", "content": "t"}])
 
 
 if __name__ == "__main__":
