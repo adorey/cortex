@@ -1,7 +1,8 @@
 name: cli tests
 
-# The `cortex` command (ADR-008), from source, on the three platforms it ships for. The built
-# binary replays the same suite in the binary workflow; this one runs on every change first.
+# The `cortex` command (ADR-008), from source, on the three platforms it ships for, and the
+# install scripts against a release served from the runner. The built binary replays the same
+# suite in the binary workflow; this one runs on every change first.
 on:
   push:
     paths:
@@ -9,6 +10,8 @@ on:
       - "core/**"
       - "agents/**"
       - "templates/**"
+      - "install.sh"
+      - "install.ps1"
       - ".github/workflows/cli-tests.yml"
   pull_request:
     paths:
@@ -16,6 +19,8 @@ on:
       - "core/**"
       - "agents/**"
       - "templates/**"
+      - "install.sh"
+      - "install.ps1"
       - ".github/workflows/cli-tests.yml"
 
 permissions:
