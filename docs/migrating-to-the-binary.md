@@ -98,13 +98,13 @@ Whether a tool reads the spec in each mode is measured, not assumed. Each measur
 
 What it means today:
 
-- **Claude Code.** Keep the default `store` mode, and allow the store once. You can answer the first prompt of a session. Or you can add it to your *user* settings, `~/.claude/settings.json`, which then covers every project:
+- **Claude Code.** Keep the default `store` mode, and let `cortex sync` allow the store. It needs one of these:
+  - `claude_access = true` in `cortex.toml`, for the whole team. `cortex init --tool claude` asks for it on a terminal, and `--claude-access` sets it unattended.
+  - `cortex sync --claude-access`, for you alone: it writes `claude_access = true` in `cortex.local.toml`.
 
-  ```json
-  { "permissions": { "additionalDirectories": ["~/.cortex/versions"] } }
-  ```
+  `cortex sync` then keeps the store's path of the pinned version in `.claude/settings.local.json`, under `permissions.additionalDirectories`. That file holds Claude Code's settings for you on this machine, which git ignores. Sync replaces the path when the version changes, and removes it when access is turned off. Measured with Claude Code 2.1.273: the Prompt Manager's card is reached with no prompt at all.
 
-  Use `sync = "copy"` in `cortex.toml` when a team wants no prompt and no setting.
+  Without it, you answer the permission prompt once per session. `sync = "copy"` needs no setting either.
 - **The tools not measured yet** start in `store`. Switch the project to `link`, then to `copy`, if a conversation does not reach the Prompt Manager's card.
 
 ### How a measurement is made
