@@ -2,6 +2,7 @@
 
 <!-- One or two sentences. What is different after this pull request? -->
 
+<!-- One keyword per issue, one per line: `Closes #42, #43` closes #42 only. -->
 Closes #
 
 ## Why
@@ -35,4 +36,4 @@ shellcheck --severity=warning setup.sh bin/*.sh
 - [ ] Everything added is in **English** — `bin/check-english.sh` passes
 - [ ] Labelled like the issues it delivers — at least one `type:*`, plus `adr:NNN` and `phase:N` for ADR work
 - [ ] No secret, real email, real organisation name or deployment-specific value added
-- [ ] ADR work: every task delivered here is listed in `Closes`, and will be repeated in the release pull request — [why](../blob/main/docs/process/adr-implementation.md#6-commits-and-closing-keywords)
+- [ ] ADR work: every task delivered here has its own `Closes #NN` line, and will be repeated in the release pull request — [why](../blob/main/docs/process/adr-implementation.md#6-commits-and-closing-keywords)
