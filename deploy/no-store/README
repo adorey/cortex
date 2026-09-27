@@ -1,0 +1,1 @@
+An empty directory, mounted as the store when CORTEX_STORE_PATH is unset (compose.yaml).
