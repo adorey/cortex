@@ -23,7 +23,7 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import List, Optional, TextIO
 
-from . import config, store, sync
+from . import config, console, store, sync
 from .paths import display, working_directory
 
 TOOLS = {
@@ -83,10 +83,12 @@ def service_path(name: str) -> str:
 
 
 def ask(out: TextIO, question: str) -> bool:
-    """A yes-or-no on the terminal, yes by default."""
+    """A yes-or-no on the terminal: yes by default, on Enter — no when stdin ends before any answer."""
     out.write(question)
     out.flush()
-    return sys.stdin.readline().strip().lower() not in ("n", "no")
+    line = sys.stdin.readline()
+    out.write("\n" if not line.endswith("\n") else "")
+    return bool(line) and line.strip().lower() not in ("n", "no")
 
 
 def prompt_services(out: TextIO) -> List[str]:
@@ -152,8 +154,7 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
     # Claude Code asks before it reads the store (ADR-008 §9): on a terminal, offer the team setting.
     writes_project = not existing_project or options.force
     claude_access = options.claude_access
-    if claude_access is None and options.tool == "claude" and writes_project and sys.stdin is not None \
-            and sys.stdin.isatty():
+    if claude_access is None and options.tool == "claude" and writes_project and console.stdin_is_terminal():
         claude_access = ask(out, "Let Claude Code read the Cortex spec without asking for permission — "
                                  "claude_access = true in cortex.toml? [Y/n] ")
 
@@ -199,7 +200,7 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
 
     if workspace:
         names = options.service
-        if not names and sys.stdin is not None and sys.stdin.isatty():
+        if not names and console.stdin_is_terminal():
             names = prompt_services(out)
         for name in names:
             folder = root / service_path(name)
