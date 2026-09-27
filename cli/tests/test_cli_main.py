@@ -93,6 +93,8 @@ class WorkingDirectoryTests(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp(prefix="cortex-cwd-")).resolve()
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         (tmp / "real" / "cortex").mkdir(parents=True)
+        (tmp / "real" / "cortex.toml").write_text('version = "1.0.0"\ntheme = "h2g2"\n', encoding="utf-8")
+        (tmp / "real" / "cortex.local.toml").write_text('spec = "cortex"\n', encoding="utf-8")
         (tmp / "link").symlink_to(tmp / "real", target_is_directory=True)
         self.tmp = tmp
 
