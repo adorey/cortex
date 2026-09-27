@@ -5,7 +5,7 @@ name: binary
 # built binary, with no Python on its PATH.
 #
 # Pushing a version's tag builds the same binaries from it and releases them: the release is made
-# a draft, from changelog/X.Y.Z.md, gets its assets — one archive per target, SHA256SUMS over them,
+# a draft, from changelog/X.Y.Z.md, gets its assets — one archive per target, the spec archive, SHA256SUMS over them,
 # and a build-provenance attestation for each (`gh attestation verify`) — and is published only
 # then. Released the other way round, `releases/latest/download/…` would name a release without
 # assets for as long as the build ran, and for good when a target failed.
@@ -217,6 +217,11 @@ jobs:
           pattern: cortex-*
           merge-multiple: true
 
+      # The spec of the release, from the tag's tree — what `cortex sync` downloads for a project
+      # pinned to this version by a newer binary (ADR-008 §3.3).
+      - name: The spec archive
+        run: python3 cli/build.py --spec-archive "$RUNNER_TEMP/release-assets"
+
       # Asset names carry no version, so that releases/latest/download/<asset> always names the
       # latest release's: the release itself is the version.
       - name: SHA256SUMS
@@ -226,7 +231,7 @@ jobs:
       # --repo adorey/cortex` then checks the installed file itself.
       - name: The binaries inside the archives
         run: |
-          for archive in "$RUNNER_TEMP/release-assets"/cortex-*.tar.gz; do
+          for archive in "$RUNNER_TEMP/release-assets"/cortex-linux-*.tar.gz "$RUNNER_TEMP/release-assets"/cortex-macos-*.tar.gz; do
             target="$(basename "$archive" .tar.gz)"
             mkdir -p "$RUNNER_TEMP/release-binaries/$target" && tar -xzf "$archive" -C "$RUNNER_TEMP/release-binaries/$target" cortex
           done
