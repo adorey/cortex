@@ -30,7 +30,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Dict, List, Optional, TextIO
+from typing import List, Optional, TextIO
 
 from cortex_core.project import is_theme
 
@@ -94,6 +94,13 @@ def service_path(name: str) -> str:
     return str(path)
 
 
+def ask(out: TextIO, question: str) -> bool:
+    """A yes-or-no on the terminal, yes by default."""
+    out.write(question)
+    out.flush()
+    return sys.stdin.readline().strip().lower() not in ("n", "no")
+
+
 def prompt_services(out: TextIO) -> List[str]:
     out.write("   Enter the names of the services to create (empty entry to stop):\n")
     names = []
@@ -110,32 +117,6 @@ def prompt_services(out: TextIO) -> List[str]:
 # --------------------------------------------------------------------------- #
 # The command
 # --------------------------------------------------------------------------- #
-
-def add_to_gitignore(root: Path, entries: Dict[str, str]) -> List[str]:
-    """Add to ``.gitignore`` each line of ``entries`` whose path — its value — git does not ignore
-    yet, and return them. The file keeps its bytes: its encoding, its byte order mark, its line
-    endings. Without a repository to ask, a line is added unless it, or one that means the same,
-    is there — and no .gitignore is created: it would keep nothing out of any commit."""
-    path = root / ".gitignore"
-    if not path.is_file() and sync.ignored(root, config.LOCAL_FILE) is None:
-        return []
-    data = path.read_bytes() if path.is_file() else b""
-    present = {line.strip().lstrip("\ufeff") for line in data.decode("utf-8", errors="replace").splitlines()}
-    missing = []
-    for line, probe in entries.items():
-        state = sync.ignored(root, probe)
-        if state is None:                       # no repository to ask
-            name = probe.rstrip("/")
-            state = bool(present & ({name, f"/{name}"} | ({f"{name}/", f"/{name}/"} if probe.endswith("/") else set())))
-        if not state and line not in present:
-            missing.append(line)
-    if missing:
-        newline = b"\r\n" if b"\r\n" in data else b"\n"
-        if data and not data.endswith(b"\n"):
-            data += newline
-        path.write_bytes(data + b"".join(line.encode("utf-8") + newline for line in missing))
-    return missing
-
 
 def _same_name(path: str) -> str:
     """A path compared as a file system that ignores case compares it — macOS's and Windows'."""
@@ -279,12 +260,24 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
                          for p in base.iterdir() if p.is_dir()})
         raise InitError(f"theme '{theme}' is neither in {described} nor in agents/personalities/ — "
                         f"the themes are: {', '.join(themes)}")
+
+    # Claude Code asks before it reads the store (ADR-008 §9): on a terminal, offer the team setting
+    # to a new project.
+    claude_access = options.claude_access
+    if claude_access is None and options.tool == "claude" and project is None and sys.stdin is not None \
+            and sys.stdin.isatty():
+        claude_access = ask(out, "Let Claude Code read the Cortex spec without asking for permission — "
+                                 "claude_access = true in cortex.toml? [Y/n] ")
+
     # cortex.toml: a new one, or only the keys the options name.
     if project is None:
-        values = {"version": str(version), "theme": theme, **({"sync": mode} if mode else {})}
+        values = {"version": str(version), "theme": theme, **({"sync": mode} if mode else {}),
+                  **({"claude_access": True} if claude_access else {})}
     else:
         values = {**({"theme": theme} if theme is not None and theme != project.theme else {}),
-                  **({"sync": mode} if mode and mode != project.sync else {})}
+                  **({"sync": mode} if mode and mode != project.sync else {}),
+                  **({"claude_access": claude_access}
+                     if claude_access is not None and claude_access != project.claude_access else {})}
     project_text = config.render_project(str(root), values) if values else None
     personality = (theme if theme is not None else project.theme) != "none"
 
@@ -310,7 +303,7 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         # `/.cortex-sync-*`, what a sync killed half-way leaves beside it — a link to this machine's store.
         entries[f"/{sync.LINK}"] = sync.LINK
         entries[f"/{sync.STAGING}*"] = f"{sync.STAGING}x"
-    ignored = add_to_gitignore(root, entries)
+    ignored = sync.add_to_gitignore(root, entries)
     if ignored:
         out.write(f"✓ .gitignore: {', '.join(ignored)}\n")
     if sync.ignored(root, config.LOCAL_FILE) is None:
@@ -391,6 +384,9 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
                 if not (agents / file).exists():
                     (agents / file).write_bytes(content)
                     out.write(f"✓ agents/{file} — the team's, agents/ is its own git repository (ADR-006)\n")
+    if options.tool == "claude" and claude_access is None and not config.load(str(root)).active_claude_access:
+        out.write("\ntip: Claude Code asks before it reads the spec in the store. `claude_access = true` in "
+                  "cortex.toml lets it read without asking — for the team; `cortex sync --claude-access`, for you.\n")
     out.write(f"\nCortex {version} is ready in {display(str(root))}.\n")
 
 
@@ -424,6 +420,12 @@ def run(args: List[str]) -> int:
                              "for the options given")
     parser.add_argument("--from", dest="source", metavar="PATH",
                         help="take the templates and the spec from a checkout of Cortex, as `cortex sync --from` does")
+    access = parser.add_mutually_exclusive_group()
+    access.add_argument("--claude-access", dest="claude_access", action="store_const", const=True,
+                        help="let Claude Code read the spec without asking: claude_access = true in cortex.toml — "
+                             "asked on a terminal with --tool claude")
+    access.add_argument("--no-claude-access", dest="claude_access", action="store_const", const=False,
+                        help="do not ask, and leave it off")
     options = parser.parse_args(args)
     if options.service and not options.workspace:
         parser.error("--service goes with --workspace")
