@@ -342,3 +342,14 @@ Each tier is labelled as soon as two or more exist. The view closes the system p
 
 Tracked as #87 and #88. Making the view an option — per deployment, workspace or run, whole or in parts — so that a run that does not need it spends a lighter prompt, is #89.
 
+### 2026-09 — the binding also names where the project's base is (§3.4)
+
+§3.4 binds a run to one project root; the base of the cascade was always `{root}/cortex`, the project's submodule. With the `cortex` binary ([ADR-008](ADR-008-cortex-binary.md) §3.6) a project holds no spec: its committed `cortex.toml` pins a version, and the spec of that version is in the machine's store. The binding still names one project root, and now also where that project's base is:
+
+- **with a `cortex.toml`**, the base is `{CORTEX_HOME}/versions/{version}`, `CORTEX_HOME` defaulting to `~/.cortex`. `deploy/compose.yaml` mounts the host's store read-only at `/cortex-home` — `CORTEX_STORE_PATH` in `deploy/.env` — and sets `CORTEX_HOME` to it;
+- **without one**, the base stays `{root}/cortex`, exactly as before.
+
+The runtime reads the store itself. It never reads `spec` in `cortex.local.toml`, a path of the developer's machine that its container does not see. What an IDE tool agrees to read changes nothing here, whichever model the runtime calls — local ones included, once ADR-011 lands. A run on a version the store does not hold is refused at submission, `422`, with the version named, in the asynchronous mode as in the synchronous one: no queued run fails later for want of a spec.
+
+Tracked as #118, #119 and #120.
+
