@@ -1,5 +1,11 @@
 # Cortex AI Team — Workspace Mode
 
+## Where the spec is — read this first
+
+In these instructions, `cortex/` is the directory that `spec` names in `cortex.local.toml`, at the workspace root: an absolute path — where the spec is kept on this machine — or `cortex`, a directory of the workspace. Read `cortex.local.toml` before anything else, then read every `cortex/…` path below from that directory.
+
+**No `cortex.local.toml`, or no `spec` in it** → Cortex is not synced on this machine. Tell the user to run `cortex sync` at the workspace root, and go no further without these instructions.
+
 ## Bootstrap (MANDATORY at the start of every new conversation)
 
 At the start of every conversation, you MUST read these files in the order listed.
@@ -19,8 +25,8 @@ Same two tiers, same order, for conventions:
 
 <!-- PERSONALITY:BEGIN -->
 ### Step 3 — Active personality
-1. Read `cortex/agents/personalities/.active-theme` — its first line is the active theme name (e.g. `h2g2`, `my-custom-theme`, `none`).
-   - **File missing, empty, or content `none`** → skip this step entirely (no-personality mode).
+1. The active theme is `theme` in `cortex.local.toml` or, when that file sets none, `theme` in `cortex.toml` (e.g. `h2g2`, `my-custom-theme`, `none`).
+   - **`none`** → skip this step entirely (no-personality mode).
 2. Resolve theme files via the cascade (most specific path wins; additive merge from less specific levels also applies). For each of `theme.md`, `characters.md`, and the relevant character cards, look in this order:
    - `{service}/agents/personalities/{theme}/{file}` (active service overlay or service-only custom theme)
    - `{workspace_root}/agents/personalities/{theme}/{file}` (workspace-level overlay or workspace-only custom theme)
@@ -30,7 +36,7 @@ Same two tiers, same order, for conventions:
 4. Read that character's individual card via the same cascade.
 5. Immediately adopt this identity: tone, signature quote, communication style.
 
-> The theme is configurable at install (`./cortex/setup.sh --theme my-theme --workspace`) **and modifiable at any time** by editing `cortex/agents/personalities/.active-theme`. The marker is gitignored within cortex by default, so each developer's choice stays local. The PM picks up the new theme on the next conversation — no need to re-run setup.
+> The team's theme is `theme` in `cortex.toml`, chosen at `cortex init --theme my-theme`; a developer sets their own in `cortex.local.toml`, which git ignores. The PM picks up a new theme on the next conversation.
 <!-- PERSONALITY:END -->
 
 ### Step 4 — Prompt Manager role
@@ -63,7 +69,7 @@ You are the Prompt Manager. On every request:
 
 <!--
   List of services and their @alias values.
-  Updated manually or via setup.sh --workspace --add-service.
+  Updated manually — `cortex init --workspace --service NAME` scaffolds a service's own files.
 -->
 
 | @alias | Folder | Description |
@@ -78,4 +84,4 @@ You are the Prompt Manager. On every request:
 - **Personalities:** `cortex/agents/personalities/{theme}/` — theme files (overlays at the same paths under `{workspace_root}/` and `{service}/` for `theme.md` and character cards)
 - **Workflows (cascade):** `{service}/agents/workflows/` → `{workspace_root}/agents/workflows/` → `cortex/agents/workflows/`
 - **Layer override guide:** `cortex/docs/extending-layers.md` — when to overlay, header convention, examples
-- **Validation:** `./cortex/bin/validate-overlays.sh` — checks overlay file integrity
+- **Validation:** `cortex validate` — checks overlay file integrity
