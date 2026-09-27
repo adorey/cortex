@@ -144,6 +144,17 @@ class InstallShTests(unittest.TestCase):
         self.assertEqual(subprocess.run([str(self.installed()), "--version"], capture_output=True,
                                         text=True).stdout, "cortex 9.9.9\n")
 
+    def test_a_download_cut_short_runs_nothing(self):
+        # curl … | sh runs what arrived: a script cut anywhere before its last line must do nothing.
+        script = SCRIPT.read_bytes()
+        env = {"HOME": str(self.home), "CORTEX_HOME": str(self.cortex_home),
+               "CORTEX_RELEASES_URL": self.release.url, "PATH": os.pathsep.join(SYSTEM_PATH)}
+        for fraction in (0.3, 0.6, 0.9, 0.99):
+            with self.subTest(fraction=fraction):
+                cut = script[:int(len(script) * fraction)]
+                subprocess.run(["sh", "-s"], input=cut, env=env, capture_output=True)
+                self.assertFalse(self.cortex_home.exists())
+
     def test_bad_arguments(self):
         for args, message in ((["--frobnicate"], "unknown option"), (["latest"], "not a version"),
                               (["--name", "cx"], "--name is cortex or cortex-ai"), (["--name"], "needs a value")):
