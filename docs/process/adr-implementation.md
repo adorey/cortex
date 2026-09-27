@@ -190,8 +190,17 @@ immediately before the subject:
 The number goes first because the issue's timeline then reads as a changelog of that task, in
 order, without opening a single diff.
 
-Commits carry no body, so **closing keywords live in the pull request description**
-(`Closes #42, #43`), never in a commit message.
+Commits carry no body, so **closing keywords live in the pull request description**, never in
+a commit message — **one keyword per issue**, each on its own line:
+
+```text
+Closes #42
+Closes #43
+```
+
+A keyword applies to the one reference that follows it: `Closes #42, #43` closes #42 and only
+mentions #43. The 0.10.0 release pull request carried twenty-eight issues in that form, and
+closed one.
 
 ⚠️ **They will not close anything on their own in this model.** GitHub closes a linked issue
 only when the pull request merges into the **default branch**. Every pull request of a stack
@@ -201,7 +210,7 @@ stayed open through a release because the keywords were in the stacked pull requ
 
 Two ways out, and one of them is mandatory:
 
-- repeat the **whole** `Closes #…` list in the final pull request (`release/adr-NNN-slug` →
+- repeat **every** `Closes #NN` line in the final pull request (`release/adr-NNN-slug` →
   `main`), which is the one merge that lands on the default branch; or
 - close the issues by hand at release time, from the lists the phase pull requests declared.
 
@@ -236,7 +245,7 @@ stack, including the last one into `main`.
 ## 9. Closing an ADR
 
 1. Final pull request: `release/adr-NNN-slug` → `main`, describing the whole decision and
-   carrying the **full** `Closes #…` list (§6).
+   carrying **every** `Closes #NN` line, one per issue (§6).
 2. The ADR status becomes `Implemented`, with an amendment entry recording what changed during
    implementation. An ADR is appended to, never rewritten.
 3. `release/X.Y.Z` — `changelog/X.Y.Z.md` and the `CHANGELOG.md` section — stacked last, so the
