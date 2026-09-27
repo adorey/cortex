@@ -227,5 +227,18 @@ print(json.dumps({{"type": "result", "result": "done", "usage": {{}}}}))
             client.propose("s", [{"role": "input", "content": "t"}])
 
 
+
+class ApiRequestTests(unittest.TestCase):
+    """The API backend re-sends the system prompt on every model call of a run — up to
+    ``max_iterations``. It is marked cacheable, so calls within the cache's lifetime read it at
+    the cached rate instead of paying it again."""
+
+    def test_the_system_prompt_is_marked_cacheable(self):
+        from cortex_runtime.agent_client import api_request
+        request = api_request("claude-opus-4-8", 4096, "THE SYSTEM PROMPT", [], [{"role": "user", "content": "x"}])
+        self.assertEqual(request["system"], [{"type": "text", "text": "THE SYSTEM PROMPT", "cache_control": {"type": "ephemeral"}}])
+        self.assertEqual((request["model"], request["max_tokens"]), ("claude-opus-4-8", 4096))
+
+
 if __name__ == "__main__":
     unittest.main()

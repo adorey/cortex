@@ -88,6 +88,21 @@ jobs:
           # regression guard for it.
           ./cortex/setup.sh --tool claude ${{ matrix.workspace_flag }} < /dev/null
 
+      # The alias is how the Prompt Manager — and the runtime's service index — name a service.
+      - name: A service setup.sh scaffolds carries its own alias
+        if: matrix.mode == 'workspace'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/host-svc && cd /tmp/host-svc
+          git clone -q "$GITHUB_WORKSPACE/cortex-src" cortex
+          # core/api: a service in a subfolder, as a monorepo lays them out — named by its last segment.
+          printf 'svc-a\ncore/api\n' | ./cortex/setup.sh --tool claude --workspace > /dev/null
+          grep -q '<!-- @alias: svc-a -->' svc-a/project-overview.md
+          grep -q '<!-- @alias: svc-a -->' svc-a/project-context.md
+          grep -q '<!-- @alias: api -->' core/api/project-overview.md
+          grep -q '<!-- @alias: api -->' core/api/project-context.md
+          echo "✓ svc-a is named @svc-a, core/api @api"
+
       - name: The bootstrap file must exist and point at cortex
         run: |
           set -euo pipefail
