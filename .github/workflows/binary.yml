@@ -5,8 +5,9 @@ name: binary
 # built binary, with no Python on its PATH.
 #
 # Publishing a GitHub Release — the maintainer still writes it from changelog/X.Y.Z.md — builds
-# the same binaries from the tag and attaches them to it: one archive per target, SHA256SUMS
-# over them, and a build-provenance attestation for each (`gh attestation verify`).
+# the same binaries from the tag and attaches them to it: one archive per target, the spec
+# archive, SHA256SUMS over them, and a build-provenance attestation for each
+# (`gh attestation verify`).
 on:
   push:
     branches: [main]
@@ -159,6 +160,11 @@ jobs:
           pattern: cortex-*
           merge-multiple: true
 
+      # The spec of the release, from the tag's tree — what `cortex sync` downloads for a project
+      # pinned to this version by a newer binary (ADR-008 §3.3).
+      - name: The spec archive
+        run: python3 cli/build.py --spec-archive assets
+
       # Asset names carry no version, so that releases/latest/download/<asset> always names the
       # latest release's: the release itself is the version.
       - name: SHA256SUMS
@@ -169,7 +175,7 @@ jobs:
       - name: The binaries inside the archives
         run: |
           mkdir -p binaries
-          for archive in assets/cortex-*.tar.gz; do
+          for archive in assets/cortex-linux-*.tar.gz assets/cortex-macos-*.tar.gz; do
             target="$(basename "$archive" .tar.gz)"
             mkdir -p "binaries/$target" && tar -xzf "$archive" -C "binaries/$target" cortex
           done
