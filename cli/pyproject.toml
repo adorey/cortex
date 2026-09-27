@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cortex-cli"
+# Never published (ADR-008 §2): the command ships as a native binary, whose version is the
+# release's, stamped by cli/build.py from the tag. This one only names the development install.
+version = "0.0.0"
+description = "The cortex command: validate a project's overlays, sync the spec, scaffold a project (ADR-008)."
+# 3.11 for tomllib. The binary embeds its own interpreter: the floor only binds a development install.
+requires-python = ">=3.11"
+readme = "README.md"
+# The standard library and the core only — the binary embeds nothing else.
+dependencies = [
+    "cortex-core",          # the cascade (ADR-007) — install it from ../core, it is on no index
+]
+
+[project.scripts]
+cortex = "cortex_cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cortex_cli*"]

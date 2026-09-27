@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+# Written by cli/build.py: the version it stamps, for the duration of a build, and PyInstaller's output.
+cortex_cli/_stamp.py
+build/
