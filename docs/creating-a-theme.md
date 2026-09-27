@@ -157,7 +157,7 @@ theme = "my-theme"
 theme = "my-theme"
 ```
 
-`cortex init --theme my-theme` writes it at install time; after that, edit it by hand. `cortex init --theme` checks that the theme exists in the Cortex version it pins, so for a theme of your project's own, run `cortex init` with the default theme, then set `theme` in `cortex.toml`.
+`cortex init --theme my-theme` writes it at install time — a theme the pinned Cortex version ships, or one already in your project's `agents/personalities/`; after that, edit it by hand.
 
 **For yourself only** — `theme` in `cortex.local.toml`, which git ignores. It overrides the team's:
 
@@ -187,7 +187,7 @@ A custom theme can live in **any** of these places (the cascade resolves at boot
 A theme that exists **only** in your overlay tree (no cortex base) is fully supported. The PM walks the cascade and finds the files wherever they are. You don't need to PR your theme upstream just to use it.
 
 When you add a custom theme:
-- Set its name as `theme` in `cortex.toml` by hand (`cortex init --theme` only accepts the themes of the pinned Cortex version), or in `cortex.local.toml` for yourself only
+- Set its name as `theme` in `cortex.toml` — `cortex init --theme my-theme` does, once the folder exists — or in `cortex.local.toml` for yourself only
 - Add `theme.md` and `characters.md` (and optional character cards) at one of the cascade paths above
 - No `<!-- OVERLAY -->` header is needed for fully custom themes — that header is only for **extending** an existing cortex theme
 
