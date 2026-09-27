@@ -58,6 +58,13 @@ def shown(value: str) -> str:
     return _CONTROL.sub(lambda m: "\\x%02x" % (ord(m.group()) & 0xFF), value)
 
 
+def display(path: str) -> str:
+    """``path`` as the report prints it: with ``/`` on every platform (ADR-008 §3.1). Only where
+    the separator is another character — ``\\`` on Windows — is it rewritten: there, it cannot be
+    part of a name, and on POSIX a ``\\`` is one."""
+    return path.replace(os.sep, "/") if os.sep != "/" else path
+
+
 def strip_prefix(value: str, prefix: str) -> str:
     """Bash ``${value#prefix}`` for a literal prefix."""
     return value[len(prefix):] if value.startswith(prefix) else value
@@ -105,7 +112,8 @@ def extract_field(text: str, name: str) -> Optional[str]:
 class Report:
     """Verdict lines and counters, as the script's ``report_*`` helpers print them.
 
-    Paths and messages go through ``shown``: they carry what was read from the project.
+    Paths and messages go through ``shown``: they carry what was read from the project. Paths
+    also go through ``display``: the same on every platform.
     """
 
     def __init__(self, out: TextIO, colors: Colors):
@@ -116,20 +124,20 @@ class Report:
         self.out.write(text + "\n")
 
     def error(self, rel_path: str, code: str, message: str) -> None:
-        self.echo(f"{self.c.RED}✗{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.RED}✗{self.c.NC} {shown(display(rel_path))}")
         self.echo(f"  {self.c.RED}{code}{self.c.NC} — {shown(message)}")
         self.errors += 1
 
     def warning(self, rel_path: str, code: str, message: str) -> None:
-        self.echo(f"{self.c.YELLOW}⚠{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.YELLOW}⚠{self.c.NC} {shown(display(rel_path))}")
         self.echo(f"  {self.c.YELLOW}{code}{self.c.NC} — {shown(message)}")
         self.warnings += 1
 
     def ok(self, rel_path: str) -> None:
-        self.echo(f"{self.c.GREEN}✓{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.GREEN}✓{self.c.NC} {shown(display(rel_path))}")
 
     def info(self, rel_path: str, note: str) -> None:
-        self.echo(f"{self.c.BLUE}ℹ{self.c.NC} {shown(rel_path)} ({note})")
+        self.echo(f"{self.c.BLUE}ℹ{self.c.NC} {shown(display(rel_path))} ({note})")
 
 
 def base_file(base: str, project_root: str, base_root: str) -> str:
@@ -161,7 +169,7 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
         text = read_text(file)
     except OSError as error:
         # The script's head failed, said so on stderr, and so found no header.
-        _stderr(f"head: cannot open '{file}' for reading: {error.strerror}\n")
+        _stderr(f"head: cannot open '{display(file)}' for reading: {error.strerror}\n")
         text = ""
 
     # Tier 1.1 — header presence, in the first ten lines. Without one, a file at the path of a
@@ -270,11 +278,11 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
     c = colors
     report = Report(out, c)
     report.echo(f"{c.BOLD}{c.BLUE}Cortex overlay validator{c.NC}")
-    report.echo(f"  Project root:  {shown(project_root)}")
-    report.echo(f"  Cortex dir:    {shown(base_root)}")
+    report.echo(f"  Project root:  {shown(display(project_root))}")
+    report.echo(f"  Cortex dir:    {shown(display(base_root))}")
     report.echo(f"  Strict mode:   {'true' if strict else 'false'}")
     if service:
-        report.echo(f"  Service only:  {shown(service)}")
+        report.echo(f"  Service only:  {shown(display(service))}")
     report.echo("")
 
     roots = overlay_roots(project_root, base_root, service)
@@ -286,7 +294,7 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
     for root in roots:
         in_workspace = os.path.normpath(root) == os.path.normpath(project_root)
         rel_root = "." if in_workspace else strip_prefix(root, f"{project_root}/")
-        report.echo(f"{c.BOLD}── Scope: {shown(rel_root)} ──{c.NC}")
+        report.echo(f"{c.BOLD}── Scope: {shown(display(rel_root))} ──{c.NC}")
         found = 0
         for layer in LAYERS:
             layer_dir = f"{root}/agents/{layer}"

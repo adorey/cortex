@@ -1,7 +1,8 @@
 """``cortex validate`` — ADR-007's frozen outputs, replayed through the command (ADR-008 §3.8).
 
 The golden fixtures are the core's (``core/tests/fixtures/validator``), captured from the script.
-The command must reproduce them byte for byte, exit codes included. One line differs, on
+The command must reproduce them byte for byte, exit codes included — on every platform, paths
+printed with ``/`` (§3.1), and from a checkout with CRLF line endings too. One line differs, on
 purpose: the help names the command it was asked of.
 """
 
@@ -38,6 +39,13 @@ class GoldenTests(unittest.TestCase):
             for args in golden.runs(case):
                 with self.subTest(case=case, run=golden.run_key(args)):
                     self.assertEqual(golden.execute(case, args, run_command), expected(case, args))
+
+    def test_a_crlf_checkout_gives_the_same_report(self):
+        # What git checks out on Windows with core.autocrlf, the base's files and the project's alike.
+        for case in golden.cases():
+            for args in golden.runs(case):
+                with self.subTest(case=case, run=golden.run_key(args)):
+                    self.assertEqual(golden.execute(case, args, run_command, crlf=True), expected(case, args))
 
     def test_the_help_names_the_command(self):
         proc = harness.run("validate", "--help")
