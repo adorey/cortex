@@ -69,13 +69,6 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
     return found
 
 
-def _same_directory(a: str, b: str) -> bool:
-    try:
-        return os.path.samefile(a, b)
-    except OSError:
-        return os.path.normpath(a) == os.path.normpath(b)
-
-
 def same_directory(a: str, b: str) -> bool:
     try:
         return os.path.samefile(a, b)
