@@ -52,7 +52,7 @@ An ADR delivered in several steps adds:
 | [ADR-005](ADR-005-execution-model-resilience.md) | Execution model & resilience | Accepted | 2026-06-03 |
 | [ADR-006](ADR-006-workspace-shareable-repo.md) | Team context in `agents/`, developer context at the workspace root | Accepted | 2026-07-20 |
 | [ADR-007](ADR-007-cortex-core.md) | Cortex Core — unified cascade resolution | Implemented | 2026-09-27 |
-| [ADR-008](ADR-008-cortex-binary.md) | The `cortex` binary — one-line install, one store per machine, `cortex.toml` per project | Proposed | 2026-09-27 |
+| [ADR-008](ADR-008-cortex-binary.md) | The `cortex` binary — one-line install, one store per machine, `cortex.toml` per project | Accepted | 2026-09-27 |
 
 ## Authoring an ADR
 

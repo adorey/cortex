@@ -59,6 +59,7 @@ labels=(
 
     # Decision record. Add one line per ADR entering implementation.
     "adr:007|7057ff|ADR-007 - Cortex Core, unified cascade resolution"
+    "adr:008|5319e7|ADR-008 - The cortex binary, one store per machine"
 
     # Phase within the ADR. The number is the ADR's own, not the execution order.
     "phase:1|c5def5|ADR phase 1"
