@@ -5,9 +5,8 @@ the core's own, and the core parses them. The command only says which two roots 
 
 - in a project — the nearest directory holding ``cortex.toml`` — the project root, and the spec
   ``cortex.local.toml`` names: the pinned version, or a checkout ``cortex sync --from`` gave;
-- in a project that has not moved to ``cortex.toml`` yet, the ``cortex/`` directory of the
-  current directory — where a submodule puts the spec, and where the script found it;
-- in a checkout of Cortex, the checkout itself: the base as its own project (ADR-007 §3.1).
+- in a checkout of Cortex, the checkout itself: the base as its own project (ADR-007 §3.1), its
+  files read once and never as overlays of themselves.
 
 A project whose spec is missing, or synced for another version than the one ``cortex.toml`` pins,
 is not validated: it would be checked against a spec it does not use.
@@ -73,12 +72,12 @@ def roots(cwd: str) -> Tuple[str, str]:
                                  f"or missing, {shown(off[0])} first: it would be validated against another spec. "
                                  "Run `cortex sync`, which says what to do")
         return root, base
-    if os.path.isdir(os.path.join(cwd, "cortex")):
-        return cwd, f"{cwd}/cortex"
     if sync.is_checkout(Path(cwd)) and os.path.isfile(os.path.join(cwd, "templates", "bootstrap-instructions.md")):
         return cwd, cwd
+    hint = (" — a cortex/ submodule or clone is here: `cortex init` says how to leave it"
+            if os.path.isdir(os.path.join(cwd, "cortex")) else "")
     raise RootsError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory a "
-                     "Cortex project")
+                     f"Cortex project{hint}")
 
 
 def run(args: List[str]) -> int:
