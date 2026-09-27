@@ -51,6 +51,7 @@ An ADR delivered in several steps adds:
 | [ADR-004](ADR-004-api-security.md) | API security & trust model | Accepted | 2026-06-03 |
 | [ADR-005](ADR-005-execution-model-resilience.md) | Execution model & resilience | Accepted | 2026-06-03 |
 | [ADR-006](ADR-006-workspace-shareable-repo.md) | Team context in `agents/`, developer context at the workspace root | Accepted | 2026-07-20 |
+| [ADR-007](ADR-007-cortex-core.md) | Cortex Core — unified cascade resolution | Accepted | 2026-09-23 |
 
 ## Authoring an ADR
 
