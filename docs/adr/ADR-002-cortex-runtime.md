@@ -336,7 +336,7 @@ retiring the parity test.
 
 Each tier is labelled as soon as two or more exist. The view closes the system prompt; with none of these files the prompt is what it was. The work itself still goes through tools. The run's service must name a folder inside the workspace — relative, never climbing out of it — or the request is refused (`422`): its files are now read into the prompt.
 
-**What it costs.** Measured on a real workspace, the view adds 44 to 66 KB to a system prompt — about 11,000 to 16,500 tokens a run: a backend lead's prompt went from 100 KB to 166 KB, an architect's from 92 KB to 136 KB. A workspace's budget (ADR-004) goes that much faster; with prompt caching, repeated runs pay it once per cache lifetime.
+**What it costs.** Measured on a real workspace, the view adds 44 to 66 KB to a system prompt — roughly 11,000 to 16,500 tokens at four bytes a token, more for French prose and emoji: a backend lead's prompt went from 100 KB to 166 KB, an architect's from 92 KB to 136 KB. It is paid on every model call, not once a run. The API backend's loop re-sends the system prompt on each of its iterations — up to `max_iterations`, 12; since this change it marks the system prompt cacheable, so the calls that follow within the cache's lifetime read it at the cached rate. The claude-cli backend hands it once to the CLI, whose own loop re-sends and caches it. A workspace's budget (ADR-004) goes faster all the same.
 
 **What leaves the machine.** The view is sent to the model provider on every run. That includes the developer tier — the untracked `project-overview.md` and `project-context.md` at the workspace root, personal notes by design (ADR-006) — and the service's. Write nothing there that should not reach the provider.
 

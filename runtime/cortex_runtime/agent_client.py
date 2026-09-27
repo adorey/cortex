@@ -62,6 +62,23 @@ def interpret_response(content_blocks: List[Any]) -> ModelTurn:
     return ModelTurn(final_text="".join(texts))
 
 
+def api_request(model: str, max_tokens: int, system_prompt: str, tools: List[Dict[str, Any]],
+                messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The Messages API call ``AnthropicAgentClient`` makes. Pure, so it can be unit-tested.
+
+    The agentic loop re-sends the system prompt on every model call of a run — up to its
+    ``max_iterations``. It is marked cacheable (``ephemeral``): the calls that follow within the
+    cache's lifetime read it at the cached rate instead of paying it again (ADR-002 §9).
+    """
+    return {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
+        "tools": tools,
+        "messages": messages,
+    }
+
+
 class AnthropicAgentClient:
     """A ``ModelClient`` backed by the Anthropic Messages API.
 
@@ -84,13 +101,8 @@ class AnthropicAgentClient:
         self.last_usage: Optional[Dict[str, Any]] = None   # tokens, for unified monitoring
 
     def propose(self, system_prompt: str, history: List[Dict[str, Any]]) -> ModelTurn:  # pragma: no cover
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=self._max_tokens,
-            system=system_prompt,
-            tools=tool_schemas(self._registry),
-            messages=_to_messages(history),
-        )
+        response = self._client.messages.create(**api_request(
+            self._model, self._max_tokens, system_prompt, tool_schemas(self._registry), _to_messages(history)))
         u = getattr(response, "usage", None)
         if u is not None:
             # API gives tokens natively; cost is computed downstream from a pricing table.
