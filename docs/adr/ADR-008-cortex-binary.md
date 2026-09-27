@@ -41,6 +41,7 @@ It is otherwise **no more than parity**. The organisation-wide configuration cas
 
 - Built with **PyInstaller** from `cortex_core` and a new `cortex_cli` package, both standard library only. It embeds the interpreter: the host needs **no Python**.
 - **Targets:** Linux `x86_64` and `aarch64` (glibc 2.28 or later — built in a `manylinux_2_28` image), macOS `arm64`, Windows `x86_64`. Intel macOS and Windows on ARM are not built.
+- **Named `cortex`** (`cortex.exe` on Windows), with **`cortex-ai`** as its fallback name. Other projects already ship a `cortex` command — the Cortex Labs CLI, the Prometheus-compatible Cortex server — so a machine may have one. The binary behaves the same under either name; nothing reads the name it was called by.
 - **Its version is the release's**, stamped at build time from the tag — `cortex --version` prints it. `CHANGELOG.md` stays the single source of truth for versions.
 - **The same output on every platform.** Paths are printed with `/`, the output is UTF-8 whatever the console's code page, and a file with CRLF line endings — what git produces on Windows with `core.autocrlf` — reads the same as with LF.
 - Built and published by CI **from the tag**, as assets of the GitHub Release: one archive per target, the spec archive of §3.3, and a `SHA256SUMS` file. Each asset carries a GitHub **build-provenance attestation**, so `gh attestation verify` can tie it to the workflow run that built it.
@@ -57,7 +58,7 @@ curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh 
 irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1 | iex                          # Windows
 ```
 
-Both scripts detect the platform, download the matching asset of the release (the latest, or the version given), **verify it against `SHA256SUMS` and stop on a mismatch**, and install `cortex` into `~/.cortex/bin` (`%USERPROFILE%\.cortex\bin`). Neither asks for administrator rights. `install.ps1` adds the directory to the user's `PATH`; `install.sh` prints the line to add to the shell profile, and edits no file on its own. Running a script again replaces the binary: that is the upgrade.
+Both scripts detect the platform, download the matching asset of the release (the latest, or the version given), **verify it against `SHA256SUMS` and stop on a mismatch**, and install `cortex` into `~/.cortex/bin` (`%USERPROFILE%\.cortex\bin`). Neither asks for administrator rights. When another `cortex` command comes first on `PATH`, both scripts say which one, and install as `cortex-ai` instead — `--name cortex` forces the first name anyway. `install.ps1` adds the directory to the user's `PATH`; `install.sh` prints the line to add to the shell profile, and edits no file on its own. Running a script again replaces the binary: that is the upgrade.
 
 ### 3.3 The store — `~/.cortex`
 
@@ -172,6 +173,7 @@ Acceptance criteria:
 - on each target, the ADR-007 golden fixtures replayed through the **built binary** match byte for byte, on a runner with no Python on `PATH` — Windows included, paths printed with `/`
 - the same overlays checked out with CRLF line endings produce the same report
 - each install script installs a release asset into an empty `$CORTEX_HOME`, and stops with a non-zero exit when one byte of the asset is altered
+- with another `cortex` first on `PATH`, each install script names it and installs `cortex-ai`; `--name cortex` installs `cortex`
 - `cortex --version` prints the version of the tag it was built from
 - a test fails when a `cortex_core` module imports `cortex_cli`
 
@@ -266,7 +268,7 @@ Acceptance criteria:
 2. **`cortex.lock` and upgrade tooling** — a resolved manifest, `cortex upgrade`, pruning unused versions from the store.
 3. **Other models, local ones included** — the provider abstraction, ADR-011 ([#40](https://github.com/adorey/cortex/issues/40)). It inherits the store and the runtime's binding as they are; its endpoints go in the machine tier, `~/.cortex/config.toml`.
 4. **The CLI drives the runtime** — `cortex run`, `watch`, `runtime up` over the unified client protocol, ADR-016 ([#45](https://github.com/adorey/cortex/issues/45)).
-5. **More channels and platforms** — Homebrew, winget, a signed Windows executable, Intel macOS, a PyPI wheel wrapping the binary if a Python consumer appears. [#86](https://github.com/adorey/cortex/issues/86) still reserves `cortex-core` meanwhile: `runtime/pyproject.toml` depends on it by name.
+5. **More channels and platforms** — Homebrew, winget, a signed Windows executable, Intel macOS, a PyPI wheel wrapping the binary if a Python consumer appears — under `cortex-ai`, the name the command falls back to, free on PyPI on 2026-09-26 (`cortex` is taken). [#86](https://github.com/adorey/cortex/issues/86) still reserves `cortex-core` meanwhile: `runtime/pyproject.toml` depends on it by name.
 
 ## 8. References
 
