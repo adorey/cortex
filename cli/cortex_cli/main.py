@@ -20,7 +20,14 @@ def _validate(args: List[str]) -> int:
     return validate.run(args)
 
 
+def _sync(args: List[str]) -> int:
+    from . import sync
+
+    return sync.run(args)
+
+
 COMMANDS: Dict[str, Tuple[str, Callable[[List[str]], int]]] = {
+    "sync": ("Put the pinned Cortex version in the store, and tell the project where it is", _sync),
     "validate": ("Check the project's overlays against the spec (ADR-001)", _validate),
 }
 
