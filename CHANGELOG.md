@@ -7,23 +7,25 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-27 — Quite Definitely the Answer _(Released)_
+[Full notes](changelog/0.10.0.md)
+
 ### Added
-- `cortex-core` (`core/`) — the one implementation of the cascade in code: resolution, merge semantics, the capability catalog and prompt assembly, parameterised by a `base_root` ([ADR-007](docs/adr/ADR-007-cortex-core.md)). Standard library only, Python 3.9 or later.
+- `cortex-core` (`core/`) — the one implementation of the cascade in code: resolution, merge semantics, the capability catalog, prompt assembly and overlay validation, parameterised by a `base_root` ([ADR-007](docs/adr/ADR-007-cortex-core.md)). Standard library only, Python 3.9 or later.
 
 ### Changed
-- The runtime depends on `cortex-core` and re-exports it, so every name it offered keeps working. Install both — `pip install -e ../core -e .` from `runtime/`.
-- **`MISSING_HEADER`**: a file without an `<!-- OVERLAY -->` header at the path of a cortex base is reported — a warning, an error under `--strict` — instead of being skipped as a custom addition, since the cascade stacks it onto that base. A host project running `--strict` in CI may start failing on such files. A headerless `characters.md` at the path of a base is `NON_OVERRIDABLE` — an error, as it is with a header — and a `README.md` is documentation, never reported.
-- `bin/validate-overlays.sh` runs its checks from `cortex-core`: validating overlays needs **Python 3.9 or later**, until the native binary of ADR-008. Same options, same exit codes, the same output but for the fixes below — and about 77× faster on 200 overlays (5.4 s → 0.07 s). Without a usable Python it exits `2` and says so.
-- **The agent sees the project** ([ADR-002 §9](docs/adr/ADR-002-cortex-runtime.md#9-amendments)): its system prompt closes on `# Project overview`, `# Workspace services` — each service's `@alias`, folder and title — and `# Project context`, the team, developer and service tiers each labelled once there are two or more; the runtime used to read `project-context.md` only to select capabilities. It adds 44 to 66 KB to the system prompt on a real workspace — roughly 11,000 to 16,500 tokens, paid on every model call of a run; the API backend now marks the system prompt cacheable — and it sends the developer's untracked notes to the model provider with every run. A `service` outside the workspace is now refused, `422`.
+- `bin/validate-overlays.sh` is a shim over `cortex-core`: it needs **Python 3.9 or later**, runs Python isolated, and is about 77× faster — same options, same exit codes.
+- The validator reports a headerless file at the path of a base (`MISSING_HEADER`) and checks the overlays behind a symbolic link; `--strict` may start failing on them. A headerless `characters.md` stays `NON_OVERRIDABLE`; a `README.md` is documentation.
+- The runtime reads ADR-006's team tier, `agents/project-context.md`, and selects capabilities from it, for every role alike — prompts grow accordingly.
+- **The agent sees the project** ([ADR-002 §9](docs/adr/ADR-002-cortex-runtime.md#9-amendments)): its system prompt closes on `# Project overview`, `# Workspace services` and `# Project context`. That is 44 to 66 KB of prompt on every model call, and the developer's untracked notes sent to the model provider; the API backend marks the system prompt cacheable. A run's `service` must be a folder of the workspace, or it is refused (`422`).
+- The runtime depends on `cortex-core`: install both, `pip install -e ../core -e .` from `runtime/`.
 
 ### Fixed
-- A header missing its `Base:`, `Scope:` or `Semantic:` key made the overlay validator stop at once with exit `1` — no file named, no summary. It is now reported as `MISSING_FIELD`, like an empty value, and the other overlays are still checked.
-- The runtime read only the root and service `project-context.md`: it now reads the ADR-006 team tier, `agents/project-context.md`, first — both tiers labelled by scope when both exist. The team tier selects capabilities too, for every role alike: on a workspace whose team context names ten technologies, an architect's system prompt went from 10 KB to 92 KB, a backend lead's from 76 KB to 100 KB — a run costs that much more, and a workspace's budget (ADR-004) goes faster.
-- The overlay validator cut absolute paths at their first `/agents/` and skipped any path containing `/cortex/`. A project inside a directory named `agents` — on GitHub Actions, a repository named `agents` — failed every overlay with `PATH_MIRROR`; one inside a directory named `cortex` had none of its services checked, and passed, under `--strict` too. Paths now come from the root being scanned, and the base is skipped by its location, whatever it is called. `UNKNOWN_LAYER`, which only that bug could produce, is gone.
-- A service overlay with no category level — `svc/agents/roles/prompt-manager.md` — declaring `Scope: workspace` went unreported: it now gets `SCOPE_MISMATCH`, a warning, an error under `--strict`.
-- The overlay validator printed header values and file names through `echo -e`, so an overlay could write terminal control sequences to the console — erase a `✗`, print a `✓` in its place. They are printed as read, control characters shown escaped (`\x1b`). The workspace's section is headed `── Scope: . ──` instead of the project's absolute path.
-- The `claude-cli` backend passed the system prompt and the task as command-line arguments: past 128 KiB — Linux's cap on one argument — the CLI could not start, and the run failed on an unexplained `OSError`. The system prompt now goes in a private temporary file, removed after the run, and the task on stdin; a CLI that cannot start says so.
-- The overlay validator skipped what sits behind a symbolic link — a layer directory, a subdirectory, an overlay file — although the cascade reads through them. It now validates what the cascade reads, as `find -L` would: a link loop is not entered again, a link that leads nowhere is skipped.
+- A header missing its `Base:`, `Scope:` or `Semantic:` key stopped the validator at once; it is reported as `MISSING_FIELD`.
+- The validator's verdicts no longer depend on where the project sits — under a directory named `agents` or `cortex` — and a service overlay with no category level that declares `Scope: workspace` gets `SCOPE_MISMATCH`.
+- Header values and file names are printed as read, control characters escaped: an overlay can no longer rewrite the report on a terminal.
+- The `claude-cli` backend could not start past 128 KiB of prompt: the system prompt now goes in a file, the task on stdin.
+- `setup.sh` named every scaffolded service `@my-project`, and stopped on a service in a subfolder.
 
 ## [0.9.0] - 2026-09-23 — Beware of the Leopard _(Released)_
 [Full notes](changelog/0.9.0.md)
