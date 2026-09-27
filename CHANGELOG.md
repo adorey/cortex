@@ -7,6 +7,12 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+- `cortex-core` (`core/`) — the one implementation of the cascade in code: resolution, merge semantics, the capability catalog and prompt assembly, parameterised by a `base_root` ([ADR-007](docs/adr/ADR-007-cortex-core.md)). Standard library only, Python 3.9 or later.
+
+### Changed
+- The runtime depends on `cortex-core` and re-exports it, so every name it offered keeps working. Install both — `pip install -e ../core -e .` from `runtime/`.
+
 ## [0.9.0] - 2026-09-23 — Beware of the Leopard _(Released)_
 [Full notes](changelog/0.9.0.md)
 

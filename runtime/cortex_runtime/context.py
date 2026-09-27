@@ -16,34 +16,9 @@ import re
 from pathlib import Path
 from typing import List, Optional
 
+from cortex_core.catalog import capability_catalog  # noqa: F401 — re-exported, part of this module's API
+
 _CONTEXT_FILE = "project-context.md"
-
-
-def _capabilities_dirs(root: Path, service: Optional[str]) -> List[Path]:
-    root = Path(root)
-    dirs = [
-        root / "cortex" / "agents" / "capabilities",   # base catalog
-        root / "agents" / "capabilities",               # workspace-added capabilities
-    ]
-    if service:
-        dirs.append(root / service / "agents" / "capabilities")  # service-added capabilities
-    return dirs
-
-
-def capability_catalog(root: Path, service: Optional[str] = None) -> List[str]:
-    """Cascade-relative paths of every capability available (e.g. ``languages/php.md``).
-
-    Union across base + workspace + service capability dirs; ``README.md`` excluded.
-    """
-    found = set()
-    for cap_dir in _capabilities_dirs(root, service):
-        if not cap_dir.is_dir():
-            continue
-        for md in cap_dir.rglob("*.md"):
-            if md.name.lower() == "readme.md":
-                continue
-            found.add("/".join(md.relative_to(cap_dir).parts))
-    return sorted(found)
 
 
 def read_project_context(root: Path, service: Optional[str] = None) -> str:

@@ -1,0 +1,11 @@
+{
+ "workspace": [
+  "languages/php.md",
+  "languages/typescript.md"
+ ],
+ "svc-a": [
+  "languages/go.md",
+  "languages/php.md",
+  "languages/typescript.md"
+ ]
+}

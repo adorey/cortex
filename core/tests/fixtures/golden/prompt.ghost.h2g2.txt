@@ -1,0 +1,12 @@
+# H2G2 Theme (fixture base)
+
+BASE-THEME: Don't Panic. British humour, cosmic absurdity.
+
+
+<!-- OVERLAY
+     Base: cortex/agents/personalities/h2g2/theme.md
+     Scope: workspace
+     Semantic: additive
+-->
+## Project narrative (additive)
+WORKSPACE-THEME: the ship is the Heart of Gold for this project.

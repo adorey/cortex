@@ -1,8 +1,9 @@
 # cortex-runtime
 
-The **deployable engine** of Cortex. It compiles [ADR-001](../docs/adr/ADR-001-layered-overrides.md)
-(the layered cascade) into an **executable resolver**, and wraps it in a thin agnostic API,
-an agentic loop, and an optional model gateway — see [ADR-002](../docs/adr/ADR-002-cortex-runtime.md).
+The **deployable engine** of Cortex. It consumes [`cortex-core`](../core/README.md) — the one
+implementation of the [ADR-001](../docs/adr/ADR-001-layered-overrides.md) cascade in code
+([ADR-007](../docs/adr/ADR-007-cortex-core.md)) — and wraps it in a thin agnostic API, an agentic
+loop, and an optional model gateway — see [ADR-002](../docs/adr/ADR-002-cortex-runtime.md).
 
 ## The firewall (non-negotiable)
 
@@ -15,7 +16,9 @@ mechanically by [`tests/test_firewall.py`](tests/test_firewall.py), not by repo 
 ```
 cortex-spec     (agents/… markdown cascade, ADR-001)   ← declarative, host-agnostic
       ▲   consumed by (one direction only)
-cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
+cortex-core     (../core: resolution, catalog, prompt) ← the cascade in code, ADR-007
+      ▲   imported by (one direction only)
+cortex-runtime  (this package: API + loop + state)     ← deployable engine
 ```
 
 ## Status — incremental MVP (feat/cortex-runtime)
@@ -35,7 +38,9 @@ cortex-runtime  (this package: resolver + API + loop)  ← deployable engine
 
 ## The resolver
 
-`cortex_runtime.resolver` is the Python port of ADR-001 §3.1, with the merge semantics of §3.2:
+The resolver lives in [`cortex-core`](../core/README.md) (ADR-007); `cortex_runtime.resolver`
+re-exports it, so existing imports keep working. It is the Python port of ADR-001 §3.1, with the
+merge semantics of §3.2:
 
 - `workflows/` → **replacement** (most specific wins entirely)
 - `roles/`, `capabilities/`, `personalities/{theme}/theme.md`, `…/{character}.md` → **additive**
@@ -51,7 +56,7 @@ The `demo` backend runs the whole wire (resolve → tools → loop → durable s
 you can smoke-test before connecting a real model:
 
 ```bash
-cd runtime && pip install -e .            # fastapi for the API; demo backend needs nothing else
+cd runtime && pip install -e ../core -e .   # cortex-core first; fastapi for the API, the demo backend needs nothing else
 CORTEX_ROOT=/path/to/a/project CORTEX_BACKEND=demo python -m cortex_runtime   # serves on :8000
 # then:
 curl -X POST localhost:8000/run -H 'content-type: application/json' \
@@ -75,7 +80,7 @@ write engine code (ADR-002 §3.2):
 
 ```python
 from pathlib import Path
-from cortex_runtime.api import create_app          # needs `pip install -e .[dev]` + fastapi
+from cortex_runtime.api import create_app          # needs `pip install -e ../core -e ".[dev]"` + fastapi
 from cortex_runtime.app import WorkspaceConfig
 
 app = create_app(
@@ -186,9 +191,13 @@ GET /runs/{run_id}                     → one run + its full metrics_json
 GET /audit?workspace=&subject=         → the action trail (with the gated flag)
 ```
 
-## Run the tests (zero install)
+## Run the tests
 
 ```bash
 cd runtime
-python3 -m unittest discover -s tests -v
+PYTHONPATH=../core python3 -m unittest discover -s tests -v
 ```
+
+Nothing to install for most of the suite: `cortex-core` is read from `../core`, standard library
+only. The modules that import `pytest` need the dev extra — `pip install -e ../core -e ".[dev]"`,
+as CI does.

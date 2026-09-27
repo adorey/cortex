@@ -1,0 +1,71 @@
+# H2G2 Theme (fixture base)
+
+BASE-THEME: Don't Panic. British humour, cosmic absurdity.
+
+
+<!-- OVERLAY
+     Base: cortex/agents/personalities/h2g2/theme.md
+     Scope: workspace
+     Semantic: additive
+-->
+## Project narrative (additive)
+WORKSPACE-THEME: the ship is the Heart of Gold for this project.
+
+
+---
+
+# Hactar (fixture base)
+
+BASE-CHARACTER: "I calculated every permutation and chose the most elegant solution."
+
+
+---
+
+# Lead Backend (fixture base)
+
+## 🎯 Mission
+BASE-ROLE: own the backend.
+
+## 🚫 Anti-patterns
+BASE-RULE: no N+1 queries.
+
+
+<!-- OVERLAY
+     Base: cortex/agents/roles/engineering/lead-backend.md
+     Scope: workspace
+     Semantic: additive
+-->
+## Project conventions (additive)
+WORKSPACE-RULE: all responses in French.
+
+
+<!-- OVERLAY
+     Base: cortex/agents/roles/engineering/lead-backend.md
+     Scope: service @svc-a
+     Semantic: additive
+-->
+## Service svc-a specifics (additive)
+SERVICE-RULE: svc-a uses event sourcing.
+
+
+---
+
+# PHP capability (fixture base)
+
+BASE-CAP: PSR-12, typed properties.
+
+
+<!-- OVERLAY
+     Base: cortex/agents/capabilities/languages/php.md
+     Scope: service @svc-a
+     Semantic: additive
+-->
+## svc-a PHP rules (additive)
+SERVICE-CAP: svc-a pins PHP 8.3.
+
+
+---
+
+# TypeScript capability (fixture base)
+
+BASE-CAP-TS: strict mode, no implicit any.
