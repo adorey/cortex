@@ -195,9 +195,10 @@ the reason.
       `gate:blocking` when the phase carries it
 - [ ] Description: what the phase does, the acceptance criteria met, the sign-offs from steps 4
       to 6, what was deliberately left out
-- [ ] `Closes #NN` for every sub-issue — commits carry no body, so the closing keywords live
-      here. They will not fire until something merges into the default branch: they must be
-      repeated in the final pull request, or closed by hand at release time
+- [ ] `Closes #NN` for every sub-issue, **one keyword per issue** (`Closes #42, #43` closes
+      #42 only) — commits carry no body, so the closing keywords live here. They will not fire
+      until something merges into the default branch: they must be repeated in the final pull
+      request, or closed by hand at release time
 - [ ] Test-merge the whole stack locally and state that it is conflict-free
 - [ ] Say explicitly when a diff is balanced (a rename, a move, a translation): a review that
       compares addition and deletion counts cannot see those
