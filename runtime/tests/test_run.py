@@ -75,5 +75,69 @@ class ResolveRunTests(unittest.TestCase):
             resolve_run(req, ROOT)
 
 
+
+class ProjectContextInPromptTests(unittest.TestCase):
+    """#87 — the project context is the agent's context: it reaches the system prompt."""
+
+    def test_the_project_context_closes_the_system_prompt(self):
+        run = resolve_run(RunRequest(workspace="host", role="lead-backend"), ROOT, theme="h2g2")
+        context = (ROOT / "project-context.md").read_text(encoding="utf-8")
+        self.assertTrue(run.system_prompt.endswith("# Project context\n\n" + context), run.system_prompt[-200:])
+
+
+class ServiceBoundaryTests(unittest.TestCase):
+    def test_a_service_is_a_folder_inside_the_workspace(self):
+        for service in ("../elsewhere", "/etc", "svc-a/../../elsewhere", "svc-a\\..\\..\\x"):
+            with self.subTest(service=service):
+                with self.assertRaisesRegex(ValueError, "inside the workspace"):
+                    resolve_run(RunRequest(workspace="host", role="lead-backend", service=service), ROOT)
+
+    def test_the_workspace_itself_is_no_service(self):
+        # "." would read the developer tier twice, the second time as a service's.
+        for service in (".", "./"):
+            with self.subTest(service=service):
+                run = resolve_run(RunRequest(workspace="host", role="lead-backend", service=service), ROOT)
+                self.assertEqual(run.system_prompt, resolve_run(RunRequest(workspace="host", role="lead-backend"), ROOT).system_prompt)
+
+    def test_agents_is_no_service(self):
+        # The workspace's agents/ holds the cascade and ADR-006's team tier: never a service.
+        for service in ("agents", "agents/roles"):
+            with self.subTest(service=service):
+                with self.assertRaisesRegex(ValueError, "agents/"):
+                    resolve_run(RunRequest(workspace="host", role="lead-backend", service=service), ROOT)
+
+    def test_a_service_path_is_normalised(self):
+        run = resolve_run(RunRequest(workspace="host", role="lead-backend", service="./svc-a/"), ROOT)
+        self.assertEqual(run.system_prompt, resolve_run(RunRequest(workspace="host", role="lead-backend", service="svc-a"), ROOT).system_prompt)
+
+
+class WorkspaceViewInPromptTests(unittest.TestCase):
+    """#88 — the agent sees what the Prompt Manager reads in the editor: the overviews, the
+    workspace's services, then the contexts."""
+
+    def test_a_run_on_a_service_sees_the_whole_workspace(self):
+        import shutil
+        import tempfile
+        root = Path(tempfile.mkdtemp(prefix="cortex-run-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        shutil.copytree(ROOT / "cortex", root / "cortex")
+        files = {
+            "agents/project-overview.md": "TEAM-VISION", "project-overview.md": "DEV-VISION",
+            "svc-a/project-overview.md": "<!-- @alias: api -->\n# Main API\nSVC-VISION",
+            "svc-b/project-overview.md": "<!-- @alias: web -->\n# Web application",
+            "project-context.md": "DEV-RULES",
+        }
+        for rel, text in files.items():
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text(text, encoding="utf-8")
+        prompt = resolve_run(RunRequest(workspace="host", role="lead-backend", service="svc-a"), root, theme=None).system_prompt
+        marks = ["# Project overview", "## Team overview", "TEAM-VISION", "## Developer overview", "DEV-VISION",
+                 "## Service overview — svc-a", "SVC-VISION", "# Workspace services", "`@api` — `svc-a/` — Main API (active)",
+                 "`@web` — `svc-b/` — Web application", "# Project context", "DEV-RULES"]
+        at = [prompt.index(m) for m in marks]
+        self.assertEqual(at, sorted(at))
+        self.assertNotIn("`agents/`", prompt)          # the team tier is no service
+
+
 if __name__ == "__main__":
     unittest.main()

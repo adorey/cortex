@@ -1,4 +1,4 @@
-# cortex-runtime image. Build context = the repo root (it needs both runtime/ and mcp/):
+# cortex-runtime image. Build context = the repo root (it needs core/, runtime/ and mcp/):
 #   docker build -f deploy/Dockerfile -t cortex-runtime .
 #
 # Bundles: the Python runtime + API, the cortex-jsm MCP server (on PATH as `cortex-jsm-mcp`),
@@ -14,9 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY core/ /app/core/
 COPY runtime/ /app/runtime/
 COPY mcp/ /app/mcp/
-RUN pip install --no-cache-dir "/app/runtime/.[serve,postgres]" "/app/mcp"
+# cortex-core in the same command as the runtime that depends on it, so pip resolves it from
+# /app/core and never looks for it on an index (ADR-007).
+RUN pip install --no-cache-dir "/app/core" "/app/runtime/.[serve,postgres]" "/app/mcp"
 
 RUN useradd -m -u 10001 cortex && chown -R cortex /app
 USER cortex

@@ -88,6 +88,21 @@ jobs:
           # regression guard for it.
           ./cortex/setup.sh --tool claude ${{ matrix.workspace_flag }} < /dev/null
 
+      # The alias is how the Prompt Manager — and the runtime's service index — name a service.
+      - name: A service setup.sh scaffolds carries its own alias
+        if: matrix.mode == 'workspace'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/host-svc && cd /tmp/host-svc
+          git clone -q "$GITHUB_WORKSPACE/cortex-src" cortex
+          # core/api: a service in a subfolder, as a monorepo lays them out — named by its last segment.
+          printf 'svc-a\ncore/api\n' | ./cortex/setup.sh --tool claude --workspace > /dev/null
+          grep -q '<!-- @alias: svc-a -->' svc-a/project-overview.md
+          grep -q '<!-- @alias: svc-a -->' svc-a/project-context.md
+          grep -q '<!-- @alias: api -->' core/api/project-overview.md
+          grep -q '<!-- @alias: api -->' core/api/project-context.md
+          echo "✓ svc-a is named @svc-a, core/api @api"
+
       - name: The bootstrap file must exist and point at cortex
         run: |
           set -euo pipefail
@@ -105,3 +120,25 @@ jobs:
           set -euo pipefail
           cd /tmp/host
           ./cortex/bin/validate-overlays.sh --strict
+
+      # With no agents/ directory, the step above only proves that the shim finds Python and
+      # the core. This one proves the checks run: a valid overlay passes, the same one broken fails.
+      - name: The checks run on an overlay
+        run: |
+          set -euo pipefail
+          cd /tmp/host
+          mkdir -p agents/roles/engineering
+          printf '%s\n' '<!-- OVERLAY' \
+            '     Base: cortex/agents/roles/engineering/lead-backend.md' \
+            '     Scope: workspace' '     Semantic: additive' '-->' '' \
+            '## Naming (additive)' '- a project rule' > agents/roles/engineering/lead-backend.md
+          ./cortex/bin/validate-overlays.sh --strict | tee report.txt
+          grep -q '✓ agents/roles/engineering/lead-backend.md' report.txt
+
+          sed -i 's#engineering/lead-backend.md$#engineering/no-such-role.md#' agents/roles/engineering/lead-backend.md
+          if ./cortex/bin/validate-overlays.sh --strict > broken.txt; then
+            echo "a Base: pointing nowhere passed the checks"
+            exit 1
+          fi
+          grep -q 'BASE_NOT_FOUND' broken.txt || { echo "failed, but not on the broken Base:"; cat broken.txt; exit 1; }
+          echo "✓ the checks ran"

@@ -1,0 +1,16 @@
+{
+ "runs": [
+  [],
+  [
+   "--strict"
+  ],
+  [
+   "--service",
+   "svc-a"
+  ],
+  [
+   "--service",
+   "{project}/svc-a"
+  ]
+ ]
+}

@@ -16,44 +16,48 @@ import re
 from pathlib import Path
 from typing import List, Optional
 
+from cortex_core.catalog import capability_catalog  # noqa: F401 — re-exported, part of this module's API
+
 _CONTEXT_FILE = "project-context.md"
+_OVERVIEW_FILE = "project-overview.md"
+_CONTEXT_LABELS = ("## Team context", "## Developer notes", "## Service context")
 
 
-def _capabilities_dirs(root: Path, service: Optional[str]) -> List[Path]:
+def _tiers(root: Path, service: Optional[str], name: str, labels):
+    """One file's tiers that exist — team ``agents/{name}``, developer ``{name}``, then the
+    service's own — as (label, text) pairs, in that order."""
     root = Path(root)
-    dirs = [
-        root / "cortex" / "agents" / "capabilities",   # base catalog
-        root / "agents" / "capabilities",               # workspace-added capabilities
-    ]
+    tiers = [(labels[0], root / "agents" / name), (labels[1], root / name)]
     if service:
-        dirs.append(root / service / "agents" / "capabilities")  # service-added capabilities
-    return dirs
+        tiers.append((f"{labels[2]} — {service}", root / service / name))
+    return [(label, path.read_text(encoding="utf-8")) for label, path in tiers if path.is_file()]
 
 
-def capability_catalog(root: Path, service: Optional[str] = None) -> List[str]:
-    """Cascade-relative paths of every capability available (e.g. ``languages/php.md``).
-
-    Union across base + workspace + service capability dirs; ``README.md`` excluded.
-    """
-    found = set()
-    for cap_dir in _capabilities_dirs(root, service):
-        if not cap_dir.is_dir():
-            continue
-        for md in cap_dir.rglob("*.md"):
-            if md.name.lower() == "readme.md":
-                continue
-            found.add("/".join(md.relative_to(cap_dir).parts))
-    return sorted(found)
+def _read_tiers(root: Path, service: Optional[str], name: str, labels) -> str:
+    """The tiers of ``_tiers``, each labelled once two or more exist; a single tier reads as it
+    always did."""
+    found = _tiers(root, service, name, labels)
+    if len(found) == 1:
+        return found[0][1]
+    return "\n\n".join(f"{label}\n\n{text}" for label, text in found)
 
 
 def read_project_context(root: Path, service: Optional[str] = None) -> str:
-    """Concatenate the workspace and (optional) service ``project-context.md`` files."""
-    root = Path(root)
-    parts = []
-    for ctx in (root / _CONTEXT_FILE, (root / service / _CONTEXT_FILE) if service else None):
-        if ctx and ctx.is_file():
-            parts.append(ctx.read_text(encoding="utf-8"))
-    return "\n\n".join(parts)
+    """The project context, tier by tier: team, developer, then the service's own.
+
+    ADR-006 splits the workspace context in two: the **team** tier ``agents/project-context.md``
+    and the **developer** tier ``project-context.md`` at the root, read in that order, then the
+    service's ``project-context.md``. When two or more exist, each is labelled by scope (ADR-006
+    §3.3) — the text reaches the agent's prompt, where the tiers must be told apart; with a
+    single tier there is no scope to tell apart, and the text stays exactly as it was.
+    """
+    return _read_tiers(root, service, _CONTEXT_FILE, _CONTEXT_LABELS)
+
+
+def read_project_overview(root: Path, service: Optional[str] = None) -> str:
+    """The project overview — vision, actors, business — in the same tiers and order as the
+    context (#88): what the Prompt Manager reads first in the editor."""
+    return _read_tiers(root, service, _OVERVIEW_FILE, ("## Team overview", "## Developer overview", "## Service overview"))
 
 
 def derive_capabilities(root: Path, service: Optional[str] = None) -> List[str]:
@@ -62,7 +66,8 @@ def derive_capabilities(root: Path, service: Optional[str] = None) -> List[str]:
     Deterministic replacement for the Prompt Manager's manual stack cross-reference.
     Role-based narrowing (a frontend role ignoring DB capabilities) is a later refinement.
     """
-    context = read_project_context(root, service).lower()
+    # The files' own words: a label — ``## Service context — php-api`` — names no technology.
+    context = "\n\n".join(text for _, text in _tiers(root, service, _CONTEXT_FILE, _CONTEXT_LABELS)).lower()
     if not context.strip():
         return []
     selected = []

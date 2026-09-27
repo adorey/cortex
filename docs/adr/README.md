@@ -19,7 +19,7 @@ An ADR documents a **significant architectural decision**: the context that trig
 | **Filename** | `ADR-{NNN}-{kebab-case-title}.md` (e.g. `ADR-001-layered-overrides.md`) |
 | **Numbering** | Strict sequential, never reused — even for superseded ADRs |
 | **Status** | One of: `Proposed`, `Accepted`, `Implemented`, `Deprecated`, `Superseded by ADR-XXX` — `Implemented` applies to a phased ADR once every phase has merged |
-| **Modification policy** | Append-only. To revise: write a new ADR that supersedes the old one. Mark the old one `Superseded by ADR-XXX` (only metadata change allowed). |
+| **Modification policy** | Append-only. What was decided is never rewritten. To **replace** a decision, write a new ADR that supersedes the old one, and mark the old one `Superseded by ADR-XXX` — the only metadata change allowed. To **adjust** it — a contract refined during implementation, a consequence found later — append a dated entry to the ADR's own `Amendments` section, the last one, saying what changed and why, and pointing at the issues that carry it. A section-sized adjustment does not warrant a new ADR; a changed decision does. See [docs/process/adr-implementation.md §9](../process/adr-implementation.md#9-closing-an-adr), item 2. |
 | **Scope** | Decisions that affect Cortex's structure, contracts, or behavior. Not implementation details. |
 
 ## Required sections
@@ -51,6 +51,7 @@ An ADR delivered in several steps adds:
 | [ADR-004](ADR-004-api-security.md) | API security & trust model | Accepted | 2026-06-03 |
 | [ADR-005](ADR-005-execution-model-resilience.md) | Execution model & resilience | Accepted | 2026-06-03 |
 | [ADR-006](ADR-006-workspace-shareable-repo.md) | Team context in `agents/`, developer context at the workspace root | Accepted | 2026-07-20 |
+| [ADR-007](ADR-007-cortex-core.md) | Cortex Core — unified cascade resolution | Implemented | 2026-09-27 |
 
 ## Authoring an ADR
 
