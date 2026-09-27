@@ -49,6 +49,20 @@ merge semantics of §3.2:
 [`bin/validate-overlays.sh`](../bin/validate-overlays.sh) runs the same core, so the resolver and
 the overlay validator are one implementation and cannot drift apart (ADR-002 §3.1, ADR-007).
 
+## The project's own files
+
+An agent sees the project as the Prompt Manager does in the editor ([ADR-002 §9](../docs/adr/ADR-002-cortex-runtime.md#9-amendments)):
+its system prompt closes on `# Project overview`, `# Workspace services` and `# Project context` —
+the team (`agents/`), developer (root) and service tiers of `project-overview.md` and
+`project-context.md`, and one line per service of the workspace.
+
+- **They leave the machine.** The whole view goes to the model provider with every model call,
+  the developer's untracked notes included.
+- **They cost.** 44 to 66 KB of prompt on a real workspace, on every model call; the API backend
+  marks the system prompt cacheable. Making the view optional is [#89](https://github.com/adorey/cortex/issues/89).
+- **A service is a folder of the workspace** — relative, never climbing out of it, never
+  `agents/`; any other `service` is refused, `422`.
+
 ## Run the slice (Phase 5) — no key, no SDK
 
 The `demo` backend runs the whole wire (resolve → tools → loop → durable state) for free, so
