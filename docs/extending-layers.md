@@ -34,6 +34,8 @@ The **workspace** level only applies in workspace mode (multiple services under 
 
 When the Prompt Manager loads `lead-backend`, it reads **base → workspace overlay → service overlay** in that order. Most-specific wins on direct contradiction.
 
+`cortex/` in these paths — and in every `Base:` header — is the directory `spec` names in `cortex.local.toml`. By default that is the version `cortex.toml` pins, read in place from the store (`~/.cortex/versions/X.Y.Z`). When the project is synced with `cortex sync --link` or `--copy`, it is a `cortex/` directory of the project. Either way, overlays live in your project's own `agents/` tree, never under `cortex/`.
+
 ### Where overlays go for each layer
 
 | Layer | Base | Overlay path |
@@ -57,7 +59,7 @@ There are **two ways** to put a file in your project's `agents/` tree:
 | **Overlay** | ✅ Yes | You're extending an existing cortex base (adding rules to `lead-backend.md`, etc.) |
 | **Custom addition** | ❌ No | You're adding something brand new that doesn't exist in cortex (a custom theme, a new role, a project-specific capability) |
 
-This guide focuses on **overlays**. For custom additions, you just place the file at the cascade path and the PM picks it up — no header needed. The `validate-overlays.sh` script logs custom additions as informational and skips overlay-specific checks for them.
+This guide focuses on **overlays**. For custom additions, you just place the file at the cascade path and the PM picks it up — no header needed. `cortex validate` logs custom additions as informational and skips overlay-specific checks for them.
 
 A file with no header that sits **at the path of a cortex base** is not a custom addition: it shadows that base, and the cascade stacks it as an overlay. The validator reports it as `MISSING_HEADER` — a warning, and an error under `--strict`. Add the header, or rename the file if it was never meant to extend the base. The one exception is `personalities/{theme}/characters.md`: it cannot be overridden at all, so a copy at the path of a base is `NON_OVERRIDABLE`, an error, header or not. A theme of your own, with no base of that name, is a custom addition. A `README.md` is documentation: the cascade never reads one, and the validator never reports it.
 
@@ -66,7 +68,7 @@ Examples of custom additions:
 - A new role unique to your domain (e.g. `roles/data/ml-engineer.md`)
 - A project-specific capability not worth PR'ing upstream
 
-**A third thing you'll find in `agents/`, that is neither of the above:** `agents/project-overview.md` and `agents/project-context.md` are the **team-shared context** tier introduced by [ADR-006](adr/ADR-006-workspace-shareable-repo.md). They don't carry an `<!-- OVERLAY -->` header (there's no base file at `cortex/agents/project-*.md` to extend) and they're not part of the roles/capabilities/personalities/workflows cascade — they're read *additively* alongside the workspace-root context files (the **developer** tier), not cascaded through base → workspace → service. `validate-overlays.sh` doesn't check them; there's nothing overlay-shaped about them.
+**A third thing you'll find in `agents/`, that is neither of the above:** `agents/project-overview.md` and `agents/project-context.md` are the **team-shared context** tier introduced by [ADR-006](adr/ADR-006-workspace-shareable-repo.md). They don't carry an `<!-- OVERLAY -->` header (there's no base file at `cortex/agents/project-*.md` to extend) and they're not part of the roles/capabilities/personalities/workflows cascade — they're read *additively* alongside the workspace-root context files (the **developer** tier), not cascaded through base → workspace → service. `cortex validate` doesn't check them; there's nothing overlay-shaped about them.
 
 ## 📜 Anatomy of an overlay file
 
@@ -97,7 +99,7 @@ Every overlay must start with this header:
 
 | Field | Purpose | Values |
 |---|---|---|
-| `Base:` | The file you're extending | Path under `cortex/agents/` (must exist) |
+| `Base:` | The file you're extending | Path under `cortex/agents/` (must exist in the version `cortex.toml` pins) |
 | `Scope:` | Human-readable scope label | `workspace` or `service @alias` |
 | `Semantic:` | Merge mode | `additive` (default for everything except workflows) — `replacement` (workflows only) |
 
@@ -110,7 +112,7 @@ In `additive` overlays, every section must be **explicitly marked**:
 
 This explicit tagging serves two purposes:
 - A human reading the file knows immediately what's an extension vs what's a deletion
-- The Prompt Manager and `validate-overlays.sh` can rely on the structure deterministically
+- The Prompt Manager and `cortex validate` can rely on the structure deterministically
 
 ## 📚 Concrete examples
 
@@ -232,12 +234,12 @@ You have a Acme-specific feature-development flow that requires @Marvin's securi
 Before committing overlays, run:
 
 ```bash
-./cortex/bin/validate-overlays.sh                                     # check everything
-./cortex/bin/validate-overlays.sh --service core/acme-backend     # check one service
-./cortex/bin/validate-overlays.sh --strict                            # warnings → errors
+cortex validate                                   # check everything
+cortex validate --service core/acme-backend       # check one service
+cortex validate --strict                          # warnings → errors
 ```
 
-> The validator needs **Python 3.9 or later** — `python3` or `python` on `PATH`. It runs its checks from `cortex/core/`, with nothing to install; without a usable Python it exits `2` and says so. This lasts until the native binary of [ADR-008](https://github.com/adorey/cortex/issues/37).
+`cortex validate` checks the project's overlays against the spec `spec` names — the version `cortex.toml` pins. It exits `0` when clean, `1` on errors (or on warnings under `--strict`), and `2` on bad arguments or when it has no spec to check against: run `cortex sync` first.
 
 The validator catches the common mistakes:
 - Overlay header missing or malformed — including a headerless file at the path of a base (`MISSING_HEADER`)
@@ -246,21 +248,27 @@ The validator catches the common mistakes:
 - Trying to override a non-overridable file (`characters.md`)
 - `replacement` semantic used outside `workflows/`
 
-CI integration is recommended — fail the pipeline if `validate-overlays.sh --strict` returns non-zero.
+CI integration is recommended — fail the pipeline if `cortex validate --strict` returns non-zero. The CI job installs the binary with the install script, then runs `cortex sync`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh
+export PATH="$HOME/.cortex/bin:$PATH"
+cortex sync
+cortex validate --strict
+```
 
 ## 🔄 Upgrade workflow
 
-When you update cortex (the command depends on how you installed it):
+To move a project to another Cortex version:
 
-- **Submodule mode:** `git submodule update --remote cortex`
-- **Standalone clone:** `cd cortex && git pull`
+1. Change `version` in `cortex.toml`
+2. Run `cortex sync` — it puts that version in the store, downloaded once per machine, and points `spec` at it. A version newer than the installed binary is refused, with the command that upgrades the binary. Teammates run `cortex sync` after they pull the change
+3. Run `cortex validate` immediately
+4. Investigate any error reported (most common: a base file was moved or renamed upstream, breaking a `Base:` header)
+5. Update overlay headers to point to the new path, OR delete the overlay if it's no longer needed
+6. Read the entry for the new version in Cortex's [`changelog/`](../changelog/) — it lists breaking renames
 
-After updating:
-
-1. Run `./cortex/bin/validate-overlays.sh` immediately
-2. Investigate any error reported (most common: a base file was renamed upstream)
-3. Update overlay headers to point to the new path, OR delete the overlay if it's no longer needed
-4. Read the [`cortex/changelog/`](../changelog/) entry for the new version — it lists breaking renames
+Still on a git submodule or a standalone clone of Cortex? See [Moving to the `cortex` binary](migrating-to-the-binary.md).
 
 ## 🤔 FAQ
 
@@ -269,6 +277,9 @@ No. One overlay per `(level, layer, file)` pair. If you need to organize rules, 
 
 **Q: What if I disagree fundamentally with a generic role's design?**
 You probably want a custom role rather than an overlay. Add `cortex/agents/roles/{cat}/my-role.md` upstream (PR), or copy it under your project's `agents/roles/` for a project-only role.
+
+**Q: Can I edit the base file instead?**
+No. The spec is read-only — in the store, and in a project's linked or copied `cortex/` — so an edit of a base file through a project fails. Write an overlay. To change the base for everyone, open a PR on Cortex, and test it in a throwaway host project with `cortex sync --from PATH`, `PATH` your checkout of the Cortex repository.
 
 **Q: Can I override an overlay?**
 Service overlay > workspace overlay > base. That's the cascade. There's no fourth level.
@@ -283,5 +294,6 @@ Negligible. Each layer triggers at most 2 extra `exists()` checks and reads. Tot
 
 - [ADR-001 — Layered overrides](adr/ADR-001-layered-overrides.md) — formal contract
 - [getting-started.md](getting-started.md) — installation walkthrough
+- [migrating-to-the-binary.md](migrating-to-the-binary.md) — moving a project to the `cortex` binary
 - [creating-a-theme.md](creating-a-theme.md) — when overlay isn't enough, fork the theme
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — contributing back upstream
