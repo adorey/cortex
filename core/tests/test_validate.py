@@ -164,10 +164,16 @@ class SymlinkTests(unittest.TestCase):
         self.assertIn("Checked:  1 files", report)
 
 
+def in_name_order(paths):
+    """``paths`` as a depth-first walk lists them when each directory's entries come sorted by name."""
+    return sorted(paths, key=lambda path: path.split("/"))
+
+
 @unittest.skipIf(shutil.which("find") is None, "find not available")
 class DiscoveryTests(unittest.TestCase):
-    """What the script's two find calls found, and in which order — asked of find itself, on the
-    same file system, so that the guard outlives the script."""
+    """What the script's two find calls found — asked of find itself, on the same file system, so
+    that the guard outlives the script — listed in name order at every level, where find follows
+    the file system's (ADR-008 §3.1)."""
 
     def tree(self):
         tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
@@ -203,17 +209,28 @@ class DiscoveryTests(unittest.TestCase):
         root = str(tmp / "link-to-host")
         self.assertEqual(overlay_roots(root, f"{root}/cortex", ""), [f"{root}/svc-a"])
 
-    def test_layer_files_come_in_finds_order(self):
+    def test_layer_files_are_finds_in_name_order(self):
         project = self.tree()
         for layer_dir in sorted(project.glob("*/agents/*")) + sorted(project.glob("tools/*/agents/*")):
             with self.subTest(layer_dir=str(layer_dir.relative_to(project))):
                 self.assertEqual(find(str(layer_dir), "*.md", regular_files=True),
-                                 self.gnu_find(str(layer_dir), "-name", "*.md", "-type", "f"))
+                                 in_name_order(self.gnu_find(str(layer_dir), "-name", "*.md", "-type", "f")))
 
-    def test_services_come_in_finds_order_outside_git_and_cortex(self):
+    def test_the_walk_does_not_follow_the_file_systems_order(self):
+        # Entries created out of alphabetical order come back sorted, files and directories
+        # interleaved by name: b/ (and what is in it) before b.md, a.md before b/.
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        for rel in ("z.md", "b.md", "b/c.md", "a.md", "C.md"):
+            (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+            (tmp / rel).write_text("x\n", encoding="utf-8")
+        self.assertEqual([p[len(str(tmp)) + 1:] for p in find(str(tmp), "*.md", regular_files=True)],
+                         ["C.md", "a.md", "b/c.md", "b.md", "z.md"])
+
+    def test_services_are_finds_in_name_order_outside_git_and_cortex(self):
         project = self.tree()
-        expected = self.gnu_find(str(project), "-maxdepth", "5", "-name", "project-overview.md",
-                                 "-not", "-path", "*/cortex/*", "-not", "-path", "*/.git/*")
+        expected = in_name_order(self.gnu_find(str(project), "-maxdepth", "5", "-name", "project-overview.md",
+                                               "-not", "-path", "*/cortex/*", "-not", "-path", "*/.git/*"))
         found = [f"{root}/project-overview.md" for root in overlay_roots(str(project), str(project / "cortex"), "")]
         self.assertEqual(found, expected)
         self.assertFalse(any("/.git/" in f or "/cortex/" in f for f in found), found)
@@ -261,6 +278,25 @@ class ServiceOptionTests(unittest.TestCase):
         with mock.patch("os.path.isabs", ntpath.isabs):
             self.assertEqual(overlay_roots("C:/work/host", "C:/work/host/cortex", "C:/work/host/svc-a"),
                              ["C:/work/host/svc-a"])
+
+
+class DisplayTests(unittest.TestCase):
+    """ADR-008 §3.1 — paths print with ``/`` on every platform."""
+
+    def test_the_windows_separator_prints_as_a_slash(self):
+        from cortex_core.validate import display
+
+        with mock.patch("os.sep", "\\"):
+            self.assertEqual(display("C:\\work\\host/agents/roles/x.md"), "C:/work/host/agents/roles/x.md")
+
+    def test_a_backslash_in_a_posix_name_is_kept(self):
+        from cortex_core.validate import display
+
+        with mock.patch("os.sep", "/"):
+            self.assertEqual(display("/p/agents/roles/a\\b.md"), "/p/agents/roles/a\\b.md")
+
+    # The report itself is checked on Windows, where the cortex command replays the golden
+    # outputs (cli/tests/test_cli_validate.py): on POSIX, a backslash in a path is part of a name.
 
 
 class MainTests(unittest.TestCase):

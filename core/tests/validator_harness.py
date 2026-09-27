@@ -18,6 +18,10 @@ A case may carry a ``case.json``:
   in an argument stands for the project root, for an absolute path;
 - ``crlf`` — files to rewrite with CRLF line endings at layout time (git keeps them LF).
 
+``layout(..., crlf=True)`` rewrites every file of the project with CRLF line endings — the base's
+too — as git checks a project out on Windows with ``core.autocrlf``: the report must not change
+(ADR-008 §3.1).
+
 Every run happens under ``LC_ALL=C``. The port reads bytes and ASCII character classes the way
 the script's grep and sed did in the C locale; under a UTF-8 locale they also took Unicode
 spaces for spaces (``unicode-space-in-field``). Pinning the locale measures the script in the
@@ -65,8 +69,13 @@ def run_key(args):
     return " ".join(args) or "default"
 
 
-def layout(case, tmp):
-    """Build the host project of ``case`` under ``tmp`` and return its root."""
+def to_crlf(data):
+    return data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+
+
+def layout(case, tmp, crlf=False):
+    """Build the host project of ``case`` under ``tmp`` and return its root — every file with CRLF
+    line endings when ``crlf``."""
     cfg = config(case)
     project = tmp / cfg.get("project", "host")
     shutil.copytree(FIXTURES / "base", project / "cortex")
@@ -78,13 +87,17 @@ def layout(case, tmp):
             shutil.copy(src, dst)
     for rel in cfg.get("crlf", []):
         path = project / rel
-        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+        path.write_bytes(to_crlf(path.read_bytes()))
+    if crlf:
+        for path in project.rglob("*"):
+            if path.is_file():
+                path.write_bytes(to_crlf(path.read_bytes()))
     return project
 
 
-def _run(cmd, env=None):
+def _run(cmd, env=None, cwd=None):
     env = dict(os.environ if env is None else env, LC_ALL="C")
-    proc = subprocess.run(cmd, capture_output=True, env=env)
+    proc = subprocess.run(cmd, capture_output=True, env=env, cwd=cwd)
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -105,15 +118,31 @@ def run_core(project, args):
     return _run([sys.executable, "-I", "-c", SHIM_CALL, str(CORE), str(project), str(project / "cortex"), *args])
 
 
-def execute(case, args, runner):
+def spellings(tmp):
+    """Every way a run may print ``tmp``: as given, resolved — macOS's ``/var`` is a link to
+    ``/private/var``, and a working directory is reported resolved — and on Windows with ``/``,
+    as the report prints paths. The longest first, so that none is left half replaced."""
+    forms = {str(tmp), os.path.realpath(tmp)}
+    forms |= {form.replace(os.sep, "/") for form in forms}
+    return sorted(forms, key=len, reverse=True)
+
+
+def execute(case, args, runner, crlf=False):
     tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
     # A case that puts its project inside a directory named "agents" or "cortex" says so with
     # "project": the temporary directory itself must contain neither, so that no other case does.
     assert "/agents/" not in f"{tmp}/" and "/cortex/" not in f"{tmp}/", tmp
     try:
-        project = layout(case, tmp)
+        project = layout(case, tmp, crlf)
         code, out, err = runner(project, [arg.replace("{project}", str(project)) for arg in args])
-        norm = lambda b: b.decode("utf-8", "surrogateescape").replace(str(tmp), "<TMP>").split("\n")
+        forms = spellings(tmp)
+
+        def norm(data):
+            text = data.decode("utf-8", "surrogateescape")
+            for form in forms:
+                text = text.replace(form, "<TMP>")
+            return text.split("\n")
+
         return {"code": code, "stdout": norm(out), "stderr": norm(err)}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
