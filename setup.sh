@@ -265,12 +265,16 @@ if [ "$WORKSPACE_MODE" = true ]; then
         fi
         SERVICE_DIR="$TARGET_DIR/$SERVICE_NAME"
         mkdir -p "$SERVICE_DIR"
+        # A service in a subfolder — core/api — is named by its last segment, @api. The name is
+        # escaped for sed: a slash or an ampersand must not end or rewrite the substitution.
+        SERVICE_ALIAS="$(basename "$SERVICE_NAME")"
+        ALIAS_SED="$(printf '%s' "$SERVICE_ALIAS" | sed 's/[\\&|]/\\&/g')"
         if [ ! -f "$SERVICE_DIR/project-overview.md" ]; then
-            sed "s/<!-- @alias: mon-projet -->/<!-- @alias: $SERVICE_NAME -->/" "$OVERVIEW_TEMPLATE" > "$SERVICE_DIR/project-overview.md"
+            sed "s|<!-- @alias: my-project -->|<!-- @alias: $ALIAS_SED -->|" "$OVERVIEW_TEMPLATE" > "$SERVICE_DIR/project-overview.md"
             echo -e "${GREEN}  ✅${NC} $SERVICE_NAME/project-overview.md"
         fi
         if [ ! -f "$SERVICE_DIR/project-context.md" ]; then
-            sed "s/<!-- @alias: mon-projet -->/<!-- @alias: $SERVICE_NAME -->/" "$CONTEXT_TEMPLATE" > "$SERVICE_DIR/project-context.md"
+            sed "s|<!-- @alias: my-project -->|<!-- @alias: $ALIAS_SED -->|" "$CONTEXT_TEMPLATE" > "$SERVICE_DIR/project-context.md"
             echo -e "${GREEN}  ✅${NC} $SERVICE_NAME/project-context.md"
         fi
     done

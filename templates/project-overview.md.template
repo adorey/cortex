@@ -5,6 +5,11 @@
   In workspace mode, mention this alias in your prompt to target this context.
   If absent, the Prompt Manager infers the service from the files open in the IDE.
 -->
+<!--
+  Who reads this file: the Prompt Manager in your editor, and every agent the runtime calls,
+  as part of its system prompt (ADR-002 §9). Either way it is sent to the model provider with
+  each request. Write nothing here that should not leave your machine.
+-->
 
 # Overview: [Project / service name]
 

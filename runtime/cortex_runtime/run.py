@@ -10,11 +10,14 @@ over it, so the contract stays testable with zero install.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
+import re
+from dataclasses import dataclass, field, replace
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
-from .context import derive_capabilities
+from cortex_core.workspace import service_index
+
+from .context import derive_capabilities, read_project_context, read_project_overview
 from .resolver import build_system_prompt, find_workflow_relpath, layers_for, read_resolved
 from .safety import ActionPolicy
 
@@ -56,10 +59,26 @@ class ResolvedRun:
     allowed_actions: List[str]           # autonomy granted for this run (gating allowlist)
 
 
+def _service_inside(service: Optional[str]) -> Optional[str]:
+    """The service as a folder of the workspace — relative, normalised, never climbing out of it.
+    Its files reach the prompt: a service naming ``../elsewhere`` would read a neighbour's."""
+    if not service:
+        return service
+    path = PurePosixPath(service.replace("\\", "/"))
+    if path.is_absolute() or ".." in path.parts or re.match(r"^[A-Za-z]:", service):
+        raise ValueError(f"service must be a folder inside the workspace, got {service!r}")
+    if not path.parts:
+        return None                  # "." is the workspace itself: no service
+    if path.parts[0] == "agents":
+        raise ValueError(f"service must be a folder of the workspace other than agents/, got {service!r}")
+    return str(path)
+
+
 def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> ResolvedRun:
     """Compile a request into a resolved bundle. ``theme`` is the workspace's active theme
     (deployment config — NOT the gitignored local ``.active-theme`` marker)."""
     root = Path(root)
+    req = replace(req, service=_service_inside(req.service))
 
     capabilities = derive_capabilities(root, req.service)
     system_prompt = build_system_prompt(
@@ -68,6 +87,9 @@ def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> Res
         theme=theme,
         root=root,
         capabilities=capabilities,
+        project_overview=read_project_overview(root, req.service),
+        workspace_services=service_index(root, active=req.service),
+        project_context=read_project_context(root, req.service),
     )
 
     workflow_text: Optional[str] = None
