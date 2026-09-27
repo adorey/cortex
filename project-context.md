@@ -7,8 +7,8 @@
 ### Stack principale
 - **Source format:** Markdown (`.md`) — natively readable by any AI agent, with no special parsing
 - **Configuration:** YAML front matter for metadata (where needed)
-- **Scripting :** Bash (`setup.sh`)
-- **No runtime dependency** — static files only
+- **Tooling:** Python — the `cortex` command (`cli/`, built into a native binary) and `cortex-core` (`core/`); POSIX `sh` and PowerShell for the one-line install
+- **No dependency for a host project** — the spec is static Markdown, the `cortex` binary embeds everything else
 
 ### Integration with AI tools
 Cortex is **agnostic of the AI tool**. The entry instruction file depends on where it is used:
@@ -36,7 +36,10 @@ cortex/
 ├── assets/               ← Ressources statiques
 ├── docs/                 ← Documentation du framework
 ├── templates/            ← Project templates (entry instructions, project-context…)
-└── setup.sh              ← Script d'initialisation
+├── cli/                  ← The `cortex` command: init, sync, validate
+├── core/                 ← cortex-core, the cascade in code
+├── runtime/              ← The engine: API, agentic loop
+└── install.sh, install.ps1  ← The one-line install
 ```
 
 ## 📝 Code conventions
