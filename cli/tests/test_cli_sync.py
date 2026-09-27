@@ -331,6 +331,30 @@ class LinkAndCopyTests(SyncTestCase):
         self.assertIn("Cortex 9.9.8", (project / "cortex/agents/roles/prompt-manager.md").read_text(encoding="utf-8"))
 
 
+class FromTests(SyncTestCase):
+    def test_spec_names_the_checkout_and_a_warning_says_so_every_time(self):
+        project = self.project()
+        for _ in range(2):
+            proc = self.sync(project, "--from", str(harness.REPO))
+            self.assert_ok(proc)
+            self.assertIn("no version is checked (--from)", proc.err)
+        self.assertEqual(self.spec(project), display(harness.REPO))
+        self.assertFalse(self.home.exists())
+
+    def test_validate_reads_the_checkouts_base(self):
+        project = self.project()
+        self.sync(project, "--from", str(harness.REPO))
+        proc = self.validate(project)
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn(f"Cortex dir:    {display(harness.REPO)}", proc.out)
+
+    def test_a_directory_that_is_no_checkout_is_refused(self):
+        project = self.project()
+        proc = self.sync(project, "--from", str(self.tmp))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("no Cortex checkout there", proc.err)
+
+
 class ProjectFileTests(SyncTestCase):
     def test_no_cortex_toml(self):
         bare = self.tmp / "bare"

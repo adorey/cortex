@@ -144,11 +144,15 @@ def make_copy(target: Path, source: Path, label: str) -> None:
     store.make_read_only(target)
 
 
+def is_checkout(path: Path) -> bool:
+    return all((path / tree).is_dir() for tree in ("agents", "templates"))
+
+
 # --------------------------------------------------------------------------- #
 # The command
 # --------------------------------------------------------------------------- #
 
-def sync(cwd: str, mode: Optional[str], out: TextIO, err: TextIO) -> None:
+def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO) -> None:
     root = config.find_project(cwd)
     if root is None:
         raise SyncError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory "
@@ -159,12 +163,20 @@ def sync(cwd: str, mode: Optional[str], out: TextIO, err: TextIO) -> None:
     target = Path(root) / LINK
     existing = existing_entry(target, the_store, project)
 
-    how = the_store.ensure(project.version)
-    spec_source = the_store.path(project.version)
-    label = str(project.version)
-    said = {"stored": "in the store", "written": "written to the store, from this cortex",
-            "downloaded": "downloaded to the store, checked against its SHA256SUMS"}[how]
-    out.write(f"Cortex {project.version}: {said} — {display(str(spec_source))}\n")
+    if source is not None:
+        spec_source = Path(os.path.abspath(source))
+        if not is_checkout(spec_source):
+            raise SyncError(f"--from {display(source)}: no Cortex checkout there — it holds no agents/ and templates/")
+        err.write(f"warning: the spec is the checkout at {display(str(spec_source))}, not Cortex {project.version}: "
+                  "no version is checked (--from)\n")
+        label = f"from {display(str(spec_source))}"
+    else:
+        how = the_store.ensure(project.version)
+        spec_source = the_store.path(project.version)
+        label = str(project.version)
+        said = {"stored": "in the store", "written": "written to the store, from this cortex",
+                "downloaded": "downloaded to the store, checked against its SHA256SUMS"}[how]
+        out.write(f"Cortex {project.version}: {said} — {display(str(spec_source))}\n")
 
     if mode == "store":
         remove_entry(existing, target)
@@ -179,7 +191,7 @@ def sync(cwd: str, mode: Optional[str], out: TextIO, err: TextIO) -> None:
         spec = LINK
         out.write(f"{LINK}/ links to {display(str(spec_source))}.\n")
     else:
-        if not (existing == "copy" and synced_version(target) == label):
+        if not (existing == "copy" and source is None and synced_version(target) == label):
             remove_entry(existing, target)
             make_copy(target, spec_source, label)
         spec = LINK
@@ -217,9 +229,11 @@ def run(args: List[str]) -> int:
                        help="link cortex/ to it: a symbolic link, a junction on Windows")
     modes.add_argument("--copy", dest="mode", action="store_const", const="copy",
                        help="copy it into cortex/, read-only")
+    parser.add_argument("--from", dest="source", metavar="PATH",
+                        help="use a checkout of Cortex instead of the store: no version is checked")
     options = parser.parse_args(args)
     try:
-        sync(working_directory(), options.mode, sys.stdout, sys.stderr)
+        sync(working_directory(), options.mode, options.source, sys.stdout, sys.stderr)
     except (config.ConfigError, store.StoreError, SyncError) as error:
         sys.stdout.flush()
         sys.stderr.write(f"cortex sync: {error}\n")
