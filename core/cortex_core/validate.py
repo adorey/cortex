@@ -457,8 +457,19 @@ def cli() -> int:
     return main(sys.argv[3:], project_root=sys.argv[1], base_root=sys.argv[2])
 
 
-if __name__ == "__main__":
-    # ``python3 -m cortex_core.validate [OPTIONS]`` from a checkout's core/ (ADR-007 §3.5): the
-    # roots come from where this file sits, as the shim derives them from where it sits.
+def _module_main() -> int:
+    """``python3 -m cortex_core.validate [OPTIONS]`` from a checkout's core/ (ADR-007 §3.5): the
+    roots come from where this file sits, as the shim derives them from where it sits — which
+    only holds inside a Cortex checkout. Installed, in a site-packages, there is none around it:
+    derived from there, the roots would name no project, and the run would pass over nothing."""
     _default_sigpipe()
-    sys.exit(main())
+    base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if not (os.path.isdir(f"{base_root}/agents") and os.path.isfile(f"{base_root}/bin/validate-overlays.sh")):
+        _stderr("cortex_core.validate is not inside a Cortex checkout here; run the checkout's "
+                "bin/validate-overlays.sh, or run the module from that checkout's core/ directory.\n")
+        return 2
+    return main()
+
+
+if __name__ == "__main__":
+    sys.exit(_module_main())
