@@ -1,0 +1,80 @@
+name: binary
+
+# The `cortex` command as it ships (ADR-008 §3.1): a native binary for each of the four targets,
+# built with PyInstaller, then checked through itself — the CLI's suite replayed through the
+# built binary, with no Python on its PATH.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cli/**"
+      - "core/**"
+      - ".github/workflows/binary.yml"
+  pull_request:
+    paths:
+      - "cli/**"
+      - "core/**"
+      - ".github/workflows/binary.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    # Linux builds in AlmaLinux 8, for its glibc 2.28: the oldest the binary runs on is the one it
+    # was built against. Not a manylinux image: their Python has no shared libpython, which
+    # PyInstaller needs (ADR-008 §9).
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x86_64, runner: ubuntu-latest, container: "almalinux:8" }
+          - { target: linux-aarch64, runner: ubuntu-24.04-arm, container: "almalinux:8" }
+          - { target: macos-arm64, runner: macos-14, container: "" }
+          - { target: windows-x86_64, runner: windows-latest, container: "" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Python and the build's tools (AlmaLinux 8)
+        if: matrix.container != ''
+        run: |
+          dnf -y -q install python3.12 python3.12-pip binutils git tar gzip
+          ln -sf /usr/bin/python3.12 /usr/local/bin/python
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        if: matrix.container == ''
+        with:
+          python-version: "3.12"
+
+      - name: The version to stamp
+        id: version
+        run: |
+          echo "version=0.0.0-dev.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          python -m pip install --quiet -r cli/requirements-build.txt
+          python cli/build.py --version "${{ steps.version.outputs.version }}"
+
+      # The suite the source runs in cli-tests, now through the binary: --version, the golden
+      # outputs of the validator byte for byte, from a CRLF checkout too.
+      - name: The binary replays the CLI's suite, with no Python on its PATH
+        working-directory: cli
+        env:
+          CORTEX_TEST_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          binary="$GITHUB_WORKSPACE/cli/build/dist/cortex"
+          [ "$RUNNER_OS" = Windows ] && binary="$binary.exe"
+          CORTEX_TEST_BINARY="$binary" python -m unittest discover -s tests -v
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cortex-${{ matrix.target }}
+          path: cli/build/dist/cortex-${{ matrix.target }}.*
+          if-no-files-found: error
