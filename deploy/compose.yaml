@@ -21,11 +21,18 @@ services:
       - .env
     environment:
       # container-specific values (these win over env_file)
-      CORTEX_ROOT: /workspace                 # the mounted project (contains its cortex/ submodule)
+      CORTEX_ROOT: /workspace                 # the mounted project
+      # The store the host's `cortex sync` fills (ADR-008 §3.6): a project whose cortex.toml pins
+      # a version resolves its base in /cortex-home/versions/<version>; one without keeps
+      # /workspace/cortex. The runtime never reads spec in cortex.local.toml, a host path.
+      CORTEX_HOME: /cortex-home
       CORTEX_DATABASE_URL: postgresql://cortex:${POSTGRES_PASSWORD:-cortex}@postgres:5432/cortex
       CORTEX_MCP_CONFIG: /config/cortex-mcp.json
     volumes:
       - ${CORTEX_PROJECT_PATH}:/workspace:ro          # the project the agent investigates
+      # The host's store, read-only. Unset, an empty directory of this repository stands in: a
+      # project without cortex.toml needs none, and Docker never creates ~/.cortex owned by root.
+      - ${CORTEX_STORE_PATH:-./no-store}:/cortex-home:ro
       - ./cortex-mcp.json:/config/cortex-mcp.json:ro  # the mcp_bindings
     depends_on:
       postgres:
