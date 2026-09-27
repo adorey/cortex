@@ -128,6 +128,35 @@ def describe(path: Path) -> str:
     return "a directory" if path.is_dir() else "a file"
 
 
+def _remove_command(path: str) -> str:
+    return f"Remove-Item -Recurse -Force {path}" if os.name == "nt" else f"rm -rf {path}"
+
+
+def leaving(path: Path) -> str:
+    """How to leave the submodule or the clone at ``cortex/`` (ADR-008 §3.10): the commands, shown
+    and never run — they rewrite the project's git state, and the developer should see them first."""
+    git = path / ".git"
+    if git.is_file():
+        # A submodule's .git names its repository, under the superproject's .git/modules/.
+        modules = ".git/modules/cortex"
+        try:
+            gitdir = git.read_text(encoding="utf-8").strip()
+            if gitdir.startswith("gitdir:"):
+                resolved = os.path.normpath(os.path.join(path, gitdir[len("gitdir:"):].strip()))
+                modules = display(os.path.relpath(resolved, path.parent))
+        except (OSError, ValueError):
+            pass
+        return ("Cortex now lives in the store, and the submodule is to go. These commands rewrite the "
+                "project's git state, so they are shown here, not run:\n\n"
+                f"    git submodule deinit -f {LINK}\n    git rm {LINK}\n    {_remove_command(modules)}\n\n"
+                "Then run the command again. The migration guide covers it: "
+                "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
+    if git.is_dir():
+        return ("Cortex now lives in the store, and the clone is to go. Once you have checked it holds "
+                f"nothing of yours:\n\n    {_remove_command(LINK)}\n\nThen run the command again.")
+    return "Move or remove it, then run the command again."
+
+
 def existing_entry(target: Path, the_store: store.Store, project: config.Project) -> Optional[str]:
     """What sync made at ``cortex/`` — ``"link"``, ``"copy"`` — or ``None`` when nothing is there.
     Anything else there is refused, and so is a copy holding a file sync did not write: removing
@@ -153,8 +182,7 @@ def existing_entry(target: Path, the_store: store.Store, project: config.Project
                             "yourself, then run cortex sync again.")
         return "copy"
     raise SyncError(f"{LINK}/ is {describe(target)}, which cortex sync did not write. It would shadow the spec "
-                    f"{config.LOCAL_FILE} names, and sync never deletes what it did not write: move or remove it, "
-                    "then run cortex sync again.")
+                    f"{config.LOCAL_FILE} names, and sync never deletes what it did not write.\n{leaving(target)}")
 
 
 # --------------------------------------------------------------------------- #
