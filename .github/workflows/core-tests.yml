@@ -9,12 +9,14 @@ on:
       - "core/**"
       - "agents/**"
       - "bin/validate-overlays.sh"
+      - "cli/tests/**"
       - ".github/workflows/core-tests.yml"
   pull_request:
     paths:
       - "core/**"
       - "agents/**"
       - "bin/validate-overlays.sh"
+      - "cli/tests/**"
       - ".github/workflows/core-tests.yml"
 
 jobs:
