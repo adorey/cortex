@@ -164,9 +164,25 @@ jobs:
       - name: SHA256SUMS
         run: python3 cli/build.py --checksums assets
 
+      # The archives, and the binaries inside them: `gh attestation verify ~/.cortex/bin/cortex
+      # --repo adorey/cortex` then checks the installed file itself.
+      - name: The binaries inside the archives
+        run: |
+          mkdir -p binaries
+          for archive in assets/cortex-*.tar.gz; do
+            target="$(basename "$archive" .tar.gz)"
+            mkdir -p "binaries/$target" && tar -xzf "$archive" -C "binaries/$target" cortex
+          done
+          for archive in assets/cortex-*.zip; do
+            target="$(basename "$archive" .zip)"
+            mkdir -p "binaries/$target" && unzip -q "$archive" cortex.exe -d "binaries/$target"
+          done
+
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: assets/*
+          subject-path: |
+            assets/*
+            binaries/*/cortex*
 
       - name: Attach the assets
         env:
