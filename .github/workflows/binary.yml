@@ -3,6 +3,10 @@ name: binary
 # The `cortex` command as it ships (ADR-008 §3.1): a native binary for each of the four targets,
 # built with PyInstaller, then checked through itself — the CLI's suite replayed through the
 # built binary, with no Python on its PATH.
+#
+# Publishing a GitHub Release — the maintainer still writes it from changelog/X.Y.Z.md — builds
+# the same binaries from the tag and attaches them to it: one archive per target, SHA256SUMS
+# over them, and a build-provenance attestation for each (`gh attestation verify`).
 on:
   push:
     branches: [main]
@@ -15,6 +19,8 @@ on:
       - "cli/**"
       - "core/**"
       - ".github/workflows/binary.yml"
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -52,10 +58,27 @@ jobs:
         with:
           python-version: "3.12"
 
+      # A release is built at the version of its tag, which CHANGELOG.md must already carry — it
+      # stays the one source of versions. A GitHub pre-release — X.Y.Z-something, the throwaway
+      # kind that tests this workflow — is not in the changelog. Anything else is a build of no
+      # release.
       - name: The version to stamp
         id: version
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
-          echo "version=0.0.0-dev.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            version="$GITHUB_REF_NAME"
+            if [ "$PRERELEASE" = true ]; then
+              echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$' || { echo "::error::pre-release tag $version is no X.Y.Z-suffix version"; exit 1; }
+            else
+              echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::tag $version is no X.Y.Z version"; exit 1; }
+              grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
+            fi
+          else
+            version="0.0.0-dev.$GITHUB_RUN_NUMBER"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Build
         run: |
@@ -78,3 +101,35 @@ jobs:
           name: cortex-${{ matrix.target }}
           path: cli/build/dist/cortex-${{ matrix.target }}.*
           if-no-files-found: error
+
+  publish:
+    name: attach to the release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # upload the assets
+      id-token: write        # sign the attestations
+      attestations: write    # store them
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          pattern: cortex-*
+          merge-multiple: true
+
+      # Asset names carry no version, so that releases/latest/download/<asset> always names the
+      # latest release's: the release itself is the version.
+      - name: SHA256SUMS
+        run: python3 cli/build.py --checksums assets
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: assets/*
+
+      - name: Attach the assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" assets/* --clobber --repo "$GITHUB_REPOSITORY"
