@@ -265,7 +265,7 @@ class Store:
 
 def _copy_trees(source: Path, staging: Path) -> None:
     for tree in SPEC_TREES:
-        shutil.copytree(source / tree, staging / tree, ignore=shutil.ignore_patterns(".active-theme"))
+        shutil.copytree(source / tree, staging / tree)
 
 
 def _extract(archive: Path, staging: Path) -> None:
