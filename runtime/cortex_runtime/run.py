@@ -67,6 +67,10 @@ def _service_inside(service: Optional[str]) -> Optional[str]:
     path = PurePosixPath(service.replace("\\", "/"))
     if path.is_absolute() or ".." in path.parts or re.match(r"^[A-Za-z]:", service):
         raise ValueError(f"service must be a folder inside the workspace, got {service!r}")
+    if not path.parts:
+        return None                  # "." is the workspace itself: no service
+    if path.parts[0] == "agents":
+        raise ValueError(f"service must be a folder of the workspace other than agents/, got {service!r}")
     return str(path)
 
 
