@@ -46,7 +46,7 @@ merge semantics of §3.2:
 - `roles/`, `capabilities/`, `personalities/{theme}/theme.md`, `…/{character}.md` → **additive**
 - `personalities/{theme}/characters.md` → **not overridable** (base only)
 
-[`bin/validate-overlays.sh`](../bin/validate-overlays.sh) runs the same core, so the resolver and
+[`cortex validate`](../cli/README.md) runs the same core, so the resolver and
 the overlay validator are one implementation and cannot drift apart (ADR-002 §3.1, ADR-007).
 
 ## Where the base is

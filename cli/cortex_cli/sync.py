@@ -162,7 +162,7 @@ def make_copy(target: Path, source: Path, label: str) -> None:
     staging = Path(tempfile.mkdtemp(prefix=".cortex-sync-", dir=target.parent))
     try:
         for tree in store.SPEC_TREES:
-            shutil.copytree(source / tree, staging / tree, ignore=shutil.ignore_patterns(".active-theme"))
+            shutil.copytree(source / tree, staging / tree)
         (staging / MARKER).write_text(f"{label}\n{MARKER_NOTE}\n", encoding="utf-8")
         os.rename(staging, target)
     except BaseException:

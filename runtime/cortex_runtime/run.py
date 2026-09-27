@@ -77,7 +77,7 @@ def _service_inside(service: Optional[str]) -> Optional[str]:
 
 def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> ResolvedRun:
     """Compile a request into a resolved bundle. ``theme`` is the workspace's active theme
-    (deployment config — NOT the gitignored local ``.active-theme`` marker). The base is the
+    (deployment config — NOT a developer's own theme in ``cortex.local.toml``). The base is the
     store's copy of the version the project's ``cortex.toml`` pins, or ``{root}/cortex`` without
     one (ADR-008 §3.6): a version the store lacks is a ``ValueError``, as a bad service is."""
     root = Path(root)

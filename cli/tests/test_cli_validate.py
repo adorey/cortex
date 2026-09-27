@@ -1,12 +1,15 @@
 """``cortex validate`` — ADR-007's frozen outputs, replayed through the command (ADR-008 §3.8).
 
-The golden fixtures are the core's (``core/tests/fixtures/validator``), captured from the script.
-The command must reproduce them byte for byte, exit codes included — on every platform, paths
-printed with ``/`` (§3.1), and from a checkout with CRLF line endings too. One line differs, on
-purpose: the help names the command it was asked of.
+The golden fixtures are the core's (``core/tests/fixtures/validator``), captured from the Bash
+validator of Cortex 0.9.0. The command must reproduce them byte for byte, exit codes included —
+on every platform, paths printed with ``/`` (§3.1), and from a checkout with CRLF line endings too.
 """
 
+import shutil
+import signal
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -32,9 +35,7 @@ def run_command(project, args):
 
 
 def expected(case, args):
-    captured = EXPECTED[case][golden.run_key(args)]
-    rename = lambda lines: [line.replace("Usage: validate-overlays.sh", "Usage: cortex validate") for line in lines]
-    return dict(captured, stdout=rename(captured["stdout"]), stderr=rename(captured["stderr"]))
+    return EXPECTED[case][golden.run_key(args)]
 
 
 class GoldenTests(unittest.TestCase):
@@ -58,6 +59,48 @@ class GoldenTests(unittest.TestCase):
 
     def test_the_top_level_help_lists_it(self):
         self.assertIn(b"  validate ", harness.run("--help").stdout)
+
+
+class IsolationTests(unittest.TestCase):
+    """Code from the project under validation never runs — the command runs in the project's root."""
+
+    def test_modules_in_the_project_are_not_imported(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validate-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = golden.layout("ok-additive", tmp)
+        marker = tmp / "executed"
+        payload = f"open({str(marker)!r}, 'w').close()\n"
+        # Standard modules the command imports, the packages' own names, and sitecustomize, which
+        # a Python started without isolation imports from its path.
+        for name in ("fnmatch.py", "re.py", "typing.py", "enum.py", "pathlib.py", "tomllib.py", "sitecustomize.py"):
+            (project / name).write_text(payload, encoding="utf-8")
+        for package in ("cortex_core", "cortex_cli"):
+            (project / package).mkdir()
+            (project / package / "__init__.py").write_text(payload, encoding="utf-8")
+        env = harness.environment(PYTHONPATH=str(project), PYTHONSTARTUP=str(project / "re.py"))
+        code, out, _ = run_command(project, [])
+        proc = harness.run("validate", cwd=project, env=env)
+        self.assertEqual((code, proc.returncode), (0, 0))
+        self.assertIn(b"agents/roles/engineering/lead-backend.md", proc.stdout)
+        self.assertFalse(marker.exists(), "a module of the project ran")
+
+
+@unittest.skipIf(not hasattr(signal, "SIGPIPE"), "no SIGPIPE here")
+class PipeTests(unittest.TestCase):
+    def test_a_reader_that_goes_away_ends_the_run_quietly(self):
+        # cortex validate | head -1: the run ends by SIGPIPE, in silence — no traceback.
+        tmp = Path(tempfile.mkdtemp(prefix="cortex-validate-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        project = golden.layout("ok-additive", tmp)
+        run_command(project, ["--help"])      # writes cortex.toml and cortex.local.toml
+        proc = subprocess.Popen(harness.command("validate"), cwd=project, env=harness.environment(PWD=str(project)),
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+        proc.stdout.close()                   # gone before the first line is written
+        err = proc.stderr.read()
+        proc.stderr.close()
+        proc.wait()
+        self.assertNotIn(b"Traceback", err)
+        self.assertEqual(proc.returncode, -signal.SIGPIPE)
 
 
 if __name__ == "__main__":
