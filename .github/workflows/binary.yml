@@ -13,11 +13,15 @@ on:
     paths:
       - "cli/**"
       - "core/**"
+      - "install.sh"
+      - "install.ps1"
       - ".github/workflows/binary.yml"
   pull_request:
     paths:
       - "cli/**"
       - "core/**"
+      - "install.sh"
+      - "install.ps1"
       - ".github/workflows/binary.yml"
   release:
     types: [published]
@@ -95,6 +99,20 @@ jobs:
           binary="$GITHUB_WORKSPACE/cli/build/dist/cortex"
           [ "$RUNNER_OS" = Windows ] && binary="$binary.exe"
           CORTEX_TEST_BINARY="$binary" python -m unittest discover -s tests -v
+
+      # The asset just built, installed the way a user installs a release: through the install
+      # script, from a release served here — its SHA256SUMS checked, the binary run once.
+      - name: The install script installs this binary
+        if: runner.os != 'Windows'
+        run: |
+          release="$RUNNER_TEMP/release"
+          mkdir -p "$release/latest/download"
+          cp "cli/build/dist/cortex-${{ matrix.target }}.tar.gz" "$release/latest/download/"
+          python cli/build.py --checksums "$release/latest/download"
+          python -m http.server 8765 --bind 127.0.0.1 --directory "$release" > /dev/null 2>&1 &
+          for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fs http://127.0.0.1:8765/ > /dev/null && break; sleep 1; done
+          CORTEX_HOME="$RUNNER_TEMP/cortex-home" CORTEX_RELEASES_URL=http://127.0.0.1:8765 sh install.sh --name cortex
+          test "$("$RUNNER_TEMP/cortex-home/bin/cortex" --version)" = "cortex ${{ steps.version.outputs.version }}"
 
       - uses: actions/upload-artifact@v4
         with:

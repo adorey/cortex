@@ -47,6 +47,11 @@ jobs:
       - name: shellcheck
         run: shellcheck --severity=warning setup.sh bin/*.sh
 
+      # install.sh runs piped from curl, under whatever sh the machine has — dash on Debian and
+      # Ubuntu: POSIX sh, linted as such.
+      - name: shellcheck (install.sh, POSIX sh)
+        run: shellcheck --shell=sh --severity=style install.sh
+
   scaffold:
     name: Scaffold a host project (${{ matrix.mode }})
     runs-on: ubuntu-latest
