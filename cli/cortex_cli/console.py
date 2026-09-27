@@ -35,3 +35,19 @@ def _enable_virtual_terminal() -> None:
         mode = ctypes.c_ulong()
         if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
             kernel32.SetConsoleMode(handle, mode.value | 0x0004)   # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+
+
+def stdin_is_terminal() -> bool:
+    """Whether someone can answer a question: stdin is a terminal. On Windows ``isatty`` also says
+    yes of ``NUL`` — stdin closed, an unattended run — which is a character device, not a console:
+    only a console handle has a console mode."""
+    stdin = sys.stdin
+    if stdin is None or not stdin.isatty():
+        return False
+    if os.name != "nt":
+        return True
+    import ctypes
+    import msvcrt
+
+    mode = ctypes.c_ulong()
+    return bool(ctypes.windll.kernel32.GetConsoleMode(msvcrt.get_osfhandle(stdin.fileno()), ctypes.byref(mode)))
