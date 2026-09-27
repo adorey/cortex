@@ -94,14 +94,22 @@ function Install-Cortex {
             }
         }
         if (-not $expected) { throw "install.ps1: SHA256SUMS lists no $asset - nothing was installed" }
-        # Get-FileHash answers in upper case, sha256sum in lower case.
-        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+        # .NET itself, not Get-FileHash or Expand-Archive: those come from script modules, which
+        # Windows PowerShell started from PowerShell 7 looks for in the wrong place (PSModulePath).
+        $stream = [IO.File]::OpenRead($zip)
+        try {
+            $digest = [Security.Cryptography.SHA256]::Create().ComputeHash($stream)
+        } finally {
+            $stream.Dispose()
+        }
+        $actual = -join ($digest | ForEach-Object { $_.ToString("x2") })
         if ($actual -cne $expected) {
             throw "install.ps1: checksum mismatch for $asset - expected $expected, got $actual. Nothing was installed."
         }
 
         $unpacked = Join-Path $work "unpacked"
-        Expand-Archive -LiteralPath $zip -DestinationPath $unpacked
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [IO.Compression.ZipFile]::ExtractToDirectory($zip, $unpacked)
         $exe = Join-Path $unpacked "cortex.exe"
         if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
             throw "install.ps1: $asset holds no cortex.exe - nothing was installed"
