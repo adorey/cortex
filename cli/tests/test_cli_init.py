@@ -362,6 +362,18 @@ class OptionTests(InitTestCase):
         self.assertTrue(written.startswith("\ufeff"))
         self.assertIn('theme = "h2g2"  # the team\'s choice', written)
 
+    def test_from_a_checkout_its_templates_and_its_spec(self):
+        # CONTRIBUTING's loop: a template edited in a checkout reaches the project at once.
+        checkout = self.tmp / "checkout"
+        shutil.copytree(self.spec, checkout)
+        template = checkout / "templates" / "bootstrap-instructions.md"
+        template.write_bytes(template.read_bytes().replace(b"# Cortex AI Team", b"# Cortex AI Team, edited", 1))
+        proc = self.init("--tool", "claude", "--from", str(checkout))
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertTrue(self.read("CLAUDE.md").startswith("# Cortex AI Team, edited\n"))
+        self.assertIn(str(checkout).replace(os.sep, "/"), self.read("cortex.local.toml"))
+        self.assertIn("no version is checked (--from)", proc.err)
+
     def test_a_directory_given(self):
         proc = self.init("sub/app", cwd=self.project)
         self.assertEqual(proc.returncode, 0, proc.err)
