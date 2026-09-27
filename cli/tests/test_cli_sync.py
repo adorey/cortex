@@ -758,7 +758,7 @@ class ProjectFileTests(SyncTestCase):
         proc = self.sync(project)
         self.assertEqual(proc.returncode, 1)
         self.assertIn('unknown key "version"', proc.err)
-        self.assertIn("theme and spec only", proc.err)
+        self.assertIn("theme, spec and claude_access only", proc.err)
 
     def test_two_modes_at_once_are_a_bad_argument(self):
         proc = self.sync(self.project(), "--link", "--copy")
