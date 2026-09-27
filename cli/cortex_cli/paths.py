@@ -23,3 +23,9 @@ def working_directory() -> str:
         except OSError:
             pass
     return cwd
+
+
+def display(path: str) -> str:
+    """``path`` with ``/`` on every platform (ADR-008 §3.1) — Windows accepts it, and it is how
+    paths are printed and written in ``cortex.local.toml``."""
+    return path.replace(os.sep, "/") if os.sep != "/" else path
