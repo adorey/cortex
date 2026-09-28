@@ -80,7 +80,7 @@ Both scripts detect the platform, download the matching asset of the release (th
 
 ### 3.4 `cortex.toml` and `cortex.local.toml`
 
-`cortex.toml` is committed at the project root — where the bootstrap file's paths start from, the workspace root in workspace mode:
+`cortex.toml` is committed at the project root — where the bootstrap file's paths start from, the workspace root in workspace mode (a workspace root that is no repository: see §9, phase 4):
 
 ```toml
 # Written by `cortex init`. Committed.
@@ -96,7 +96,7 @@ theme = "star-wars"                               # optional — overrides corte
 spec = "/home/dev/.cortex/versions/1.0.0"         # written by `cortex sync` — where the spec is
 ```
 
-`version` and `theme` are required in `cortex.toml`; `cortex.local.toml` accepts only `theme` and `spec`. **An unknown key is an error**, not a warning: these files are the ones a later ADR extends, and a typo that silently does nothing is the failure they must not start with.
+`version` and `theme` are required in `cortex.toml`; `cortex.local.toml` accepts only `theme` and `spec` — and, since, `claude_access` in both files and `claude_entry` in the local one (§9, after the delivery and phase 5). **An unknown key is an error**, not a warning: these files are the ones a later ADR extends, and a typo that silently does nothing is the failure they must not start with.
 
 The active-theme marker **leaves the spec**: it lived inside `cortex/agents/personalities/`, which is now a shared, read-only store. The bootstrap templates read the theme from `cortex.local.toml`, then `cortex.toml` — the same per-developer choice as today, with a team default a fresh clone did not have.
 
@@ -468,3 +468,11 @@ Across it, `cortex init` writes what `setup.sh` wrote, byte for byte. The `.acti
 - **Kept for one version:** `.gitignore` ignores `agents/personalities/.active-*`, the theme marker a checkout may still hold, and `--copy --from` leaves it out of the copy.
 - **Pointers the removal broke**: ADR-002 §7 links the removed validator at `0.10.1`, and ADR-007 records, in its own amendments, that §3.5's entry point went with the scripts. CONTRIBUTING's release steps are the tag push of phase 1. The changelog names `init --from`, a theme of the project's own, `--no-claude-access`, and marks two more changes as breaking: `cortex validate` needs a `cortex.toml`, and `python3 -m cortex_core.validate` is gone.
 - **Not verified**, for want of the machines or accounts: macOS beyond CI, NTFS attributes and antivirus software on Windows beyond one machine, and every tool but Claude Code.
+
+### Phase 5 — found in the second review
+
+- **Claude Code's settings keep their layout, not their every character.** The indent, the line endings and the byte order mark stay, a link to the file is written through; the values are written back as JSON writes them — `1.10` becomes `1.1`, a letter escaped as `\u00e9` the letter itself, an array kept on one line is spread over several. The JSON means the same.
+- **`claude_entry` is what sync knows of its own entry.** Removed with `cortex.local.toml` — a `git clean -X` — the entry stays in the settings as the developer's; edited by hand, sync takes the path written for its own. The migration guide says both. Turned off, sync says when an entry of the developer's still lets Claude Code read the spec, rather than that it no longer does.
+- **The templates compare the version of a copy too**: `cortex/.synced` names it. A link names none, and there is nothing to compare. Measured again with Claude Code 2.1.273 in `copy` mode: it read `.synced`, and reached the Prompt Manager's card with no denial.
+- **The CI lines read the pinned version whatever its quotes**, or an indented line, and stop when there is none: read empty, `install.sh` installed the latest release, in silence. A PowerShell equivalent is given for a Windows runner. Both are run by the CLI's tests, as written.
+- **The promise of §3.3's amendment is in CONTRIBUTING's versioning section**, where the release process reads it.
