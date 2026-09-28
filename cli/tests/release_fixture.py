@@ -26,14 +26,19 @@ build = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(build)
 
 
-def _windows_program():
-    """A program Windows starts, when this machine has one to copy: ``hostname.exe``."""
-    for path in (os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32", "hostname.exe"),
-                 "/mnt/c/Windows/System32/HOSTNAME.EXE"):
+def _windows_program(name="doskey.exe"):
+    """A program Windows starts, when this machine has one to copy. ``doskey.exe --version`` exits
+    0; ``hostname.exe --version`` exits 1 — a program that starts, then fails."""
+    for path in (os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32", name),
+                 f"/mnt/c/Windows/System32/{name}"):
         if os.path.isfile(path):
             with open(path, "rb") as fh:
                 return fh.read()
     return None
+
+
+def failing_windows_program():
+    return _windows_program("hostname.exe")
 
 
 def stand_in(version, windows):
@@ -69,6 +74,14 @@ def _asset(directory, target, version):
 
 
 class _Quiet(SimpleHTTPRequestHandler):
+    def do_GET(self):
+        location = self.server.redirects.get(self.path)
+        if location is None:
+            return super().do_GET()
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.end_headers()
+
     def log_message(self, *args):
         pass
 
@@ -83,6 +96,7 @@ class FakeRelease:
         shutil.copytree(self.root / "download" / versions[-1], self.root / "latest" / "download")
         handler = functools.partial(_Quiet, directory=str(self.root))
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        self.server.redirects = {}
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
 
@@ -114,6 +128,10 @@ class FakeRelease:
         with zipfile.ZipFile(directory / "cortex-windows-x86_64.zip", "w") as archive:
             archive.writestr("cortex.exe", content)
         build.checksums(directory)
+
+    def redirect(self, path, location):
+        """Answer ``path`` — ``/latest/download/SHA256SUMS`` — with a redirect to ``location``."""
+        self.server.redirects[path] = location
 
     def alter_one_byte(self, target):
         """Change one byte of the latest release's asset, after its checksum was written."""
