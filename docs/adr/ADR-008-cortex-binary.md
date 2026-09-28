@@ -356,3 +356,8 @@ Acceptance criteria:
 - **A stored version left writable is found by its files**, on every target: on Windows a directory never tells.
 - **A copy's own directory is made read-only once in place**, and writable again before it is moved: macOS renames no directory its owner may not write in, where Linux does — a copy sealed before its rename never reached `cortex/` there. What the copy holds is read-only throughout.
 
+### Phase 2 — found in the third review
+
+- **One sync of a project at a time** (§3.5): the others wait for it, up to two minutes. Racing, most of them failed on a path of their own, and a residue could outlive them. The lock writes nothing: on POSIX it is the project's directory, on Windows a byte of `cortex.toml` far past its end. Under it, what an interrupted sync left beside `cortex/` is removed at once, whatever its age, and a copy kept as it was is sealed again.
+- **A value of `spec` a message quotes is escaped**, as `cortex.toml`'s are.
+
