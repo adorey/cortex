@@ -377,7 +377,7 @@ Acceptance criteria:
 
 ### Phase 3 — the store the runtime is given
 
-- **`CORTEX_STORE_PATH` names the host's store** in `deploy/.env` (§3.6). Compose mounts it read-only at `/cortex-home` and sets `CORTEX_HOME` to that path. Unset, it mounts an empty directory of this repository, `deploy/no-store/`. Docker creates a missing bind source, owned by root, and a root-owned `~/.cortex` would then refuse the developer's own `cortex sync` and install scripts. A project without `cortex.toml` needs no store, and a pinned version is refused with the variable named.
+- **`CORTEX_STORE_PATH` names the host's store** in `deploy/.env` (§3.6). Compose mounts its `versions/` read-only at `/cortex-home/versions` — nothing else of the store, *found in review* below — and sets `CORTEX_HOME` to `/cortex-home`. Unset, it mounts an empty store of this repository, `deploy/no-store/versions/`. Docker creates a missing bind source, owned by root, and a root-owned `~/.cortex` would then refuse the developer's own `cortex sync` and install scripts. A project without `cortex.toml` needs no store, and a pinned version is refused with the variable named.
 - **The runtime checks the pinned version itself.** It must be `X.Y.Z` or a pre-release — never a path — before it names a directory of the store. The runtime does not import the command's package: ADR-016 will have the command drive the runtime over HTTP.
 
 ### Phase 3 — found in review
@@ -388,4 +388,5 @@ Acceptance criteria:
 - **The theme is `cortex.toml`'s** unless the deployment names one, `CORTEX_THEME` (§3.6): the runtime read only its own setting, and `deploy/.env.example` no longer sets one.
 - **Only the store's `versions/` is mounted**, at `/cortex-home/versions` (§3.6): the whole of `~/.cortex` gave an agent of the container the binary and, from the machine tier (§7), the machine's own settings — a local model's endpoint, perhaps its credentials. The empty store is `deploy/no-store/versions/`. Compose asks Docker not to create a missing `versions/` (`create_host_path: false`), which it would own as root; Docker Desktop creates it all the same — measured on Docker Desktop 28 under WSL — so `cortex sync` runs once first.
 - **The host fills the store**, not the runtime: whoever keeps the mirrors current syncs them (ADR-002 §3.4.3, §8.2).
+- **Only the version and the theme are frozen at acceptance.** The mirror stays live: the project's overlays, its `project-overview.md` and `project-context.md` are read when the run executes, as before this ADR. A skipped run names its run and its version too.
 
