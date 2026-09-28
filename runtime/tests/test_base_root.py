@@ -161,6 +161,15 @@ class QueuedRunTests(SyncedProjectTestCase):
         self.assertEqual(result["cortex_version"], "9.9.9")
         self.assertEqual(runtime.cfg.store.get_run("r1").lifecycle, "done")
 
+    def test_a_skipped_run_names_its_run_and_its_version(self):
+        runtime = self.runtime()
+        runtime.execute({"run_id": "r3", "payload": self.payload(), "cortex": runtime.prepare(self.payload(), run_id="r3")["cortex"]})
+        # The same subject again: its state is no longer awaiting-agent, and the run is skipped.
+        prepared = runtime.prepare(self.payload(), run_id="r4")
+        result = runtime.execute({"run_id": "r4", "payload": self.payload(), "cortex": prepared["cortex"]})
+        self.assertTrue(result["skipped"], result)
+        self.assertEqual((result["run_id"], result["cortex_version"]), ("r4", "9.9.9"))
+
     def test_a_version_gone_from_the_store_fails_the_run_instead_of_leaving_it_queued(self):
         runtime = self.runtime()
         prepared = runtime.prepare(self.payload(), run_id="r2")
