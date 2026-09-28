@@ -58,6 +58,17 @@ def _format(text: str) -> Tuple[bool, str, object, bool]:
     return bom, newline, indent, text.endswith(("\n", "\r"))
 
 
+def allows(root: Path, path: str) -> bool:
+    """Whether an entry of the settings lets Claude Code read ``path`` — ``False`` when the file
+    cannot be read: nothing is said of a file sync cannot read."""
+    try:
+        settings = json.loads((root / SETTINGS).read_bytes().decode("utf-8").lstrip("\ufeff"))
+        entries = settings.get("permissions", {}).get("additionalDirectories", [])
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(entries, list) and any(_same(entry, path) for entry in entries)
+
+
 def update(root: Path, allow: Optional[str], owned: Optional[str],
            spec: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     """Make ``allow`` — or nothing, when it is ``None`` — the entry Cortex keeps in the file.
@@ -93,8 +104,10 @@ def update(root: Path, allow: Optional[str], owned: Optional[str],
     if not isinstance(entries, list):
         raise ClaudeSettingsError(f"{SETTINGS}: permissions.additionalDirectories is no list: left as it is")
 
-    keep_owned = owned is not None and allow is not None and _same(owned, allow)
-    kept: List = [entry for entry in entries if keep_owned or not (owned is not None and _same(entry, owned))]
+    # The entry Cortex wrote is the string it wrote: an entry of the developer's that leads to the
+    # same directory — `~/…`, a trailing slash — is theirs, and stays.
+    keep_owned = owned is not None and owned == allow
+    kept: List = [entry for entry in entries if keep_owned or entry != owned]
     if allow is not None and any(_same(entry, allow) for entry in kept):
         now_owned = owned if keep_owned else None        # already allowed — by Cortex before, or by the developer
     elif allow is not None:
