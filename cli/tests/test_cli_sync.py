@@ -6,9 +6,11 @@ so that it may download the fake releases 9.9.7 and 9.9.8. A built binary is a b
 release, 0.0.0-dev.N, and serves only its own version: the tests that download skip there.
 """
 
+import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -276,7 +278,7 @@ class LinkAndCopyTests(SyncTestCase):
         self.assert_ok(proc)
         self.assert_link_to(project, self.stored())
         self.assertEqual(self.spec(project), "cortex")
-        self.assertIn("note: cortex/ is not in", proc.err)
+        self.assertIn(f"Project: {display(project)}", proc.out)
 
     def test_back_to_store_removes_the_link_and_only_it(self):
         project = self.project()
@@ -295,9 +297,10 @@ class LinkAndCopyTests(SyncTestCase):
         copy = project / "cortex"
         self.assertFalse(os.path.islink(copy))
         self.assertEqual(sorted(p.name for p in copy.iterdir()), sorted(TREES + [".synced"]))
-        self.assertEqual((copy / ".synced").read_text(encoding="utf-8").split("\n")[0], OWN)
+        marker = json.loads((copy / ".synced").read_text(encoding="utf-8"))
+        self.assertEqual((marker["version"], marker["from"]), (OWN, None))
+        self.assertIn("agents/roles/prompt-manager.md", marker["files"])
         self.assertEqual(self.spec(project), "cortex")
-        self.assertNotIn("note:", proc.err)
 
     def test_back_to_store_removes_the_copy_and_only_it(self):
         project = self.project()
@@ -331,6 +334,126 @@ class LinkAndCopyTests(SyncTestCase):
         self.assertIn("Cortex 9.9.8", (project / "cortex/agents/roles/prompt-manager.md").read_text(encoding="utf-8"))
 
 
+@unittest.skipIf(shutil.which("git") is None, "needs git")
+class GitIgnoreTests(SyncTestCase):
+    """What git ignores, asked of git: a link is a file to git, which `cortex/` does not match."""
+
+    def repository(self, ignore):
+        project = self.project()
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        (project / ".gitignore").write_text(ignore, encoding="utf-8")
+        return project
+
+    def check_ignore(self, project, name):
+        return subprocess.run(["git", "-C", str(project), "check-ignore", "-q", name]).returncode == 0
+
+    @unittest.skipIf(os.name == "nt", "a junction is a directory to git on Windows")
+    def test_a_link_is_not_ignored_by_a_trailing_slash(self):
+        project = self.repository("cortex.local.toml\n/cortex/\n")
+        proc = self.sync(project, "--link")
+        self.assert_ok(proc)
+        self.assertFalse(self.check_ignore(project, "cortex"))
+        self.assertIn("add a `/cortex` line to .gitignore, without the final slash", proc.err)
+
+    def test_without_the_slash_a_link_and_a_copy_are_ignored(self):
+        for mode in ("--link", "--copy"):
+            with self.subTest(mode=mode):
+                project = self.repository("cortex.local.toml\n/cortex\n")
+                shutil.move(str(project), str(self.tmp / f"repo{mode}"))
+                project = self.tmp / f"repo{mode}"
+                proc = self.sync(project, mode)
+                self.assert_ok(proc)
+                self.assertTrue(self.check_ignore(project, "cortex"))
+                self.assertNotIn("note:", proc.err)
+
+    def test_cortex_local_toml_not_ignored_is_said(self):
+        project = self.repository("")
+        proc = self.sync(project)
+        self.assertIn("git does not ignore cortex.local.toml", proc.err)
+
+
+class SafetyTests(SyncTestCase):
+    """Sync deletes nothing it did not write, and changes nothing before every check passed."""
+
+    def test_a_directory_with_an_empty_marker_is_no_copy(self):
+        project = self.project()
+        (project / "cortex" / "agents").mkdir(parents=True)
+        (project / "cortex" / "agents" / "mine.md").write_text("mine\n", encoding="utf-8")
+        (project / "cortex" / ".synced").write_text("", encoding="utf-8")
+        before = snapshot(project / "cortex")
+        proc = self.sync(project)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("holds a .synced file cortex sync cannot read", proc.err)
+        self.assertEqual(snapshot(project / "cortex"), before)
+
+    def test_a_clone_with_a_marker_is_still_a_clone(self):
+        project = self.project()
+        (project / "cortex" / ".git").mkdir(parents=True)
+        (project / "cortex" / ".synced").write_text('{"files": {}}', encoding="utf-8")
+        proc = self.sync(project)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a git clone", proc.err)
+        self.assertTrue((project / "cortex" / ".git").is_dir())
+
+    def test_a_file_added_to_a_copy_is_named_and_kept(self):
+        # A read-only directory takes new files on Windows: an agent writing cortex/agents/…
+        # instead of agents/… would lose its file at the next sync.
+        project = self.project(extra='sync = "copy"\n')
+        self.assert_ok(self.sync(project))
+        roles = project / "cortex" / "agents" / "roles"
+        os.chmod(roles, 0o755)
+        (roles / "mine.md").write_text("mine\n", encoding="utf-8")
+        for mode in ("--store", "--copy", "--link"):
+            with self.subTest(mode=mode):
+                proc = self.sync(project, mode)
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("agents/roles/mine.md", proc.err)
+                self.assertEqual((roles / "mine.md").read_text(encoding="utf-8"), "mine\n")
+
+    def test_a_from_that_is_no_whole_checkout_changes_nothing(self):
+        project = self.project(extra='sync = "copy"\n')
+        self.assert_ok(self.sync(project))
+        before = (snapshot(project / "cortex"), (project / "cortex.local.toml").read_text(encoding="utf-8"))
+        partial = self.tmp / "partial"
+        for tree in ("agents", "templates"):
+            shutil.copytree(harness.REPO / tree, partial / tree)
+        proc = self.sync(project, "--copy", "--from", str(partial))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("no agents/, templates/ and docs/", proc.err)
+        self.assertEqual((snapshot(project / "cortex"), (project / "cortex.local.toml").read_text(encoding="utf-8")),
+                         before)
+
+    def test_a_spec_line_it_cannot_rewrite_changes_nothing(self):
+        project = self.project(extra='sync = "link"\n')
+        self.assert_ok(self.sync(project))
+        (project / "cortex.local.toml").write_text('spec = """\ncortex\n"""\n', encoding="utf-8")
+        proc = self.sync(project, "--copy")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cannot rewrite", proc.err)
+        self.assertTrue(os.path.lexists(project / "cortex"))
+        self.assertFalse((project / "cortex" / ".synced").exists())
+
+    def test_no_traceback_when_the_store_cannot_be_made(self):
+        project = self.project()
+        (self.tmp / "a-file").write_text("x", encoding="utf-8")
+        env = dict(self.env, CORTEX_HOME=str(self.tmp / "a-file"))
+        proc = harness.run("sync", cwd=project, env=env)
+        self.assertEqual(proc.returncode, 1)
+        self.assertNotIn(b"Traceback", proc.stderr)
+        self.assertIn(b"a-file", proc.stderr)
+
+    @unittest.skipIf(os.name == "nt", "a symbolic link needs a privilege on Windows")
+    def test_a_link_to_a_directory_that_is_no_checkout_is_not_replaced(self):
+        project = self.project()
+        (project / "cortex.local.toml").write_text('spec = "cortex"\n', encoding="utf-8")
+        mine = self.tmp / "mine"
+        (mine / "agents").mkdir(parents=True)
+        (project / "cortex").symlink_to(mine, target_is_directory=True)
+        proc = self.sync(project, "--link")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(os.readlink(project / "cortex"), str(mine))
+
+
 class FromTests(SyncTestCase):
     def test_spec_names_the_checkout_and_a_warning_says_so_every_time(self):
         project = self.project()
@@ -347,6 +470,27 @@ class FromTests(SyncTestCase):
         proc = self.validate(project)
         self.assertEqual(proc.returncode, 0, proc.err)
         self.assertIn(f"Cortex dir:    {display(harness.REPO)}", proc.out)
+
+    def test_validate_after_a_link_or_a_copy_from_a_checkout(self):
+        # CONTRIBUTING's loop, in the mode where Claude Code asks for nothing: the copy is of a
+        # checkout, whose version nothing checks.
+        for mode in ("--link", "--copy"):
+            with self.subTest(mode=mode):
+                project = self.project(f"p{mode}")
+                self.assert_ok(self.sync(project, mode, "--from", str(harness.REPO)))
+                proc = self.validate(project)
+                self.assertEqual(proc.returncode, 0, proc.err)
+                self.assertIn(f"Cortex dir:    {display(project / 'cortex')}", proc.out)
+
+    def test_a_copy_leaves_the_checkouts_theme_marker_out(self):
+        checkout = self.tmp / "checkout"
+        for tree in ("agents/personalities", "templates", "docs"):
+            (checkout / tree).mkdir(parents=True)
+        (checkout / "agents" / "personalities" / ".active-theme").write_text("star-wars\n", encoding="utf-8")
+        project = self.project()
+        for _ in range(2):
+            self.assert_ok(self.sync(project, "--copy", "--from", str(checkout)))
+            self.assertFalse((project / "cortex" / "agents" / "personalities" / ".active-theme").exists())
 
     def test_a_directory_that_is_no_checkout_is_refused(self):
         project = self.project()

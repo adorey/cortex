@@ -96,8 +96,9 @@ def toml_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def write_spec(root: str, spec: str) -> None:
-    """Set ``spec`` in ``cortex.local.toml``, creating the file if needed.
+def render_spec(root: str, spec: str) -> str:
+    """``cortex.local.toml`` with ``spec`` set — computed, not written, so that sync validates it
+    before it changes anything in the project.
 
     ``tomllib`` reads TOML but does not write it: the one line that holds ``spec`` is rewritten,
     or added, and every other line — the developer's ``theme``, their comments — is kept as it
@@ -129,7 +130,17 @@ def write_spec(root: str, spec: str) -> None:
     if written.get("spec") != spec:
         raise ConfigError(f"{LOCAL_FILE}: its spec is written in a way cortex sync cannot rewrite — "
                           "remove that line and run cortex sync again")
+    return text
+
+
+def write_local_text(root: str, text: str) -> None:
+    path = os.path.join(root, LOCAL_FILE)
     temporary = f"{path}.{os.getpid()}.tmp"
     with open(temporary, "w", encoding="utf-8", newline="") as fh:
         fh.write(text)
     os.replace(temporary, path)
+
+
+def write_spec(root: str, spec: str) -> None:
+    """Set ``spec`` in ``cortex.local.toml``, creating the file if needed."""
+    write_local_text(root, render_spec(root, spec))
