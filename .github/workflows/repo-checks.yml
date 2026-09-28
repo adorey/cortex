@@ -169,7 +169,7 @@ jobs:
           echo "✓ the checks ran"
 
   self:
-    name: Cortex validates itself
+    name: cortex validate takes this repository for the base
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -178,6 +178,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The base as its own project (ADR-007 §3.1): its files are the base, never workspace overlays.
+      # The base as its own project (ADR-007 §3.1): its files are the base, never overlays of it, so
+      # there is no overlay to check. What this proves: validate finds the checkout as both roots,
+      # scans no scope of it, and exits 0 — the overlay checks run in the scaffold job.
       - name: cortex validate --strict at the root of this repository
-        run: PYTHONPATH=core:cli python -m cortex_cli validate --strict
+        run: |
+          out="$(PYTHONPATH=core:cli python -m cortex_cli validate --strict)"
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -qxF "  Project root:  $PWD"
+          printf '%s\n' "$out" | grep -qxF "  Cortex dir:    $PWD"
+          if printf '%s\n' "$out" | grep -q '── Scope:'; then echo "::error::the base was scanned as overlays"; exit 1; fi
