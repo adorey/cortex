@@ -559,16 +559,20 @@ class LockTests(SyncTestCase):
             with self.subTest(errno=errno.errorcode[code]):
                 project = self.project(f"app-{errno.errorcode[code]}", version=version)
 
-                def no_lock(fd, code=code):
-                    raise OSError(code, os.strerror(code))
+                tries = []
 
-                def no_wait(seconds):
-                    raise AssertionError("waited for a lock that cannot be taken")
+                def no_lock(fd, code=code):
+                    # Counted, not timed: time.sleep is the process's, and subprocess waits with it on macOS.
+                    tries.append(fd)
+                    if len(tries) > 1:
+                        raise AssertionError("tried again a lock that cannot be taken")
+                    raise OSError(code, os.strerror(code))
 
                 err = io.StringIO()
                 with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), \
-                        mock.patch.object(sync, "_try_lock", no_lock), mock.patch.object(sync.time, "sleep", no_wait):
+                        mock.patch.object(sync, "_try_lock", no_lock):
                     sync.sync(str(project), None, None, io.StringIO(), err)
+                self.assertEqual(len(tries), 1)
                 self.assertIn(f"cannot be locked here ({os.strerror(code)})", err.getvalue())
                 self.assertTrue((project / "cortex.local.toml").is_file())
 
