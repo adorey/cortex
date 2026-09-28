@@ -67,11 +67,11 @@ cortex init --no-personality
 The command creates:
 - `cortex.toml` — **committed**: the Cortex `version` the project uses (the binary's own) and the team's `theme`
 - `cortex.local.toml` — **ignored by git** (the command adds it to `.gitignore`): `spec`, where the spec is on this machine, written by the `cortex sync` it runs
-- The instructions file for your AI tool (path depends on `--tool`) — an existing one is kept unless `--force`
+- The instructions file for your AI tool (path depends on `--tool`) — an existing one is kept unless `--force`, which keeps it as `FILE.bak`
 - `project-overview.md` — to fill in: vision, stakeholders, business flows
 - `project-context.md` — to fill in: stack, conventions, tools
 
-The two context files are written only when missing. Running `cortex init` again keeps `cortex.toml` and the instructions file; `--force` rewrites both.
+The two context files are written only when missing. Running `cortex init` again keeps the instructions file, and `cortex.toml` with its version: it changes only the keys an option names — `--theme` or `--no-personality`, `--link` or `--copy`, `--claude-access`. `--force` replaces the instructions file, and only it.
 
 ### Step 2 — Commit, then `cortex sync` after every clone
 
