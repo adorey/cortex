@@ -137,8 +137,16 @@ class WriteSpecTests(ConfigTestCase):
         before = '# my own comment\ntheme = "star-wars"   # I like it\n\nspec = "/old/path"  # stale\n# trailing\n'
         self.write("cortex.local.toml", before)
         config.write_spec(str(self.root), "/new/path")
-        self.assertEqual(self.read(), before.replace('spec = "/old/path"  # stale',
-                                                      'spec = "/new/path"    # written by `cortex sync`'))
+        # The comment that ends the line rewritten is kept too — the developer's, or sync's own.
+        self.assertEqual(self.read(), before.replace('spec = "/old/path"  # stale', 'spec = "/new/path"  # stale'))
+
+    def test_a_byte_order_mark_and_a_comment_after_a_value_stay(self):
+        (self.root / "cortex.local.toml").write_bytes(
+            '\ufefftheme = "a#b"  # mine, with a "#" in the value\r\nspec = "/old"\r\n'.encode("utf-8"))
+        config.write_spec(str(self.root), "/new")
+        self.assertEqual((self.root / "cortex.local.toml").read_bytes().decode("utf-8"),
+                         '\ufefftheme = "a#b"  # mine, with a "#" in the value\r\n'
+                         'spec = "/new"    # written by `cortex sync`\r\n')
 
     def test_spec_is_added_when_missing(self):
         self.write("cortex.local.toml", 'theme = "none"')          # no final newline
