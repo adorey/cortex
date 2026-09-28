@@ -766,6 +766,7 @@ class ValidateTests(SyncTestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertNotIn("\x1b", proc.err)
         self.assertIn("\\u001b", proc.err)
+
     def test_validate_before_sync(self):
         proc = self.validate(self.project())
         self.assertEqual(proc.returncode, 2)
@@ -782,6 +783,26 @@ class ValidateTests(SyncTestCase):
                 proc = self.validate(project)
                 self.assertEqual(proc.returncode, 2)
                 self.assertIn('pins Cortex 9.9.8, and the spec synced is "9.9.7"', proc.err)
+
+    @unittest.skipIf(os.name == "nt", "a Windows file name holds no control character")
+    def test_names_read_from_the_project_are_printed_escaped(self):
+        project = self.project()
+        os.symlink(self.tmp / "\x1b]0;pwned\x07", project / "cortex")
+        proc = self.sync(project)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a link to", proc.err)
+        self.assertNotIn("\x1b", proc.err)
+        self.assertIn("\\x1b]0;pwned\\x07", proc.err)
+        copied = self.project("copied", extra='sync = "copy"\n')
+        self.assert_ok(self.sync(copied))
+        os.chmod(copied / "cortex" / "agents", 0o755)
+        (copied / "cortex" / "agents" / "\x1b[2Jmine.md").write_text("mine\n", encoding="utf-8")
+        for command, proc, escaped in (("sync", self.sync(copied), "\\x1b[2Jmine.md"),
+                                       ("validate", self.validate(copied), "\\u001b[2Jmine.md")):
+            with self.subTest(command=command):
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertNotIn("\x1b", proc.err)
+                self.assertIn(escaped, proc.err)
 
 
 if __name__ == "__main__":
