@@ -78,9 +78,6 @@ class ChecksumsTests(unittest.TestCase):
             b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  cortex-b.zip\n"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class _FakeApi:
     """GitHub's releases API, as fetch_known_specs reads it: pages of releases, and the files
@@ -186,3 +183,7 @@ class VersionReportTests(unittest.TestCase):
 
     def test_none_is_said(self):
         self.assertTrue(self.report({})[1].startswith("known spec archives: 0 — "))
+
+
+if __name__ == "__main__":
+    unittest.main()

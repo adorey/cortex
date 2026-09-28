@@ -124,10 +124,20 @@ jobs:
         run: |
           binary="$GITHUB_WORKSPACE/cli/build/dist/cortex"
           [ "$RUNNER_OS" = Windows ] && binary="$binary.exe"
-          "$binary" --version --verbose
-          expected="$(python -c 'import json, sys; print(len(json.load(open(sys.argv[1]))))' "$RUNNER_TEMP/known-specs.json")"
-          actual="$("$binary" --version --verbose | sed -n 's/^known spec archives: \([0-9]*\).*/\1/p')"
-          [ "$actual" = "$expected" ] || { echo "::error::the binary knows $actual spec archives, the build was given $expected"; exit 1; }
+          "$binary" --version --verbose | tr -d '\r' > "$RUNNER_TEMP/known-by-binary.txt"
+          cat "$RUNNER_TEMP/known-by-binary.txt"
+          # Every entry, version and checksum, as the binary prints them — not their number only.
+          # Compared by Python, which every runner has: no diff in the AlmaLinux image, CRLF on Windows.
+          python - "$RUNNER_TEMP/known-specs.json" "$RUNNER_TEMP/known-by-binary.txt" <<'EOF'
+          import json, sys
+          given = [f"  {version}  {digest}" for version, digest in sorted(json.load(open(sys.argv[1])).items())]
+          carried = [line.rstrip("\r\n") for line in open(sys.argv[2], encoding="utf-8") if line.startswith("  ")]
+          if carried != given:
+              print("::error::the binary does not carry the table the build was given")
+              print("given:", given)
+              print("carried:", carried)
+              sys.exit(1)
+          EOF
 
       # The suite the source runs in cli-tests, now through the binary: --version, the golden
       # outputs of the validator byte for byte, from a CRLF checkout too.
