@@ -71,7 +71,7 @@ theme = "star-wars"
 Where CI ran `./cortex/bin/validate-overlays.sh --strict`, it installs the binary of the version `cortex.toml` pins, and syncs:
 
 ```bash
-version="$(sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*[\"']\([^\"']*\)[\"'].*/\\1/p" cortex.toml | head -n 1)"
+version="$(LC_ALL=C tr -d '\357\273\277' < cortex.toml | sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*[\"']\([^\"']*\)[\"'].*/\\1/p" | head -n 1)"
 [ -n "$version" ] || { echo "cortex.toml pins no version" >&2; exit 1; }
 curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- "$version"
 export PATH="$HOME/.cortex/bin:$PATH"
@@ -121,7 +121,7 @@ What it means today:
   - `claude_access = true` in `cortex.toml`, for the whole team. `cortex init --tool claude` asks for it on a terminal, and `--claude-access` sets it unattended.
   - `cortex sync --claude-access`, for you alone: it writes `claude_access = true` in `cortex.local.toml`.
 
-  `cortex sync` then keeps the store's path of the pinned version in `.claude/settings.local.json`, under `permissions.additionalDirectories`. That file holds Claude Code's settings for you on this machine, which git ignores. Sync replaces the path when the version changes, and removes it when access is turned off — the path it wrote, which `cortex.local.toml` records as `claude_entry`, and no other: an entry you added yourself, by hand or through Claude Code's own prompt, stays yours. While neither file sets `claude_access`, sync does not touch the file. `claude_entry` is how sync knows its own entry: if `cortex.local.toml` goes — a `git clean -X` removes it — the entry stays in `.claude/settings.local.json` as if you had written it, and is yours to remove; if you edit `claude_entry`, sync takes the path you wrote for its own, and removes that one when access goes off. Measured with Claude Code 2.1.273: the Prompt Manager's card is reached with no prompt at all.
+  `cortex sync` then keeps the store's path of the pinned version in `.claude/settings.local.json`, under `permissions.additionalDirectories`. That file holds Claude Code's settings for you on this machine, which git ignores. Sync replaces the path when the version changes, and removes it when access is turned off — the path it wrote, which `cortex.local.toml` records as `claude_entry`, and no other: an entry you added yourself, by hand or through Claude Code's own prompt, stays yours. While neither file sets `claude_access`, sync does not touch the file. `claude_entry` is how sync knows its own entry: if `cortex.local.toml` goes — a `git clean -X` removes it — the entry stays in `.claude/settings.local.json` as if you had written it, and is yours to remove; edit `claude_entry`, and the next sync takes the path you wrote for its own: it removes that entry at once, and the store's entry, already there, then passes for yours. Leave `claude_entry` to sync. Measured with Claude Code 2.1.273: the Prompt Manager's card is reached with no prompt at all.
 
   Without it, you answer the permission prompt once per session. `sync = "copy"` needs no setting either.
 - **The tools not measured yet** start in `store`. Switch the project to `link`, then to `copy`, if a conversation does not reach the Prompt Manager's card.
