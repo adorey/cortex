@@ -30,18 +30,20 @@ class RootsError(Exception):
 
 
 def _synced_version(project: config.Project, base: str) -> str:
-    """The version the spec at ``base`` is, when sync says so — ``""`` for a checkout."""
+    """The version the spec at ``base`` is, when that is known — ``""`` for a checkout.
+
+    A copy's marker says it. Otherwise the spec is the store's, read in place or through a link:
+    a directory of some ``versions/``, whichever ``CORTEX_HOME`` it was synced with — a sync made
+    with another home is still checked against the version pinned.
+    """
     link = Path(project.root) / sync.LINK
     if project.spec == sync.LINK and sync.is_link(link):
         base = sync.link_target(link)
     elif project.spec == sync.LINK and (link / sync.MARKER).is_file():
-        return sync.synced_version(link) or ""
-    versions = store.cortex_home() / "versions"
-    try:
-        relative = Path(os.path.realpath(base)).relative_to(os.path.realpath(versions))
-    except ValueError:
-        return ""
-    return relative.parts[0] if len(relative.parts) == 1 else ""
+        marker = sync.read_marker(link)
+        return (marker.get("version") or "") if marker else ""
+    resolved = Path(os.path.realpath(base))
+    return resolved.name if resolved.parent.name == "versions" and store.Version.valid(resolved.name) else ""
 
 
 def roots(cwd: str) -> Tuple[str, str]:
@@ -76,8 +78,7 @@ def run(args: List[str]) -> int:
     try:
         project_root, base_root = roots(working_directory())
     except RootsError as error:
-        import sys
-
-        sys.stderr.write(f"cortex validate: {error}\n")
-        return 2
+        return sync.failed("cortex validate", str(error), 2)
+    except OSError as error:
+        return sync.failed("cortex validate", sync.os_error(error), 2)
     return validate.main(args, project_root=project_root, base_root=base_root, prog="cortex validate")
