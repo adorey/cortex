@@ -558,7 +558,8 @@ def _claude(root: Path, project: config.Project, spec: Optional[Path], out: Text
         return
     allow = claude.entry_for(spec) if access and spec is not None else None
     try:
-        said, owned = claude.update(root, allow, project.claude_entry)
+        said, owned = claude.update(root, allow, project.claude_entry,
+                                    claude.entry_for(spec) if spec is not None else None)
     except claude.ClaudeSettingsError as error:
         err.write(f"warning: {error}\n")
         return

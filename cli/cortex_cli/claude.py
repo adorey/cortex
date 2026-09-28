@@ -58,9 +58,11 @@ def _format(text: str) -> Tuple[bool, str, object, bool]:
     return bom, newline, indent, text.endswith(("\n", "\r"))
 
 
-def update(root: Path, allow: Optional[str], owned: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+def update(root: Path, allow: Optional[str], owned: Optional[str],
+           spec: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     """Make ``allow`` — or nothing, when it is ``None`` — the entry Cortex keeps in the file.
-    ``owned`` is the entry Cortex wrote before, the only one it may remove.
+    ``owned`` is the entry Cortex wrote before, the only one it may remove. ``spec``, the entry
+    of the spec synced, tells whether an entry of the developer's still lets Claude Code read it.
 
     Return what to report — ``None`` when nothing changed — and the entry Cortex now owns: ``allow``
     when it wrote it or had written it, ``None`` when the developer's own entry already allows it.
@@ -122,5 +124,8 @@ def update(root: Path, allow: Optional[str], owned: Optional[str]) -> Tuple[Opti
     except OSError as error:
         raise ClaudeSettingsError(f"{SETTINGS} cannot be written ({error.strerror or error}): left as it is")
     if allow is None:
+        if spec is not None and any(_same(entry, spec) for entry in kept):
+            return (f"{SETTINGS}: the entry cortex sync wrote is removed — an entry of your own still lets "
+                    f"Claude Code read {display(spec)} without asking"), None
         return f"{SETTINGS}: Claude Code no longer reads the spec without asking", None
     return f"{SETTINGS}: Claude Code reads {display(allow)} without asking", now_owned
