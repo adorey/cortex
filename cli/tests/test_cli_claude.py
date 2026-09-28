@@ -89,6 +89,12 @@ class SettingsTests(unittest.TestCase):
         said, _ = claude.update(self.root, None, self.v2, spec=self.v2)
         self.assertIn("no longer reads the spec without asking", said)
 
+    def test_a_developers_entry_to_the_same_directory_is_theirs(self):
+        # `~/…` or a trailing slash leads where Cortex's entry does: it is still not Cortex's.
+        self.write({"permissions": {"additionalDirectories": [self.v1 + "/", self.v1]}})
+        claude.update(self.root, None, self.v1)
+        self.assertEqual(self.read(), {"permissions": {"additionalDirectories": [self.v1 + "/"]}})
+
     def test_no_file_and_nothing_to_allow(self):
         self.assertEqual(claude.update(self.root, None, None), (None, None))
         self.assertFalse(self.settings.exists())
@@ -225,6 +231,14 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(self.allowed(), mine["permissions"]["additionalDirectories"])
         self.run_cortex("sync", "--no-claude-access")
         self.assertEqual(self.allowed(), mine["permissions"]["additionalDirectories"])
+
+    def test_turned_off_with_nothing_of_cortexs_it_says_what_still_allows(self):
+        self.toml()
+        mine = display(self.home / "versions" / OWN)
+        self.settings({"permissions": {"additionalDirectories": [mine]}})
+        proc = self.run_cortex("sync", "--no-claude-access")
+        self.assertIn("has an entry of your own that lets Claude Code read", proc.err)
+        self.assertEqual(self.allowed(), [mine])
 
     def test_an_entry_for_a_checkout_is_removed_too(self):
         checkout = self.tmp / "checkout"

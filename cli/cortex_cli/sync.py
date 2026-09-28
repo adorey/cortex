@@ -568,6 +568,10 @@ def _claude(root: Path, project: config.Project, spec: Optional[Path], out: Text
                            {"claude_entry": f"written by `cortex sync` — the entry it keeps in {claude.SETTINGS}"})
     if said:
         out.write(f"{said}\n")
+    elif access is False and spec is not None and claude.allows(root, claude.entry_for(spec)):
+        # Off, with nothing of Cortex's to remove: an entry of the developer's still grants it.
+        err.write(f"note: {claude.SETTINGS} has an entry of your own that lets Claude Code read "
+                  f"{claude.entry_for(spec)} without asking — remove it there for Claude Code to ask again\n")
     if allow is not None:
         added = add_to_gitignore(root, {claude.SETTINGS: claude.SETTINGS})
         if added:
