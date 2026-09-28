@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import hashlib
 import json
 import os
@@ -172,39 +173,68 @@ def _discard(path: Path) -> None:
 
 
 LOCK_WAIT = 120   # seconds a sync waits for another sync of the same project
+# What the lock answers when another process holds it. Anything else is a file system without
+# the lock: NFS emulates flock with a POSIX lock, which a read-only descriptor cannot take (EBADF).
+HELD = {errno.EACCES, errno.EDEADLOCK} if os.name == "nt" else {errno.EWOULDBLOCK, errno.EAGAIN}
+
+
+def lock_path(root: Path) -> Path:
+    """What the lock is taken on. On POSIX, the project's directory: nothing is written for it. On
+    Windows, a file of the user's temporary directory named after the project: a file held open
+    cannot be replaced there, and held on ``cortex.toml`` the lock failed a ``git pull``, or an
+    editor that saves by renaming, for as long as a sync ran or waited."""
+    if os.name != "nt":
+        return root
+    key = os.path.normcase(os.path.realpath(root)).encode("utf-8", "surrogatepass")
+    return Path(tempfile.gettempdir()) / f"cortex-sync-{hashlib.sha256(key).hexdigest()[:16]}.lock"
+
+
+def _try_lock(fd: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _take(fd: int, root: Path) -> None:
+    deadline = time.monotonic() + LOCK_WAIT
+    while True:
+        try:
+            _try_lock(fd)
+            return
+        except OSError as error:
+            if error.errno not in HELD:
+                raise
+        if time.monotonic() > deadline:
+            raise SyncError(f"another cortex sync of {display(str(root))} has run for {LOCK_WAIT} seconds — "
+                            "wait for it, then run cortex sync again")
+        time.sleep(0.1)
 
 
 @contextlib.contextmanager
-def project_lock(root: Path):
-    """One sync of a project at a time on this machine: the others wait. Nothing is written for
-    it: on POSIX the project's directory is locked, on Windows a byte of ``cortex.toml`` far past
-    its end — no reader of the file meets it."""
-    if os.name == "nt":
-        fd = os.open(root / config.PROJECT_FILE, os.O_RDONLY)
-        os.lseek(fd, 2 ** 40, os.SEEK_SET)
-    else:
-        fd = os.open(root, os.O_RDONLY)
+def project_lock(root: Path, err: TextIO):
+    """One sync of a project at a time on this machine: the others wait for it. Where the lock
+    cannot be taken at all, the sync runs without it, and says so."""
+    fd = None
     try:
-        deadline = time.monotonic() + LOCK_WAIT
-        while True:
-            try:
-                if os.name == "nt":
-                    import msvcrt
-
-                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except OSError:
-                if time.monotonic() > deadline:
-                    raise SyncError(f"another cortex sync of {display(str(root))} has run for {LOCK_WAIT} seconds — "
-                                    "wait for it, then run cortex sync again")
-                time.sleep(0.1)
+        fd = os.open(lock_path(root), os.O_RDONLY if os.name != "nt" else os.O_RDWR | os.O_CREAT)
+        _take(fd, root)
+    except OSError as error:
+        err.write(f"warning: {display(str(root))} cannot be locked here ({error.strerror}) — a sync of this project "
+                  "run at the same time is not kept out\n")
+    except BaseException:
+        if fd is not None:
+            os.close(fd)
+        raise
+    try:
         yield
     finally:
-        os.close(fd)                                   # which releases the lock, on every system
+        if fd is not None:
+            os.close(fd)                               # which releases the lock, on every system
 
 
 def tidy(root: Path) -> None:
@@ -333,7 +363,7 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
     if root is None:
         raise SyncError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory "
                         "a Cortex project")
-    with project_lock(Path(root)):
+    with project_lock(Path(root), err):
         _sync(root, mode, source, out, err)
 
 
