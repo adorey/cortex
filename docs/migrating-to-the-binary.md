@@ -128,4 +128,4 @@ claude -p "…" --setting-sources project --tools Read,Glob,Grep --permission-pr
        --output-format stream-json --verbose
 ```
 
-The run's `permission_denials` names every read that would have prompted.
+The run's `permission_denials` names every read that would have prompted. `--setting-sources project` leaves out your own settings, so that nothing you allowed before counts. To measure `claude_access`, add the settings `cortex sync` writes: `--setting-sources project,local`, since `.claude/settings.local.json` is Claude Code's *local* source.
