@@ -95,12 +95,13 @@ def service_path(name: str) -> str:
 
 
 def ask(out: TextIO, question: str) -> bool:
-    """A yes-or-no on the terminal: yes by default, on Enter — no when stdin ends before any answer."""
+    """A yes-or-no on the terminal, no by default: Enter, and a stdin that ends before any answer,
+    say no — the question grants a permission."""
     out.write(question)
     out.flush()
     line = sys.stdin.readline()
     out.write("\n" if not line.endswith("\n") else "")
-    return bool(line) and line.strip().lower() not in ("n", "no")
+    return line.strip().lower() in ("y", "yes")
 
 
 def prompt_services(out: TextIO) -> List[str]:
@@ -265,10 +266,13 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
 
     # Claude Code asks before it reads the store (ADR-008 §9): on a terminal, offer the team setting
     # to a new project.
+    # A copy is inside the project: Claude Code reads it without asking, and there is nothing to offer.
+    spec_mode = mode or (project.sync if project else None)
     claude_access = options.claude_access
-    if claude_access is None and options.tool == "claude" and project is None and console.stdin_is_terminal():
+    if claude_access is None and options.tool == "claude" and project is None and spec_mode != "copy" \
+            and console.stdin_is_terminal():
         claude_access = ask(out, "Let Claude Code read the Cortex spec without asking for permission — "
-                                 "claude_access = true in cortex.toml? [Y/n] ")
+                                 "claude_access = true in cortex.toml? [y/N] ")
 
     # cortex.toml: a new one, or only the keys the options name.
     if project is None:
@@ -297,7 +301,7 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
     # The spec, where the project finds it — then what git must ignore, asked of git once
     # cortex/ has its final form: a copy turned into a link is a file to git.
     sync.sync(str(root), mode, options.source, out, err, notes=False)
-    spec_mode = mode or (project.sync if project else None) or "store"
+    spec_mode = spec_mode or "store"
     entries = {config.LOCAL_FILE: config.LOCAL_FILE}
     if spec_mode in ("link", "copy"):
         # A link is a file to git: `cortex/` would not match it. `/cortex` matches the link and the copy;
@@ -385,7 +389,8 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
                 if not (agents / file).exists():
                     (agents / file).write_bytes(content)
                     out.write(f"✓ agents/{file} — the team's, agents/ is its own git repository (ADR-006)\n")
-    if options.tool == "claude" and claude_access is None and not config.load(str(root)).active_claude_access:
+    if options.tool == "claude" and claude_access is None and spec_mode != "copy" \
+            and not config.load(str(root)).active_claude_access:
         out.write("\ntip: Claude Code asks before it reads the spec in the store. `claude_access = true` in "
                   "cortex.toml lets it read without asking — for the team; `cortex sync --claude-access`, for you.\n")
     out.write(f"\nCortex {version} is ready in {display(str(root))}.\n")

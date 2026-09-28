@@ -110,14 +110,15 @@ class LocalFileTests(ConfigTestCase):
         self.write("cortex.local.toml", 'theme = "star-wars"\n')
         self.assertEqual(config.load(str(self.root)).active_theme, "star-wars")
 
-    def test_only_theme_spec_and_claude_access(self):
+    def test_only_theme_spec_claude_access_and_claude_entry(self):
         for key in ("version", "sync", "specs"):
             with self.subTest(key=key):
                 self.write("cortex.local.toml", f'{key} = "x"\n')
-                self.assert_refused(f'unknown key "{key}"', "theme, spec and claude_access only")
+                self.assert_refused(f'unknown key "{key}"', "theme, spec, claude_access and claude_entry only")
 
     def test_claude_access_is_the_teams_unless_the_developer_says(self):
-        self.assertFalse(config.load(str(self.root)).active_claude_access)
+        # Neither file sets it: None, not False — Claude Code's settings are then left alone.
+        self.assertIsNone(config.load(str(self.root)).active_claude_access)
         self.write("cortex.toml", 'version = "1.0.0"\ntheme = "h2g2"\nclaude_access = true\n')
         self.assertTrue(config.load(str(self.root)).active_claude_access)
         self.write("cortex.local.toml", "claude_access = false\n")
@@ -177,8 +178,13 @@ class WriteSpecTests(ConfigTestCase):
 
     def test_a_boolean_is_written_without_quotes_and_rewritten_in_place(self):
         self.write("cortex.local.toml", 'theme = "none"\nclaude_access = false  # mine\n')
-        config.write_local(str(self.root), "claude_access", True)
-        self.assertEqual(self.read(), 'theme = "none"\nclaude_access = true\n')
+        config.write_local(str(self.root), {"claude_access": True})
+        self.assertEqual(self.read(), 'theme = "none"\nclaude_access = true  # mine\n')
+
+    def test_a_key_set_to_none_is_removed(self):
+        self.write("cortex.local.toml", 'theme = "none"\nclaude_entry = "/x"  # sync\nspec = "cortex"\n')
+        config.write_local(str(self.root), {"claude_entry": None})
+        self.assertEqual(self.read(), 'theme = "none"\nspec = "cortex"\n')
 
     def test_a_spec_it_cannot_rewrite_is_refused_and_the_file_kept(self):
         before = 'spec = """\n/old\n"""\n'
