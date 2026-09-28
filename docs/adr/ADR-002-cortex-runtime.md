@@ -274,7 +274,7 @@ Dependent on this ADR, tracked separately:
 - [ADR-005 — Execution model & resilience](ADR-005-execution-model-resilience.md) — makes the runtime's side of §3.7 concrete (async accept-then-process, timeouts, concurrency cap, readiness)
 - [cortex/agents/roles/prompt-manager.md](../../agents/roles/prompt-manager.md) — dispatch protocol
 - [cortex/agents/workflows/README.md](../../agents/workflows/README.md) — workflow cascade
-- [cortex/bin/validate-overlays.sh](../../bin/validate-overlays.sh) — existing partial resolver (validation)
+- [cortex/bin/validate-overlays.sh](https://github.com/adorey/cortex/blob/0.10.1/bin/validate-overlays.sh) — existing partial resolver (validation); replaced by `cortex validate` ([ADR-008](ADR-008-cortex-binary.md))
 - [cortex/docs/extending-layers.md](../extending-layers.md) — cascade user reference
 
 ---

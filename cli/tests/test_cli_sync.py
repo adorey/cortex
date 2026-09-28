@@ -722,11 +722,11 @@ class FromTests(SyncTestCase):
         checkout = self.tmp / "checkout"
         for tree in ("agents/personalities", "templates", "docs"):
             (checkout / tree).mkdir(parents=True)
-        (checkout / "agents" / "personalities" / ".active-theme").write_text("star-wars\n", encoding="utf-8")
+        (checkout / "agents" / "personalities" / ".active-marker").write_text("star-wars\n", encoding="utf-8")
         project = self.project()
         for _ in range(2):
             self.assert_ok(self.sync(project, "--copy", "--from", str(checkout)))
-            self.assertFalse((project / "cortex" / "agents" / "personalities" / ".active-theme").exists())
+            self.assertFalse((project / "cortex" / "agents" / "personalities" / ".active-marker").exists())
 
     def test_a_directory_that_is_no_checkout_is_refused(self):
         project = self.project()
