@@ -251,7 +251,7 @@ The validator catches the common mistakes:
 CI integration is recommended — fail the pipeline if `cortex validate --strict` returns non-zero. The CI job installs the binary of the version `cortex.toml` pins — its checks are that version's — then runs `cortex sync`:
 
 ```bash
-version="$(sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*[\"']\([^\"']*\)[\"'].*/\\1/p" cortex.toml | head -n 1)"
+version="$(LC_ALL=C tr -d '\357\273\277' < cortex.toml | sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*[\"']\([^\"']*\)[\"'].*/\\1/p" | head -n 1)"
 [ -n "$version" ] || { echo "cortex.toml pins no version" >&2; exit 1; }
 curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- "$version"
 export PATH="$HOME/.cortex/bin:$PATH"

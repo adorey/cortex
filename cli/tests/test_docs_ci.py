@@ -17,6 +17,7 @@ GUIDES = (DOCS / "migrating-to-the-binary.md", DOCS / "extending-layers.md")
 PINS = {'version = "1.2.3"\ntheme = "h2g2"\n': "1.2.3",
         "version = '1.2.3'\ntheme = 'h2g2'\n": "1.2.3",
         '# version = "0.1.0"\n  version="1.2.3"   # the team pins it\n': "1.2.3",
+        '\ufeffversion = "1.2.3"\ntheme = "h2g2"\n': "1.2.3",          # a byte order mark, as Notepad writes one
         'theme = "h2g2"\n': None}
 
 
