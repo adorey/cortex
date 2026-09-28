@@ -25,6 +25,7 @@ import json
 import os
 import re
 import secrets
+import shlex
 import shutil
 import stat
 import subprocess
@@ -120,40 +121,84 @@ def missing_files(copy: Path, marker: dict) -> List[str]:
     return sorted(rel for rel in marker["files"] if not (copy / rel).is_file())
 
 
-def describe(path: Path) -> str:
-    if (path / ".git").is_file():
-        return "a git submodule"
+def _gitdir(path: Path) -> Optional[str]:
+    """The repository a ``.git`` file names — a submodule's, or a worktree's — absolute."""
+    try:
+        text = (path / ".git").read_text(encoding="utf-8").strip()
+    except (OSError, ValueError):
+        return None
+    if not text.startswith("gitdir:"):
+        return None
+    return os.path.normpath(os.path.join(path, text[len("gitdir:"):].strip()))
+
+
+def is_submodule(path: Path) -> bool:
+    """``.gitmodules`` has a ``path = cortex``: a submodule, whether its repository is under the
+    superproject's ``.git/modules/`` or, as older git made them, in the ``.git`` it holds."""
+    try:
+        lines = (path.parent / ".gitmodules").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return False
+    for line in lines:
+        key, _, value = line.partition("=")
+        if key.strip() == "path" and value.strip().strip('"').rstrip("/") == path.name:
+            return True
+    return False
+
+
+def kind_of(path: Path) -> str:
+    """What is at ``cortex/`` when sync did not make it."""
+    gitdir = _gitdir(path) if (path / ".git").is_file() else None
+    if gitdir is not None and f"{os.sep}worktrees{os.sep}" in gitdir:
+        return "worktree"
+    if is_submodule(path) or (path / ".git").is_file():
+        return "submodule"
     if (path / ".git").is_dir():
-        return "a git clone"
-    return "a directory" if path.is_dir() else "a file"
+        return "clone"
+    return "directory" if path.is_dir() else "file"
+
+
+def describe(path: Path) -> str:
+    return {"worktree": "a git worktree", "submodule": "a git submodule", "clone": "a git clone",
+            "directory": "a directory", "file": "a file"}[kind_of(path)]
+
+
+def quote(path: str) -> str:
+    """A path as the shell the commands are shown for reads it: PowerShell on Windows."""
+    if os.name == "nt":
+        return "'" + path.replace("'", "''") + "'"
+    return shlex.quote(path)
 
 
 def _remove_command(path: str) -> str:
-    return f"Remove-Item -Recurse -Force {path}" if os.name == "nt" else f"rm -rf {path}"
+    return f"Remove-Item -Recurse -Force {quote(path)}" if os.name == "nt" else f"rm -rf {quote(path)}"
 
 
 def leaving(path: Path) -> str:
-    """How to leave the submodule or the clone at ``cortex/`` (ADR-008 §3.10): the commands, shown
-    and never run — they rewrite the project's git state, and the developer should see them first."""
-    git = path / ".git"
-    if git.is_file():
-        # A submodule's .git names its repository, under the superproject's .git/modules/.
-        modules = ".git/modules/cortex"
-        try:
-            gitdir = git.read_text(encoding="utf-8").strip()
-            if gitdir.startswith("gitdir:"):
-                resolved = os.path.normpath(os.path.join(path, gitdir[len("gitdir:"):].strip()))
-                modules = display(os.path.relpath(resolved, path.parent))
-        except (OSError, ValueError):
-            pass
-        return ("Cortex now lives in the store, and the submodule is to go. These commands rewrite the "
-                "project's git state, so they are shown here, not run:\n\n"
-                f"    git submodule deinit -f {LINK}\n    git rm {LINK}\n    {_remove_command(modules)}\n\n"
+    """How to leave the submodule, the worktree or the clone at ``cortex/`` (ADR-008 §3.10): the
+    commands, shown and never run — they rewrite the project's git state, and the developer should
+    see them first. Every path in them is absolute: they run from any directory."""
+    root = display(str(path.parent))
+    kind = kind_of(path)
+    if kind == "submodule":
+        commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {LINK}"]
+        # A submodule's repository stays under the superproject's .git/modules/ once it is gone.
+        gitdir = _gitdir(path)
+        if gitdir is not None:
+            commands.append(_remove_command(display(gitdir)))
+        shown = "".join(f"    {command}\n" for command in commands)
+        return (f"Cortex now lives in the store, and the submodule is to go. These commands rewrite the git "
+                f"state of the project at {root}, so they are shown here, not run:\n\n{shown}\n"
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
-    if git.is_dir():
+    if kind == "worktree":
+        common = os.path.dirname(os.path.dirname(_gitdir(path)))       # …/.git/worktrees/<name> → …/.git
+        return (f"Cortex now lives in the store, and this worktree of {display(common)} is to go. Once you have "
+                f"checked it holds nothing of yours:\n\n    git --git-dir {quote(display(common))} worktree remove "
+                f"{quote(display(str(path)))}\n\nThen run the command again.")
+    if kind == "clone":
         return ("Cortex now lives in the store, and the clone is to go. Once you have checked it holds "
-                f"nothing of yours:\n\n    {_remove_command(LINK)}\n\nThen run the command again.")
+                f"nothing of yours:\n\n    {_remove_command(display(str(path)))}\n\nThen run the command again.")
     return "Move or remove it, then run the command again."
 
 
