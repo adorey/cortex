@@ -38,6 +38,18 @@ jobs:
           fi
           echo "✓ every tracked shell script is executable"
 
+      # ADR-008, phase 5: the scripts are gone, and so is every pointer to them but the history's —
+      # the changelog, the ADRs, the migration guide. A rebase once brought one back.
+      - name: Nothing points at the removed scripts
+        run: |
+          # [.] matches a dot, and not this line's own text: the pattern cannot find itself.
+          if git grep -n 'setup[.]sh\|validate-overlays[.]sh\|[.]active-theme' -- \
+               ':!CHANGELOG.md' ':!changelog' ':!docs/adr' ':!docs/migrating-to-the-binary.md'; then
+            echo "::error::the lines above point at the scripts ADR-008 removed"
+            exit 1
+          fi
+          echo "✓ only the history names the removed scripts"
+
   shell:
     name: Shell lint
     runs-on: ubuntu-latest
@@ -132,11 +144,11 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/host"
           test -f CLAUDE.md || { echo "CLAUDE.md was not generated"; exit 1; }
-          grep -q "cortex/agents" CLAUDE.md && grep -q "cortex.local.toml" CLAUDE.md || {
+          if ! { grep -q "cortex/agents" CLAUDE.md && grep -q "cortex.local.toml" CLAUDE.md; }; then
             echo "CLAUDE.md does not send the LLM to the spec — the cascade would resolve nowhere:"
             cat CLAUDE.md
             exit 1
-          }
+          fi
           grep -q '^spec = ' cortex.local.toml
           echo "✓ bootstrap generated, spec synced"
 
