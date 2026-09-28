@@ -204,15 +204,23 @@ class InstallShTests(unittest.TestCase):
                 self.assertFalse(self.cortex_home.exists())
 
     def without_curl(self):
-        """The system's commands, but curl: install.sh downloads with wget."""
-        if not shutil.which("wget"):
+        """The system's commands, but curl, and the wget found on PATH — Homebrew's, on macOS, is
+        in none of the system's directories: install.sh downloads with wget. Each command is a
+        script that runs the real one by its own path: macOS's shasum, a perl script, finds its
+        version by the path it is called by, and a link would give it another."""
+        wget = shutil.which("wget")
+        if not wget:
             self.skipTest("needs wget")
         tools = self.tmp / "no-curl"
         tools.mkdir()
-        for directory in reversed(SYSTEM_PATH):
-            for entry in Path(directory).glob("*") if os.path.isdir(directory) else ():
-                if entry.name != "curl" and not (tools / entry.name).exists():
-                    (tools / entry.name).symlink_to(entry)
+        entries = [Path(wget)] + [entry for directory in SYSTEM_PATH if os.path.isdir(directory)
+                                  for entry in sorted(Path(directory).iterdir())]
+        for entry in entries:
+            if entry.name == "curl" or (tools / entry.name).exists() or not os.access(entry, os.X_OK) or entry.is_dir():
+                continue
+            wrapper = tools / entry.name
+            wrapper.write_text(f"#!/bin/sh\nexec '{entry}' \"$@\"\n", encoding="utf-8")
+            wrapper.chmod(0o755)
         return [str(tools)]
 
     def test_with_wget_it_installs(self):
