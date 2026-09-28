@@ -192,7 +192,7 @@ Acceptance criteria:
 - sync refuses, and deletes nothing, when `cortex/` is a submodule, a clone or any directory it did not write; switching a project from `link` or `copy` back to `store` removes only what sync made
 - a project pinned to a version newer than the binary is refused with the upgrade command
 - on Windows, the junction is created by a user without administrator rights or developer mode
-- `cortex.toml` with an unknown key, or without `version` or `theme`, is refused and the key named; so is any key but `theme` and `spec` in `cortex.local.toml`
+- `cortex.toml` with an unknown key, or without `version` or `theme`, is refused and the key named; so is any key but `theme` and `spec` in `cortex.local.toml` — `claude_access` and `claude_entry` joined them since (§9, after the delivery and phase 5)
 - for Copilot, Cursor, Claude Code and Codex, which mode works — the spec read in place, through the link, or only copied — is measured on a real conversation that must reach a role card, and written in the migration guide, with whether the tool asked for permission
 
 ### Phase 3 — The runtime finds the base through `cortex.toml`
@@ -455,7 +455,6 @@ Across it, `cortex init` writes what `setup.sh` wrote, byte for byte. The `.acti
 - **The Windows executable stays unsigned** for 1.0.0 (§3.1, §7). Measured on a throwaway pre-release, on Windows 11: installed by `install.ps1`, `cortex.exe` carries no Mark of the Web, so SmartScreen does not step in, and Defender let it run. A zip downloaded with a browser would carry it.
 - **The release path ran on that pre-release.** It found one bug: the publish job gathered the assets in the repository's own `assets/`, so the README's logo shipped with the release. It now works in `$RUNNER_TEMP`.
 
-
 ### Phase 5 — found in review
 
 - **Phase 2's last criterion is met for Claude Code only, before 1.0.0** (§4). §4 has all five phases gate the release; the measurement of Copilot, Cursor and Codex moves to #137, outside that gate, because no account for them is at hand. This amends §4 for that one criterion: 1.0.0 ships with the three tools marked *not measured yet* in the migration guide, which tells their users to start in `store` and move to `link`, then `copy`.
@@ -475,4 +474,4 @@ Across it, `cortex init` writes what `setup.sh` wrote, byte for byte. The `.acti
 - **`claude_entry` is what sync knows of its own entry.** Removed with `cortex.local.toml` — a `git clean -X` — the entry stays in the settings as the developer's; edited by hand, sync takes the path written for its own. The migration guide says both. Turned off, sync says when an entry of the developer's still lets Claude Code read the spec, rather than that it no longer does.
 - **The templates compare the version of a copy too**: `cortex/.synced` names it. A link names none, and there is nothing to compare. Measured again with Claude Code 2.1.273 in `copy` mode: it read `.synced`, and reached the Prompt Manager's card with no denial.
 - **The CI lines read the pinned version whatever its quotes**, or an indented line, and stop when there is none: read empty, `install.sh` installed the latest release, in silence. A PowerShell equivalent is given for a Windows runner. Both are run by the CLI's tests, as written.
-- **The promise of §3.3's amendment is in CONTRIBUTING's versioning section**, where the release process reads it.
+- **The promise of *Phase 5 — found in review* — a later binary only warns within a major version (§3.3) — is in CONTRIBUTING's versioning section**, where the release process reads it.
