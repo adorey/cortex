@@ -32,12 +32,24 @@ COMMANDS: Dict[str, Tuple[str, Callable[[List[str]], int]]] = {
 }
 
 
+def known_specs_report() -> str:
+    """The spec archives this binary knows the checksum of (ADR-008 §9): a download of one of
+    them is refused when its release says otherwise."""
+    from . import store
+
+    known = store.known_specs()
+    if not known:
+        return "known spec archives: 0 — a download is checked against its release's SHA256SUMS alone\n"
+    return f"known spec archives: {len(known)}\n" + "".join(f"  {version}  {digest}\n"
+                                                          for version, digest in sorted(known.items()))
+
+
 def usage() -> str:
     commands = "".join(f"  {name:<10} {summary}\n" for name, (summary, _) in COMMANDS.items())
     return ("Usage: cortex <command> [options]\n\n"
             + (f"Commands:\n{commands}\n" if commands else "")
             + "Options:\n"
-              "  -V, --version   Print the version and exit\n"
+              "  -V, --version   Print the version and exit — with --verbose, the spec archives it knows\n"
               "  -h, --help      Show this help and exit\n\n"
               "`cortex <command> --help` shows the options of a command.\n")
 
@@ -57,6 +69,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             sys.stderr.write(f"cortex: unknown option '{rest[0]}' for --version\n")
             return 2
         sys.stdout.write(f"cortex {VERSION}\n")
+        if rest in (["-v"], ["--verbose"]):
+            sys.stdout.write(known_specs_report())
         return 0
     if command not in COMMANDS:
         sys.stderr.write(f"cortex: unknown command '{command}'\n\n{usage()}")
