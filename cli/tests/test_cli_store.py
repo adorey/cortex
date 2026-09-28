@@ -86,6 +86,33 @@ class EmbeddedTests(StoreTestCase):
         the_store._install(Version("2.0.0"), fill)
         self.assertEqual(self.listing(), ["2.0.0"])
 
+    def test_an_empty_version_directory_is_no_version(self):
+        the_store = store.Store(self.home, own_version="2.0.0", checkout=REPO, fetch=self.no_network)
+        the_store.path(Version("2.0.0")).mkdir(parents=True)
+        self.assertFalse(the_store.has(Version("2.0.0")))
+        with self.assertRaisesRegex(store.StoreError, "holds no complete spec"):
+            the_store.ensure(Version("2.0.0"))
+
+    @unittest.skipIf(os.name == "nt", "the mode of a directory is POSIX's")
+    def test_a_version_left_writable_is_made_read_only_again(self):
+        # Interrupted between the rename and the chmod, a sync left the version writable.
+        the_store = store.Store(self.home, own_version="2.0.0", checkout=REPO, fetch=self.no_network)
+        the_store.ensure(Version("2.0.0"))
+        store.make_writable(the_store.path(Version("2.0.0")))
+        self.assertEqual(the_store.ensure(Version("2.0.0")), "stored")
+        self.assertFalse(os.stat(the_store.path(Version("2.0.0"))).st_mode & 0o222)
+
+    def test_a_staging_left_for_a_day_is_removed(self):
+        the_store = store.Store(self.home, own_version="2.0.0", checkout=REPO, fetch=self.no_network)
+        the_store.ensure(Version("2.0.0"))
+        old, fresh = the_store.versions / ".2.0.1-abandoned", the_store.versions / ".download-inflight"
+        old.mkdir()
+        fresh.write_bytes(b"x")
+        os.utime(old, (0, 0))
+        the_store.ensure(Version("2.0.0"))
+        self.assertFalse(old.exists())
+        self.assertTrue(fresh.exists())
+
     @staticmethod
     def no_network(url, limit):
         raise AssertionError(f"no download expected, got {url}")
@@ -172,6 +199,27 @@ class DownloadTests(StoreTestCase):
             the_store.ensure(Version("1.0.0-rc.1"))
         self.assertEqual(self.requested, [])
 
+    def test_a_known_checksum_the_release_contradicts_is_refused(self):
+        # SHA256SUMS comes from where the archive does: a release replaced wholesale passes it.
+        # The checksum this binary was built with does not move.
+        the_store = self.release("2.0.0")
+        the_store.known = {"2.0.0": "f" * 64}
+        with self.assertRaisesRegex(store.StoreError, "the release was changed since this binary was built"):
+            the_store.ensure(Version("2.0.0"))
+        self.assertEqual(self.listing(), [])
+
+    def test_a_known_checksum_that_agrees(self):
+        archive = spec_archive(self.tmp, "2.0.0").read_bytes()
+        the_store = self.release("2.0.0", archive)
+        the_store.known = {"2.0.0": hashlib.sha256(archive).hexdigest()}
+        self.assertEqual(the_store.ensure(Version("2.0.0")), "downloaded")
+
+    def test_a_version_the_binary_does_not_know_falls_back_on_sha256sums(self):
+        # A release made after this binary, on an older line — 2.0.1 after 3.0.0 — is not in its table.
+        the_store = self.release("2.0.0")
+        the_store.known = {"1.0.0": "a" * 64}
+        self.assertEqual(the_store.ensure(Version("2.0.0")), "downloaded")
+
     def test_a_release_that_does_not_exist(self):
         with self.assertRaisesRegex(store.StoreError, "could not download the SHA256SUMS of Cortex 2.5.0"):
             self.release("2.0.0").ensure(Version("2.5.0"))
@@ -201,6 +249,60 @@ class NetTests(unittest.TestCase):
             with mock.patch.object(ssl.SSLContext, "load_verify_locations") as loaded:
                 net.ssl_context()
         loaded.assert_called_with(cafile=bundle)
+
+    def test_only_https_or_http_to_this_machine(self):
+        for url in ("https://github.com/x", "http://127.0.0.1:8765/x", "http://localhost/x", "http://[::1]:80/x"):
+            with self.subTest(url=url):
+                net.check_url(url)
+        for url in ("http://example.com/x", "file:///etc/passwd", "ftp://example.com/x", "http://127.0.0.1.example.com/x"):
+            with self.subTest(url=url):
+                with self.assertRaises(net.DownloadError):
+                    net.check_url(url)
+
+    def test_the_releases_url_is_checked(self):
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"CORTEX_RELEASES_URL": "file:///srv/releases"}):
+            with self.assertRaisesRegex(store.StoreError, "CORTEX_RELEASES_URL"):
+                store.releases_url()
+
+    def test_a_redirect_off_https_is_refused(self):
+        import http.server
+        import threading
+
+        class Redirect(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header("Location", "http://example.com/SHA256SUMS")
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        with self.assertRaisesRegex(net.DownloadError, "only https"):
+            net.get(f"http://127.0.0.1:{server.server_address[1]}/SHA256SUMS", 1024)
+
+    def test_a_url_holding_a_control_character(self):
+        with self.assertRaises(net.DownloadError):
+            net.get("https://github.com/adorey/cortex/releases/download/1.0.0\n/SHA256SUMS", 1024)
+
+    @unittest.skipIf(os.name == "nt", "Windows gives Python its own certificate store")
+    def test_an_empty_certificate_directory_holds_no_certificate(self):
+        from unittest import mock
+        import ssl
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as empty:
+            paths = ssl.DefaultVerifyPaths(None, empty, "SSL_CERT_FILE", "/nonexistent", "SSL_CERT_DIR", empty)
+            with mock.patch("ssl.get_default_verify_paths", return_value=paths), \
+                    mock.patch.dict(os.environ, {}, clear=False) as env:
+                env.pop("SSL_CERT_FILE", None)
+                env.pop("SSL_CERT_DIR", None)
+                self.assertFalse(net._defaults_hold_certificates())
 
     @unittest.skipUnless(os.environ.get("CI") == "true", "reaches github.com: in CI only")
     def test_github_is_reached_over_verified_https(self):
