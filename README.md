@@ -197,7 +197,7 @@ cortex init --tool claude           # CLAUDE.md — or cursor, agents, custom --
 cortex init --no-personality        # neutral professional agents (no theme)
 ```
 
-`cortex init` writes `cortex.toml` — committed: the Cortex `version` the project uses and the team's `theme` — adds `cortex.local.toml` to `.gitignore` and runs `cortex sync`. It then writes the AI tool's instructions file, `project-overview.md` and `project-context.md` when they are missing; an existing instructions file is kept unless `--force`. [Getting Started](docs/getting-started.md) goes through every option.
+`cortex init` writes `cortex.toml` — committed: the Cortex `version` the project uses and the team's `theme` — adds `cortex.local.toml` to `.gitignore` and runs `cortex sync`. It then writes the AI tool's instructions file, `project-overview.md` and `project-context.md` when they are missing; an existing instructions file is kept unless `--force`, which keeps the old one as `FILE.bak`. [Getting Started](docs/getting-started.md) goes through every option.
 
 ### 3. After a clone: `cortex sync`
 
@@ -230,7 +230,7 @@ cortex validate              # overlay checks: 0 clean, 1 errors, 2 cannot run
 cortex validate --strict     # warnings fail too — what CI runs
 ```
 
-In CI: install the binary, then `cortex sync` and `cortex validate --strict`.
+In CI: install the binary of the version `cortex.toml` pins, then `cortex sync` and `cortex validate --strict` — [the migration guide](docs/migrating-to-the-binary.md#5-ci) has the lines.
 
 To move a project to another Cortex version, change `version` in `cortex.toml`, then run `cortex sync`. To upgrade the binary, run the install script again. A binary serves every version from 1.0.0 up to its own, and refuses a project pinned to a newer one with the command that upgrades it.
 

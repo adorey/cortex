@@ -19,7 +19,7 @@ irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1 | iex      
 
 ## 2. A single project, from a submodule
 
-`cortex init` refuses to run while `cortex/` is a submodule, and prints the commands that remove it. It does not run them: they rewrite your git state, so you run them yourself, once, in the project's root.
+`cortex init` refuses to run while `cortex/` is a submodule, and prints the commands that remove it. It does not run them: they rewrite your git state, so you run them yourself, once. In the project's root, they are:
 
 ```bash
 git submodule deinit -f cortex
@@ -27,16 +27,19 @@ git rm cortex
 rm -rf .git/modules/cortex
 ```
 
-On Windows, the last one is `Remove-Item -Recurse -Force .git\modules\cortex`. The path under `.git/modules/` is the one `cortex init` prints: it reads it from the submodule itself.
+On Windows, the last one is `Remove-Item -Recurse -Force .git\modules\cortex`. The commands `cortex init` prints name the project by its absolute path, so they run from any directory, and the path under `.git/modules/` is read from the submodule itself. A submodule whose repository is in its own `cortex/.git` directory, as older git made them, needs only the first two.
 
 Then initialise the project with the options you gave `setup.sh` — they are the same:
 
 ```bash
 cortex init --tool claude --force         # or copilot (the default), cursor, agents, custom
-git add cortex.toml .gitignore CLAUDE.md && git commit -m "Move to the cortex binary"
+git add cortex.toml .gitignore CLAUDE.md  # CLAUDE.md, or your tool's file — see below
+git commit -m "Move to the cortex binary"
 ```
 
-`--force` replaces the instructions file `setup.sh` wrote: the new one reads `cortex.local.toml` first. Without it, `cortex init` keeps an instructions file that is already there. Keep your `project-overview.md`, `project-context.md` and `agents/` overlays as they are. Overlay headers keep their `Base: cortex/agents/…`: `cortex/` is now the directory `spec` names.
+`--force` replaces the instructions file `setup.sh` wrote: the new one reads `cortex.local.toml` first. **It keeps the old one beside it, as `FILE.bak`** — `CLAUDE.md.bak` here. Carry over what you added to it by hand — a table of services, sections of your own — then delete the `.bak`. Without `--force`, `cortex init` keeps an instructions file that is already there.
+
+The instructions file is the tool's: `.github/copilot-instructions.md` for Copilot, `.cursor/rules/cortex.mdc` for Cursor, `CLAUDE.md` for Claude Code, `AGENTS.md` for `--tool agents`, the path you give with `--tool custom`. Keep your `project-overview.md`, `project-context.md` and `agents/` overlays as they are. Overlay headers keep their `Base: cortex/agents/…`: `cortex/` is now the directory `spec` names.
 
 ## 3. A workspace, from a standalone clone
 
@@ -47,7 +50,9 @@ rm -rf cortex                             # Windows: Remove-Item -Recurse -Force
 cortex init --workspace --tool claude --force
 ```
 
-Check first that the clone holds nothing of yours. `--service NAME` scaffolds a service's own `project-overview.md` and `project-context.md` — repeatable, `core/api` for a service in a subfolder. The services you already have keep their files.
+Check first that the clone holds nothing of yours. `--service NAME` scaffolds a service's own `project-overview.md` and `project-context.md` — repeatable, `core/api` for a service in a subfolder. The services you already have keep their files. As in a single project, `--force` keeps the instructions file it replaces as `FILE.bak`: where the workspace root is no git repository, that `.bak` is the only copy of what you wrote in it.
+
+**A workspace root that is no git repository** — a directory holding the services' repositories — has nowhere to commit `cortex.toml`, and `cortex init` says so. Each developer then runs `cortex init --workspace` in their own root: it pins the version of their own `cortex`, and their own theme and sync mode. A team-wide pin for that layout is left to a later decision (ADR-008 §9).
 
 ## 4. Every other developer, after a pull
 
@@ -63,19 +68,20 @@ theme = "star-wars"
 
 ## 5. CI
 
-Where CI ran `./cortex/bin/validate-overlays.sh --strict`, it installs the binary and syncs:
+Where CI ran `./cortex/bin/validate-overlays.sh --strict`, it installs the binary of the version `cortex.toml` pins, and syncs:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh
+version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' cortex.toml)"
+curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- "$version"
 export PATH="$HOME/.cortex/bin:$PATH"
 cortex sync && cortex validate --strict
 ```
 
-`cortex validate` has the same checks, the same report and the same exit codes as the script. When it cannot run — no `cortex.toml`, a project not synced — it exits `2`.
+`cortex validate` has the same checks, the same report and the same exit codes as the script. When it cannot run — no `cortex.toml`, a project not synced — it exits `2`. The binary checks with its own rules: a later release may warn where the pinned one did not, and `--strict` fails on a warning. Pinned, CI checks the project with the rules of the version it uses, and a bump of `version` is the change that brings the new ones (ADR-008 §9).
 
 ## 6. The runtime
 
-A project with a `cortex.toml` gives the runtime its base through the store. Set `CORTEX_STORE_PATH` in `deploy/.env` to your store (usually `~/.cortex`, written as an absolute path); compose mounts it read-only. A project without `cortex.toml` needs nothing. See the [deploy README](../deploy/README.md).
+A project with a `cortex.toml` gives the runtime its base through the store. Run `cortex sync` in the project, then set `CORTEX_STORE_PATH` in `deploy/.env` to your store (usually `~/.cortex`, written as an absolute path); compose mounts its `versions/`, read-only, and nothing else of it. A project without `cortex.toml` needs nothing. See the [deploy README](../deploy/README.md).
 
 ## 7. Which mode your tool needs
 

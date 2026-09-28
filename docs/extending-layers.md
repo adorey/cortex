@@ -248,10 +248,11 @@ The validator catches the common mistakes:
 - Trying to override a non-overridable file (`characters.md`)
 - `replacement` semantic used outside `workflows/`
 
-CI integration is recommended — fail the pipeline if `cortex validate --strict` returns non-zero. The CI job installs the binary with the install script, then runs `cortex sync`:
+CI integration is recommended — fail the pipeline if `cortex validate --strict` returns non-zero. The CI job installs the binary of the version `cortex.toml` pins — its checks are that version's — then runs `cortex sync`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh
+version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' cortex.toml)"
+curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- "$version"
 export PATH="$HOME/.cortex/bin:$PATH"
 cortex sync
 cortex validate --strict
