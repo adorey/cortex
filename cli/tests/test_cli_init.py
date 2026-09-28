@@ -65,6 +65,8 @@ class InitTestCase(unittest.TestCase):
     def run_case(self, case):
         options, services, before = matrix.CASES[case]
         matrix.prepare(self.project, before)
+        if HAS_GIT:     # a repository to ignore files in: outside of one, init writes no .gitignore
+            subprocess.run(["git", "init", "-q", str(self.project)], check=True)
         proc = self.init(*options, *[arg for name in services for arg in ("--service", name)])
         self.assertEqual(proc.returncode, 0, proc.err)
         return proc
@@ -87,7 +89,8 @@ class MatrixTests(InitTestCase):
                 # The one difference: the theme goes to cortex.toml, not to a marker in the spec.
                 self.assertIn(f'theme = "{EXPECTED[case]["active_theme"]}"', self.read("cortex.toml"))
                 self.assertIn(f'version = "{OWN}"', self.read("cortex.toml"))
-                self.assertIn("cortex.local.toml", self.read(".gitignore").splitlines())
+                if HAS_GIT:
+                    self.assertIn("cortex.local.toml", self.read(".gitignore").splitlines())
                 self.assertIn("spec = ", self.read("cortex.local.toml"))
 
     def test_the_comparison_catches_one_byte(self):
@@ -243,13 +246,80 @@ class OptionTests(InitTestCase):
                 self.assertIn("no theme name", proc.err)
                 self.assertEqual(list(self.project.iterdir()), [])
 
-    def test_a_root_that_is_no_repository_is_said(self):
+    def test_a_root_that_is_no_repository_is_said_and_gets_no_gitignore(self):
         proc = self.init()
         self.assertEqual(proc.returncode, 0, proc.err)
         self.assertIn("is in no git repository", proc.err)
+        self.assertFalse((self.project / ".gitignore").exists())
         if HAS_GIT:
             subprocess.run(["git", "init", "-q", str(self.project)], check=True)
-            self.assertNotIn("is in no git repository", self.init().err)
+            proc = self.init()
+            self.assertNotIn("is in no git repository", proc.err)
+            self.assertIn("cortex.local.toml", self.read(".gitignore").splitlines())
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_copy_turned_into_a_link_is_ignored_as_a_link(self):
+        # Asked before the sync, git saw cortex/ still a directory, which `cortex/` matches: the
+        # link that took its place was then a file git did not ignore.
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        (self.project / ".gitignore").write_text("cortex/\n", encoding="utf-8")
+        self.assertEqual(self.init("--copy").returncode, 0)
+        proc = self.init("--link")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertTrue(os.path.islink(self.project / "cortex") or os.name == "nt")
+        self.assertEqual(subprocess.run(["git", "-C", str(self.project), "check-ignore", "-q", "cortex"]).returncode, 0)
+        self.assertNotIn("git does not ignore", proc.err)
+
+    def test_a_file_where_a_folder_is_to_be_made_is_refused_first(self):
+        (self.project / "api").write_text("a file\n", encoding="utf-8")
+        (self.project / ".cursor").write_text("a file\n", encoding="utf-8")
+        for args in (["--workspace", "--service", "api/x"], ["--tool", "cursor"]):
+            with self.subTest(args=args):
+                proc = self.init(*args)
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("is a file, not a folder", proc.err)
+                self.assertNotIn("Traceback", proc.err)
+                self.assertEqual(sorted(p.name for p in self.project.iterdir()), [".cursor", "api"])
+
+    def test_force_never_overwrites_a_backup(self):
+        (self.project / "CLAUDE.md").write_text("# mine, first\n", encoding="utf-8")
+        self.assertEqual(self.init("--tool", "claude", "--force").returncode, 0)
+        (self.project / "CLAUDE.md").write_text("# mine, second\n", encoding="utf-8")
+        proc = self.init("--tool", "claude", "--force")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertEqual(self.read("CLAUDE.md.bak"), "# mine, first\n")
+        self.assertEqual(self.read("CLAUDE.md.bak.1"), "# mine, second\n")
+        # Already what --force writes: nothing to back up, nothing rewritten.
+        proc = self.init("--tool", "claude", "--force")
+        self.assertIn("is what --force would write", proc.out)
+        self.assertFalse((self.project / "CLAUDE.md.bak.2").exists())
+
+    def test_a_second_init_writes_the_instructions_file_of_the_tool_already_there(self):
+        self.assertEqual(self.init("--tool", "claude").returncode, 0)
+        proc = self.init()
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertFalse((self.project / ".github" / "copilot-instructions.md").exists())
+        self.assertIn("CLAUDE.md kept", proc.out)
+        (self.project / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+        proc = self.init("--force")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("several instructions files are there", proc.err)
+
+    def test_a_kept_instructions_file_that_no_longer_fits_the_theme_is_said(self):
+        self.assertEqual(self.init("--tool", "claude").returncode, 0)
+        proc = self.init("--tool", "claude", "--no-personality")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("was written with the personality block", proc.err)
+        self.assertIn("cortex init --force writes it again", proc.err)
+
+    def test_cortex_toml_keeps_its_comments_and_its_byte_order_mark(self):
+        self.assertEqual(self.init("--theme", "acme").returncode, 0)
+        text = self.read("cortex.toml").replace('theme = "acme"', 'theme = "acme"  # the team\'s choice')
+        (self.project / "cortex.toml").write_bytes(("\ufeff" + text).encode("utf-8"))
+        self.assertEqual(self.init("--theme", "h2g2").returncode, 0)
+        written = (self.project / "cortex.toml").read_bytes().decode("utf-8")
+        self.assertTrue(written.startswith("\ufeff"))
+        self.assertIn('theme = "h2g2"  # the team\'s choice', written)
 
     def test_a_directory_given(self):
         proc = self.init("sub/app", cwd=self.project)
@@ -269,7 +339,10 @@ class OptionTests(InitTestCase):
                               (["--workspace", "--service", "notes"], "is a file, not a folder"),
                               (["--tool", "custom", "--instructions-file", "docs"], "a directory"),
                               (["--tool", "custom", "--instructions-file", "cortex.toml"], "writes for itself"),
-                              (["--tool", "custom", "--instructions-file", ".gitignore"], "writes for itself")):
+                              (["--tool", "custom", "--instructions-file", ".gitignore"], "writes for itself"),
+                              (["--tool", "custom", "--instructions-file", "cortex"], "writes for itself"),
+                              (["--workspace", "--service", "api", "--tool", "custom", "--instructions-file",
+                                "api/project-overview.md"], "writes for itself")):
             with self.subTest(args=args):
                 proc = self.init(*args)
                 self.assertEqual(proc.returncode, 1)

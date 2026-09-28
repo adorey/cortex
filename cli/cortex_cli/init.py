@@ -27,7 +27,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Dict, List, TextIO
+from typing import Dict, List, Optional, TextIO
 
 from cortex_core.project import is_theme
 
@@ -112,8 +112,10 @@ def add_to_gitignore(root: Path, entries: Dict[str, str]) -> List[str]:
     """Add to ``.gitignore`` each line of ``entries`` whose path — its value — git does not ignore
     yet, and return them. The file keeps its bytes: its encoding, its byte order mark, its line
     endings. Without a repository to ask, a line is added unless it, or one that means the same,
-    is there."""
+    is there — and no .gitignore is created: it would keep nothing out of any commit."""
     path = root / ".gitignore"
+    if not path.is_file() and sync.ignored(root, config.LOCAL_FILE) is None:
+        return []
     data = path.read_bytes() if path.is_file() else b""
     present = {line.strip().lstrip("\ufeff") for line in data.decode("utf-8", errors="replace").splitlines()}
     missing = []
@@ -134,16 +136,52 @@ def add_to_gitignore(root: Path, entries: Dict[str, str]) -> List[str]:
 
 def _refuse_instructions_file(root: Path, path: Path) -> None:
     """``--instructions-file`` names the tool's file: never a directory, never a file cortex init
-    writes for itself, never the spec."""
+    writes for itself — a project's or a service's — never the spec, nor ``cortex`` itself."""
     if path.is_dir():
         raise InitError(f"--instructions-file {display(str(path))}: a directory")
     own = {os.path.normcase(os.path.abspath(root / name)) for name in
-           (config.PROJECT_FILE, config.LOCAL_FILE, ".gitignore", "project-overview.md", "project-context.md")}
+           (config.PROJECT_FILE, config.LOCAL_FILE, ".gitignore", sync.LINK)}
     target = os.path.normcase(os.path.abspath(path))
     spec = os.path.normcase(os.path.abspath(root / sync.LINK))
-    if target in own or target.startswith(spec + os.sep):
+    if target in own or target.startswith(spec + os.sep) or path.name in ("project-overview.md", "project-context.md"):
         raise InitError(f"--instructions-file {display(str(path))}: a file cortex init writes for itself — "
                         "name the tool's instructions file")
+
+
+def _refuse_a_file_on_the_way(path: Path, what: str) -> None:
+    """A directory to create — ``path`` or one of its parents — that is a file already would stop
+    the writes half-way: refused before any of them."""
+    for directory in [*reversed(path.parents), path]:
+        if directory.exists() and not directory.is_dir():
+            raise InitError(f"{what}: {display(str(directory))} is a file, not a folder")
+
+
+def _backup_of(path: Path, content: bytes) -> Optional[Path]:
+    """Where ``--force`` keeps the file it replaces — ``FILE.bak``, or ``FILE.bak.N`` when a
+    ``.bak`` of other content is there already: none is ever overwritten. ``None`` when a backup
+    of this content exists."""
+    for n in range(1000):
+        backup = path.with_name(path.name + (".bak" if n == 0 else f".bak.{n}"))
+        if not backup.exists():
+            return backup
+        if backup.is_file() and backup.read_bytes() == content:
+            return None
+    raise InitError(f"--force: {display(str(path))} has a thousand backups — remove some")
+
+
+def _tool(options: argparse.Namespace, root: Path) -> Optional[str]:
+    """The tool whose instructions file to write: ``--tool``, or the one whose file is there — a
+    second ``cortex init`` writes no other — or ``copilot``, setup.sh's default, for a project
+    that has none. ``None`` when several are there, and none is named."""
+    if options.tool is not None:
+        return options.tool
+    found = [tool for tool, rel in TOOLS.items() if (root / rel).is_file()]
+    if len(found) > 1:
+        if options.force:
+            raise InitError(f"--force: several instructions files are there — {', '.join(TOOLS[t] for t in found)}: "
+                            "name the one to write with --tool")
+        return None
+    return found[0] if found else "copilot"
 
 
 def _services(options: argparse.Namespace, root: Path, out: TextIO, err: TextIO) -> List[str]:
@@ -155,9 +193,7 @@ def _services(options: argparse.Namespace, root: Path, out: TextIO, err: TextIO)
         else:
             err.write("note: no service created — --service NAME adds one; names are asked for on a terminal only\n")
     for name in names:
-        folder = root / service_path(name)
-        if folder.exists() and not folder.is_dir():
-            raise InitError(f"--service {name}: {display(str(folder))} is a file, not a folder")
+        _refuse_a_file_on_the_way(root / service_path(name), f"--service {name}")
     return [service_path(name) for name in names]
 
 
@@ -168,8 +204,12 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
     mode = "link" if options.link else "copy" if options.copy else None
 
     # Everything is checked before anything of the project is written: its instructions file,
-    # its services, its theme, its cortex.toml, what is at cortex/.
-    if options.tool == "custom":
+    # its services, its theme, its cortex.toml, what is at cortex/ — and that no file stands where
+    # a directory is to be made.
+    _refuse_a_file_on_the_way(root, "the project root")
+    tool = _tool(options, root)
+    options.tool = tool
+    if tool == "custom":
         if not options.instructions_file:
             raise InitError("--tool custom needs --instructions-file PATH")
         instructions_file = Path(os.path.join(cwd, options.instructions_file))
@@ -177,7 +217,9 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
     else:
         if options.instructions_file:
             raise InitError("--instructions-file goes with --tool custom")
-        instructions_file = root / TOOLS[options.tool]
+        instructions_file = root / TOOLS[tool] if tool else None
+    if instructions_file is not None:
+        _refuse_a_file_on_the_way(instructions_file.parent, f"the instructions file {display(str(instructions_file))}")
     if theme is not None and not is_theme(theme):
         raise InitError(f'--theme {theme}: no theme name — letters, digits, ".", "_" and "-"')
     services = _services(options, root, out, err) if options.workspace else []
@@ -220,36 +262,55 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         out.write(f"✓ {config.PROJECT_FILE}: {shown} — the rest kept, at Cortex {version}\n")
     else:
         out.write(f"✓ {config.PROJECT_FILE} kept, at Cortex {version}\n")
-    spec_mode = mode or (project.sync if project else None)
+
+    # The spec, where the project finds it — then what git must ignore, asked of git once
+    # cortex/ has its final form: a copy turned into a link is a file to git.
+    sync.sync(str(root), mode, None, out, err, notes=False)
+    spec_mode = mode or (project.sync if project else None) or "store"
     entries = {config.LOCAL_FILE: config.LOCAL_FILE}
     if spec_mode in ("link", "copy"):
         # A link is a file to git: `cortex/` would not match it. `/cortex` matches the link and the copy.
-        entries[f"/{sync.LINK}"] = sync.LINK if spec_mode == "link" else f"{sync.LINK}/"
+        entries[f"/{sync.LINK}"] = sync.LINK
     ignored = add_to_gitignore(root, entries)
     if ignored:
         out.write(f"✓ .gitignore: {', '.join(ignored)}\n")
     if sync.ignored(root, config.LOCAL_FILE) is None:
         err.write(f"note: {display(str(root))} is in no git repository: {config.PROJECT_FILE} is committed nowhere, "
-                  "and .gitignore does nothing here. Where the workspace root is no repository (ADR-006, 2.B), each "
+                  "and no .gitignore is written. Where the workspace root is no repository (ADR-006, 2.B), each "
                   "developer runs cortex init in their own, and pins the version of their own cortex (ADR-008 §9).\n")
-
-    # The spec, where the project finds it
-    sync.sync(str(root), mode, None, out, err)
+    else:
+        sync._notes(root, spec_mode, err)
 
     templates = spec / "templates"
     workspace = options.workspace
     bootstrap = templates / ("bootstrap-instructions-workspace.md" if workspace else "bootstrap-instructions.md")
-    if instructions_file.exists() and not options.force:
+    if instructions_file is None:
+        out.write("✓ the instructions files are kept — several are there; --tool names the one to write\n")
+    elif instructions_file.exists() and not options.force:
         out.write(f"✓ {display(str(instructions_file))} kept — --force replaces it\n")
+        kept = instructions_file.read_bytes()
+        ours = kept.startswith(b"# Cortex AI Team") or PERSONALITY_BEGIN in kept      # the templates' own
+        if ours and (PERSONALITY_BEGIN in kept) != personality:
+            err.write(f"note: {display(str(instructions_file))} was written {'without' if personality else 'with'} "
+                      "the personality block this theme needs removed or added — cortex init --force writes it "
+                      "again, and keeps it as .bak\n")
     else:
+        wanted = instructions(bootstrap.read_bytes(), personality)
         replaced = instructions_file.exists()
-        instructions_file.parent.mkdir(parents=True, exist_ok=True)
-        if replaced:
-            backup = instructions_file.with_name(instructions_file.name + ".bak")
-            os.replace(instructions_file, backup)
-            out.write(f"✓ {display(str(backup))}: the file --force replaces, as it was\n")
-        instructions_file.write_bytes(instructions(bootstrap.read_bytes(), personality))
-        out.write(f"✓ {display(str(instructions_file))} {'replaced' if replaced else 'written'}\n")
+        current = instructions_file.read_bytes() if replaced else None
+        if current == wanted:
+            out.write(f"✓ {display(str(instructions_file))} is what --force would write: left as it is\n")
+        else:
+            instructions_file.parent.mkdir(parents=True, exist_ok=True)
+            if replaced:
+                backup = _backup_of(instructions_file, current)
+                if backup is None:
+                    out.write(f"✓ {display(str(instructions_file))}: a backup of it is there already\n")
+                else:
+                    os.replace(instructions_file, backup)
+                    out.write(f"✓ {display(str(backup))}: the file --force replaces, as it was\n")
+            instructions_file.write_bytes(wanted)
+            out.write(f"✓ {display(str(instructions_file))} {'replaced' if replaced else 'written'}\n")
 
     overview = (templates / "project-overview.md.template").read_bytes()
     context = (templates / "project-context.md.template").read_bytes()
@@ -293,8 +354,9 @@ def run(args: List[str]) -> int:
     parser.add_argument("--workspace", action="store_true", help="multi-service workspace mode")
     parser.add_argument("--service", action="append", default=[], metavar="NAME",
                         help="a service of the workspace, a folder — repeatable; asked for when omitted on a terminal")
-    parser.add_argument("--tool", default="copilot", choices=[*TOOLS, "custom"],
-                        help="the AI tool: copilot (default), cursor, claude, agents, custom")
+    parser.add_argument("--tool", choices=[*TOOLS, "custom"],
+                        help="the AI tool: copilot (the default for a new project), cursor, claude, agents, custom — "
+                             "for a project that has one, the tool whose instructions file is there")
     parser.add_argument("--instructions-file", metavar="PATH", help="the instructions file of --tool custom")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--link", action="store_true", help="link cortex/ to the spec: cortex.toml's sync = \"link\"")

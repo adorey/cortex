@@ -453,16 +453,18 @@ def unswap(target: Path, aside: Optional[Path]) -> None:
 # The command
 # --------------------------------------------------------------------------- #
 
-def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO) -> None:
+def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO, notes: bool = True) -> None:
+    """Sync the project at or above ``cwd``. ``notes`` off, what git ignores is left to the
+    caller — ``cortex init`` writes .gitignore once ``cortex/`` has its final form."""
     root = config.find_project(cwd)
     if root is None:
         raise SyncError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory "
                         "a Cortex project")
     with project_lock(Path(root), err):
-        _sync(root, mode, source, out, err)
+        _sync(root, mode, source, out, err, notes)
 
 
-def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO) -> None:
+def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO, notes: bool) -> None:
     project = config.load(root)
     out.write(f"Project: {display(root)}\n")
     mode = mode or project.sync or "store"
@@ -528,7 +530,8 @@ def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, er
     else:
         out.write(f"{LINK}/ is a read-only copy of {display(str(spec_source))}.\n")
     out.write(f'{config.LOCAL_FILE}: spec = "{spec}"\n')
-    _notes(Path(root), mode, err)
+    if notes:
+        _notes(Path(root), mode, err)
     theme = project.active_theme
     if theme != "none" and not any((base / "agents" / "personalities" / theme).is_dir()
                                    for base in (spec_source, Path(root))):
