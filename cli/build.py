@@ -52,6 +52,7 @@ STAMP = CLI / "cortex_cli" / "_stamp.py"
 KNOWN_SPECS = CLI / "cortex_cli" / "_known_specs.py"
 sys.path.insert(0, str(REPO / "core"))
 from cortex_core.project import is_version  # noqa: E402 — the grammar the command and the runtime read
+from cortex_cli.semver import FIRST_SPEC_ARCHIVE, Version  # noqa: E402
 # (operating system, machine) as Python names them -> the target's name in the release (§3.1)
 SPEC_TREES = ("agents", "templates", "docs")
 SPEC_ARCHIVE = "cortex-spec.tar.gz"
@@ -79,9 +80,15 @@ def spec_archive(directory: Path) -> Path:
     return archive
 
 
-def fetch_known_specs(repository: str) -> Dict[str, str]:
+class KnownSpecsError(Exception):
+    pass
+
+
+def fetch_known_specs(repository: str, api: str = "https://api.github.com") -> Dict[str, str]:
     """``{version: sha256}`` of the spec archive of every published release of ``repository``,
-    from each release's ``SHA256SUMS``; a release without one — before 1.0.0 — has none."""
+    from each release's ``SHA256SUMS``. A release before 1.0.0 may have none; one from 1.0.0 on
+    that has none is refused — a binary built without it would check that version against its
+    ``SHA256SUMS`` alone, in silence."""
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "cortex-build"}
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
@@ -94,18 +101,33 @@ def fetch_known_specs(repository: str) -> Dict[str, str]:
     known: Dict[str, str] = {}
     page = 1
     while True:
-        releases = json.loads(get(f"https://api.github.com/repos/{repository}/releases?per_page=100&page={page}"))
+        releases = json.loads(get(f"{api}/repos/{repository}/releases?per_page=100&page={page}"))
         if not releases:
             return known
         for release in releases:
+            tag = release["tag_name"]
+            if release.get("draft") or not is_version(tag):
+                continue
+            served = Version(tag) >= FIRST_SPEC_ARCHIVE
             sums = next((a for a in release.get("assets", []) if a["name"] == "SHA256SUMS"), None)
-            if release.get("draft") or sums is None or not is_version(release["tag_name"]):
+            if sums is None:
+                if served:
+                    raise KnownSpecsError(f"release {tag} has no SHA256SUMS: a binary could not check its spec")
                 continue
             for line in get(sums["browser_download_url"]).decode("utf-8").splitlines():
                 fields = line.split()
                 if len(fields) == 2 and fields[1].lstrip("*") == SPEC_ARCHIVE:
-                    known[release["tag_name"]] = fields[0].lower()
+                    known[tag] = fields[0].lower()
+            if served and tag not in known:
+                raise KnownSpecsError(f"the SHA256SUMS of release {tag} lists no {SPEC_ARCHIVE}")
         page += 1
+
+
+def known_specs_module(known: Dict[str, str]) -> str:
+    """``cortex_cli/_known_specs.py``, as a build writes it."""
+    return ('"""Written by cli/build.py for one build — never committed: the checksum of the spec '
+            'archive of every release before this one."""\n\n'
+            f"KNOWN = {json.dumps(dict(sorted(known.items())), indent=4)}\n")
 
 
 def build(version: str, known: Optional[Dict[str, str]] = None) -> Path:
@@ -113,9 +135,10 @@ def build(version: str, known: Optional[Dict[str, str]] = None) -> Path:
     embedded = spec_archive(BUILD)
     STAMP.write_text(f'"""Written by cli/build.py for one build — never committed."""\n\nVERSION = "{version}"\n',
                      encoding="utf-8")
-    KNOWN_SPECS.write_text('"""Written by cli/build.py for one build — never committed: the checksum of the spec '
-                           'archive of every release before this one."""\n\n'
-                           f"KNOWN = {json.dumps(dict(sorted((known or {}).items())), indent=4)}\n", encoding="utf-8")
+    if not known:
+        print("warning: no spec archive known (--known-specs): this binary checks a download against its "
+              "release's SHA256SUMS alone", file=sys.stderr)
+    KNOWN_SPECS.write_text(known_specs_module(known or {}), encoding="utf-8")
     try:
         subprocess.run([
             sys.executable, "-m", "PyInstaller",
@@ -185,7 +208,11 @@ def main() -> int:
     args = parser.parse_args()
     if args.fetch_known_specs:
         repository, output = args.fetch_known_specs
-        known = fetch_known_specs(repository)
+        try:
+            known = fetch_known_specs(repository)
+        except KnownSpecsError as error:
+            print(f"build.py: {error}", file=sys.stderr)
+            return 1
         Path(output).write_text(json.dumps(known, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(f"{len(known)} spec archive(s) known: {', '.join(sorted(known)) or 'none'}")
         return 0
