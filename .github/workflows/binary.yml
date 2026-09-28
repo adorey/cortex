@@ -118,6 +118,17 @@ jobs:
           export SOURCE_DATE_EPOCH
           python cli/build.py --version "${{ steps.version.outputs.version }}" --known-specs "$RUNNER_TEMP/known-specs.json"
 
+      # The table the build was given is the one the binary carries: a table left out — the module
+      # missing from the bundle — would check nothing, in silence.
+      - name: The binary knows the spec archives released before
+        run: |
+          binary="$GITHUB_WORKSPACE/cli/build/dist/cortex"
+          [ "$RUNNER_OS" = Windows ] && binary="$binary.exe"
+          "$binary" --version --verbose
+          expected="$(python -c 'import json, sys; print(len(json.load(open(sys.argv[1]))))' "$RUNNER_TEMP/known-specs.json")"
+          actual="$("$binary" --version --verbose | sed -n 's/^known spec archives: \([0-9]*\).*/\1/p')"
+          [ "$actual" = "$expected" ] || { echo "::error::the binary knows $actual spec archives, the build was given $expected"; exit 1; }
+
       # The suite the source runs in cli-tests, now through the binary: --version, the golden
       # outputs of the validator byte for byte, from a CRLF checkout too.
       - name: The binary replays the CLI's suite, with no Python on its PATH
