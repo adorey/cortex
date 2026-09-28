@@ -9,6 +9,7 @@ role card names the version. The server records the paths it was asked for.
 """
 
 import functools
+import gzip
 import importlib.util
 import io
 import os
@@ -77,7 +78,8 @@ def _asset(directory, target, version):
 
 def spec_archive(directory, version, extra=None):
     """A spec archive for ``version``: the three trees, one file each — and ``extra``, a
-    ``{name: bytes}`` of members to add, to build archives a store must refuse."""
+    ``{name: bytes}`` of members to add, to build archives a store must refuse. The same bytes
+    at every call: gzip's header is not dated."""
     path = directory / "cortex-spec.tar.gz"
     files = {
         "agents/roles/prompt-manager.md": f"# Prompt Manager — Cortex {version}\n".encode(),
@@ -86,7 +88,7 @@ def spec_archive(directory, version, extra=None):
         "docs/extending-layers.md": b"# Extending\n",
     }
     files.update(extra or {})
-    with tarfile.open(path, "w:gz") as archive:
+    with gzip.GzipFile(path, "wb", mtime=0) as compressed, tarfile.open(fileobj=compressed, mode="w") as archive:
         for name, data in files.items():
             info = tarfile.TarInfo(name)
             info.size, info.mode = len(data), 0o644

@@ -160,7 +160,7 @@ class DownloadTests(StoreTestCase):
     def test_a_checksum_in_upper_case_or_with_a_star_is_read(self):
         archive = spec_archive(self.tmp, "2.0.0").read_bytes()
         line = f"{hashlib.sha256(archive).hexdigest().upper()} *cortex-spec.tar.gz\n"
-        self.release("2.0.0", sums_line=line).ensure(Version("2.0.0"))
+        self.release("2.0.0", archive, sums_line=line).ensure(Version("2.0.0"))
         self.assertEqual(self.listing(), ["2.0.0"])
 
     def test_members_a_spec_archive_cannot_hold(self):
