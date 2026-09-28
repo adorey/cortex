@@ -6,6 +6,8 @@ so that it may download the fake releases 9.9.7 and 9.9.8. A built binary is a b
 release, 0.0.0-dev.N, and serves only its own version: the tests that download skip there.
 """
 
+import errno
+import io
 import json
 import os
 import shutil
@@ -15,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # the harness, not a package named tests
 import cli_harness as harness  # noqa: E402
@@ -511,6 +514,62 @@ class HousekeepingTests(SyncTestCase):
                     with self.assertRaisesRegex(sync.SyncError, "was put back while this sync ran"):
                         sync.sync(str(project), None, None, io.StringIO(), io.StringIO())
                 self.assertEqual(list(project.glob(".cortex-sync-*")), [])
+
+
+def in_process():
+    sys.path[:0] = [str(Path(__file__).resolve().parents[1]), str(Path(__file__).resolve().parents[2] / "core")]
+    from cortex_cli import sync
+    from cortex_cli.version import VERSION
+
+    return sync, VERSION
+
+
+class LockTests(SyncTestCase):
+    """One sync of a project at a time; a file system without the lock stops no sync."""
+
+    def test_a_sync_waits_for_the_lock_and_names_the_one_it_waited_for(self):
+        sync, version = in_process()
+        project = self.project(version=version)
+        with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), mock.patch.object(sync, "LOCK_WAIT", 0.3):
+            with sync.project_lock(project, io.StringIO()):
+                with self.assertRaisesRegex(sync.SyncError, "another cortex sync of .* has run for 0.3 seconds"):
+                    sync.sync(str(project), None, None, io.StringIO(), io.StringIO())
+                self.assertFalse((project / "cortex.local.toml").exists())
+            err = io.StringIO()
+            sync.sync(str(project), None, None, io.StringIO(), err)          # released: it runs
+        self.assertNotIn("cannot be locked", err.getvalue())
+        self.assertTrue((project / "cortex.local.toml").is_file())
+
+    def test_a_file_system_without_the_lock_warns_and_does_not_wait(self):
+        # NFS emulates flock with a POSIX lock, which a read-only descriptor cannot take: EBADF.
+        sync, version = in_process()
+        for code in (errno.EBADF, errno.ENOLCK, errno.EOPNOTSUPP, errno.EINVAL):
+            with self.subTest(errno=errno.errorcode[code]):
+                project = self.project(f"app-{errno.errorcode[code]}", version=version)
+
+                def no_lock(fd, code=code):
+                    raise OSError(code, os.strerror(code))
+
+                def no_wait(seconds):
+                    raise AssertionError("waited for a lock that cannot be taken")
+
+                err = io.StringIO()
+                with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), \
+                        mock.patch.object(sync, "_try_lock", no_lock), mock.patch.object(sync.time, "sleep", no_wait):
+                    sync.sync(str(project), None, None, io.StringIO(), err)
+                self.assertIn(f"cannot be locked here ({os.strerror(code)})", err.getvalue())
+                self.assertTrue((project / "cortex.local.toml").is_file())
+
+    def test_the_project_file_can_be_replaced_while_a_sync_holds_the_lock(self):
+        # Held on cortex.toml, the Windows lock failed a git pull, or an editor saving by renaming.
+        sync, version = in_process()
+        project = self.project(version=version)
+        with sync.project_lock(project, io.StringIO()):
+            self.assertEqual([entry.name for entry in project.iterdir()], ["cortex.toml"])   # nothing written in it
+            new = project / "cortex.toml.new"
+            new.write_text('version = "9.9.8"\ntheme = "h2g2"\n', encoding="utf-8")
+            os.replace(new, project / "cortex.toml")
+        self.assertIn("9.9.8", (project / "cortex.toml").read_text(encoding="utf-8"))
 
 
 class SafetyTests(SyncTestCase):
