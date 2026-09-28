@@ -7,6 +7,7 @@ deletes it.
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # the harness, not a package named tests
 import cli_harness as harness  # noqa: E402
 import init_matrix as matrix  # noqa: E402
+
+
+def display(path):
+    return str(path).replace(os.sep, "/")
+
+
+def quote(path):
+    """A path as the commands are shown for the shell: PowerShell on Windows."""
+    return "'" + path.replace("'", "''") + "'" if os.name == "nt" else shlex.quote(path)
+
+
+def remove(path):
+    return f"Remove-Item -Recurse -Force {quote(path)}" if os.name == "nt" else f"rm -rf {quote(path)}"
+
 
 EXPECTED = json.loads(matrix.EXPECTED.read_text(encoding="utf-8"))
 OWN = harness.EXPECTED_VERSION if harness.BINARY else "9.9.9"
@@ -200,8 +215,9 @@ class OptionTests(InitTestCase):
                 err = proc.stderr.decode()
                 self.assertNotEqual(proc.returncode, 0)
                 self.assertIn("cortex/ is a git submodule", err)
-                for line in ("git submodule deinit -f cortex", "git rm cortex",
-                             "Remove-Item -Recurse -Force .git/modules/cortex" if os.name == "nt" else "rm -rf .git/modules/cortex"):
+                root = display(self.project)
+                for line in (f"git -C {quote(root)} submodule deinit -f cortex", f"git -C {quote(root)} rm cortex",
+                             remove(display(self.project / ".git" / "modules" / "cortex"))):
                     self.assertIn(f"    {line}\n", err)
                 after = {p.relative_to(self.project).as_posix(): p.read_bytes() for p in self.project.rglob("*") if p.is_file()}
                 self.assertEqual(after, before)
@@ -211,8 +227,43 @@ class OptionTests(InitTestCase):
         proc = self.init()
         self.assertEqual(proc.returncode, 1)
         self.assertIn("cortex/ is a git clone", proc.err)
-        self.assertIn("Remove-Item -Recurse -Force cortex" if os.name == "nt" else "    rm -rf cortex\n", proc.err)
+        self.assertIn(f"    {remove(display(self.project / 'cortex'))}\n", proc.err)
         self.assertEqual(sorted(p.name for p in self.project.iterdir()), ["cortex"])
+
+    def test_the_commands_run_from_any_directory_and_hold_any_path(self):
+        # Shown from ~ for projects/foo, `rm -rf cortex` would remove ~/cortex; a space would split it.
+        project = self.tmp / "init" / "my app"
+        (project / "cortex" / ".git").mkdir(parents=True)
+        proc = self.init("my app", cwd=self.tmp / "init")
+        self.assertEqual(proc.returncode, 1)
+        command = remove(display(project / "cortex"))
+        self.assertIn(f"    {command}\n", proc.err)
+        if os.name != "nt":
+            self.assertEqual(shlex.split(command), ["rm", "-rf", str(project / "cortex")])
+
+    def test_a_submodule_with_its_own_git_directory(self):
+        # Older git kept a submodule's repository in its .git directory: .gitmodules still says so.
+        (self.project / "cortex" / ".git").mkdir(parents=True)
+        (self.project / ".gitmodules").write_text('[submodule "cortex"]\n\tpath = cortex\n\turl = x\n',
+                                                  encoding="utf-8")
+        proc = self.init()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a git submodule", proc.err)
+        self.assertIn(f"git -C {quote(display(self.project))} rm cortex", proc.err)
+        self.assertNotIn("rm -rf", proc.err.replace("git -C", ""))
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_worktree_is_no_submodule(self):
+        other = self.tmp / "other"
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI"]
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        subprocess.run([*git, "-C", str(other), "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        subprocess.run(["git", "-C", str(other), "worktree", "add", "-q", str(self.project / "cortex")], check=True)
+        proc = self.init()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a git worktree", proc.err)
+        self.assertIn(f"worktree remove {quote(display(self.project / 'cortex'))}", proc.err)
+        self.assertNotIn("submodule deinit", proc.err)
 
     def test_the_team_tier_is_its_own_repository_not_the_projects(self):
         # setup.sh asked git whether agents/ was in a working tree — true inside the project's own
