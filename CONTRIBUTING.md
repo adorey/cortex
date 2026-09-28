@@ -245,11 +245,11 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 
 ```
 ✨ feat(capabilities): add Redis capability for caching patterns
-🐛 fix(setup): use workspace template when --workspace flag is set
+🐛 fix(init): use workspace template when --workspace flag is set
 📝 docs(extending-layers): add example for personality character overlay
 📐 docs(adr): mark ADR-001 as Accepted
-♻️ refactor(setup): replace hardcoded heredoc with template loader
-✅ test(validate-overlays): cover non-overridable characters.md case
+♻️ refactor(init): replace hardcoded heredoc with template loader
+✅ test(validate): cover non-overridable characters.md case
 🔧 chore: rename copilot-instructions templates to bootstrap-instructions
 💥 feat(roles)!: rename lead-backend → senior-backend
 
@@ -269,6 +269,8 @@ Cortex follows **semantic versioning** with a pragmatic interpretation:
 | **Major** (1.0.0) | Breaking change to the layer cascade contract, role schema, the `cortex` command line, or `cortex.toml` |
 | **Minor** (0.x.0) | New role/capability/theme/workflow; new ADR-anchored feature |
 | **Patch** (0.x.y) | Bug fix, docs improvement, internal refactor |
+
+**What a later `cortex` promises within a major version** (ADR-008 §9): it accepts what an earlier one accepted. A check it adds to `cortex validate` reports a warning, never an error, until the next major version. `--strict` fails on warnings, so a CI that runs it installs the binary of the version `cortex.toml` pins — [the migration guide](docs/migrating-to-the-binary.md#5-ci) has the lines — and a bump of `version` is the change that brings the new checks.
 
 Release process (maintainers only). A release is a **stack of pull requests onto an integration branch**, not a series of pushes to `main`:
 
