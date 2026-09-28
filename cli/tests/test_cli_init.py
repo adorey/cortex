@@ -32,7 +32,6 @@ def quote(path):
 def remove(path):
     return f"Remove-Item -Recurse -Force {quote(path)}" if os.name == "nt" else f"rm -rf {quote(path)}"
 
-
 EXPECTED = json.loads(matrix.EXPECTED.read_text(encoding="utf-8"))
 OWN = harness.EXPECTED_VERSION if harness.BINARY else "9.9.9"
 HAS_GIT = shutil.which("git") is not None
@@ -137,36 +136,97 @@ class OptionTests(InitTestCase):
         self.assertEqual(self.read("CLAUDE.md"), "# ours\n")
         self.assertIn("kept — --force replaces it", proc.out)
 
-    def test_and_replaced_with_it(self):
+    def test_and_replaced_with_it_the_old_one_kept_beside(self):
         (self.project / "CLAUDE.md").write_text("# ours\n", encoding="utf-8")
-        self.assertEqual(self.init("--tool", "claude", "--force").returncode, 0)
+        proc = self.init("--tool", "claude", "--force")
+        self.assertEqual(proc.returncode, 0, proc.err)
         self.assertEqual(self.read("CLAUDE.md"), EXPECTED["single-claude"]["files"]["CLAUDE.md"])
+        self.assertEqual(self.read("CLAUDE.md.bak"), "# ours\n")
+        self.assertIn("CLAUDE.md.bak", proc.out)
 
-    def test_link_and_copy_go_to_cortex_toml_and_gitignore(self):
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_git_ignores_cortex_in_link_and_copy_modes(self):
+        # A link is a file to git: `/cortex/` would not match it, and the link — with the absolute
+        # path of this machine's store — would go into the commit.
         for flag in ("--link", "--copy"):
             with self.subTest(flag=flag):
                 project = self.tmp / flag.strip("-")
-                project.mkdir()
+                subprocess.run(["git", "init", "-q", str(project)], check=True)
                 proc = self.init(flag, cwd=project)
                 self.assertEqual(proc.returncode, 0, proc.err)
                 self.assertIn(f'sync = "{flag[2:]}"', (project / "cortex.toml").read_text(encoding="utf-8"))
-                self.assertIn("/cortex/", (project / ".gitignore").read_text(encoding="utf-8").splitlines())
                 self.assertTrue(os.path.lexists(project / "cortex"))
+                check = subprocess.run(["git", "-C", str(project), "check-ignore", "-q", "cortex"])
+                self.assertEqual(check.returncode, 0, "git does not ignore cortex")
+                status = subprocess.run(["git", "-C", str(project), "status", "--porcelain", "--untracked-files=all"],
+                                        capture_output=True, text=True, check=True).stdout
+                self.assertNotIn("cortex/", status)
+                self.assertNotRegex(status, r"(?m) cortex$")
                 self.assertNotIn("note:", proc.err)
 
-    def test_an_existing_gitignore_keeps_its_lines(self):
+    def test_an_existing_gitignore_keeps_its_bytes(self):
         (self.project / ".gitignore").write_text("node_modules/", encoding="utf-8")
         self.init()
         self.assertEqual(self.read(".gitignore"), "node_modules/\ncortex.local.toml\n")
         self.init()
         self.assertEqual(self.read(".gitignore"), "node_modules/\ncortex.local.toml\n")
+        # A byte order mark, CRLF line endings and a byte that is no UTF-8 stay as they were.
+        (self.project / ".gitignore").write_bytes(b"\xef\xbb\xbfcortex.local.toml\r\ncaf\xe9/\r\n")
+        proc = self.init("--copy")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertEqual((self.project / ".gitignore").read_bytes(),
+                         b"\xef\xbb\xbfcortex.local.toml\r\ncaf\xe9/\r\n/cortex\r\n")
 
-    def test_a_second_init_keeps_cortex_toml(self):
-        self.init("--theme", "acme")
+    def test_a_second_init_keeps_cortex_toml_but_for_the_options_given(self):
+        self.init("--theme", "acme", "--link")
+        (self.project / "cortex.toml").write_text(self.read("cortex.toml") + "# the team's note\n", encoding="utf-8")
+        before = self.read("cortex.toml")
+        proc = self.init()
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertEqual(self.read("cortex.toml"), before)
+        self.assertIn("kept", proc.out)
+        self.assertTrue(os.path.islink(self.project / "cortex") or os.path.isdir(self.project / "cortex"))
         proc = self.init("--theme", "h2g2")
         self.assertEqual(proc.returncode, 0, proc.err)
-        self.assertIn('theme = "acme"', self.read("cortex.toml"))
-        self.assertIn("kept", proc.out)
+        self.assertEqual(self.read("cortex.toml"), before.replace('theme = "acme"', 'theme = "h2g2"'))
+        self.assertIn('theme = "h2g2" — the rest kept', proc.out)
+        proc = self.init("--copy", "--no-personality")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        text = self.read("cortex.toml")
+        self.assertIn('theme = "none"', text)
+        self.assertIn('sync = "copy"', text)
+        self.assertIn("# the team's note", text)
+        self.assertTrue((self.project / "cortex" / ".synced").is_file())
+
+    def test_force_keeps_cortex_toml(self):
+        # --force replaces the instructions file, and only it: the team's theme, its sync mode and
+        # its version stay, and so does the copy.
+        self.init("--theme", "acme", "--copy")
+        before = self.read("cortex.toml")
+        proc = self.init("--force")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertEqual(self.read("cortex.toml"), before)
+        self.assertTrue((self.project / "cortex" / ".synced").is_file())
+        self.assertIn("PERSONALITY", self.read(".github/copilot-instructions.md"))
+
+    def test_a_version_is_never_downgraded(self):
+        (self.project / "cortex.toml").write_text('version = "99.0.0"\ntheme = "h2g2"\n', encoding="utf-8")
+        for args in ([], ["--force"]):
+            with self.subTest(args=args):
+                proc = self.init(*args)
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("newer than this cortex", proc.err)
+                self.assertEqual(self.read("cortex.toml"), 'version = "99.0.0"\ntheme = "h2g2"\n')
+                self.assertEqual(sorted(p.name for p in self.project.iterdir()), ["cortex.toml"])
+
+    def test_an_unreadable_cortex_toml_is_refused_and_kept(self):
+        (self.project / "cortex.toml").write_text('version = "1.0.0"\ntheme = "../../templates"\n', encoding="utf-8")
+        for args in ([], ["--force"]):
+            with self.subTest(args=args):
+                proc = self.init(*args)
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("fix it, or remove it to start over", proc.err)
+                self.assertEqual(sorted(p.name for p in self.project.iterdir()), ["cortex.toml"])
 
     def test_a_theme_the_spec_does_not_have(self):
         proc = self.init("--theme", "no-such-theme")
@@ -174,6 +234,22 @@ class OptionTests(InitTestCase):
         self.assertIn("theme 'no-such-theme' is not in", proc.err)
         self.assertIn("acme, h2g2", proc.err)
         self.assertEqual(list(self.project.iterdir()), [])
+
+    def test_a_theme_is_a_name(self):
+        for theme in ("../../templates", 'a"b', "h2g2\n"):
+            with self.subTest(theme=theme):
+                proc = self.init("--theme", theme)
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("no theme name", proc.err)
+                self.assertEqual(list(self.project.iterdir()), [])
+
+    def test_a_root_that_is_no_repository_is_said(self):
+        proc = self.init()
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("is in no git repository", proc.err)
+        if HAS_GIT:
+            subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+            self.assertNotIn("is in no git repository", self.init().err)
 
     def test_a_directory_given(self):
         proc = self.init("sub/app", cwd=self.project)
@@ -185,14 +261,34 @@ class OptionTests(InitTestCase):
         for args in (["--service", "api"], ["--tool", "vim"], ["--link", "--copy"]):
             with self.subTest(args=args):
                 self.assertEqual(self.init(*args).returncode, 2)
+        (self.project / "notes").write_text("mine\n", encoding="utf-8")
+        (self.project / "docs").mkdir()
         for args, message in ((["--tool", "custom"], "needs --instructions-file"),
                               (["--instructions-file", "x.md"], "goes with --tool custom"),
-                              (["--workspace", "--service", "../out"], "a folder inside the workspace")):
+                              (["--workspace", "--service", "api", "--service", "../out"], "a folder inside the workspace"),
+                              (["--workspace", "--service", "notes"], "is a file, not a folder"),
+                              (["--tool", "custom", "--instructions-file", "docs"], "a directory"),
+                              (["--tool", "custom", "--instructions-file", "cortex.toml"], "writes for itself"),
+                              (["--tool", "custom", "--instructions-file", ".gitignore"], "writes for itself")):
             with self.subTest(args=args):
                 proc = self.init(*args)
                 self.assertEqual(proc.returncode, 1)
                 self.assertIn(message, proc.err)
+                self.assertNotIn("Traceback", proc.err)
+                # Nothing is written before a refusal.
+                self.assertEqual(sorted(p.name for p in self.project.iterdir()), ["docs", "notes"])
         self.assertFalse((self.tmp / "init" / "out").exists())
+
+    @unittest.skipIf(os.name == "nt", "a backslash separates folders on Windows")
+    def test_a_backslash_is_part_of_a_service_name_outside_windows(self):
+        proc = self.init("--workspace", "--service", "a\\b")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("<!-- @alias: a\\b -->", self.read("a\\b/project-overview.md"))
+
+    def test_services_on_stdin_without_a_terminal_are_said_to_be_ignored(self):
+        proc = self.init("--workspace", stdin=subprocess.PIPE)
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("no service created — --service NAME adds one", proc.err)
 
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_submodule_is_refused_and_the_commands_printed(self):
