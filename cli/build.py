@@ -17,6 +17,7 @@ the release's, from the tag, or a pre-release — ``0.0.0-dev.N`` — for a buil
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import os
 import platform
@@ -80,7 +81,9 @@ def package(binary: Path, target: str) -> Path:
                 archive.writestr(info, path.read_bytes())
         return asset
     asset = binary.parent / f"cortex-{target}.tar.gz"
-    with tarfile.open(asset, "w:gz") as archive:
+    # The gzip header carries a time of its own: SOURCE_DATE_EPOCH sets it too, and no file name.
+    with open(asset, "wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=mtime) as gz, \
+            tarfile.open(fileobj=gz, mode="w", format=tarfile.PAX_FORMAT) as archive:
         for path, name in files:
             info = archive.gettarinfo(str(path), arcname=name)
             info.uid = info.gid = 0
