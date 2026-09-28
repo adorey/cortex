@@ -101,13 +101,30 @@ def toml_value(value) -> str:
 
 
 def _read_text(path: str) -> Optional[str]:
+    """The file as it is — its byte order mark too, which ``set_keys`` writes back."""
     if not os.path.isfile(path):
         return None
     try:
         with open(path, "rb") as fh:
-            return fh.read().decode("utf-8-sig")
+            return fh.read().decode("utf-8")
     except UnicodeDecodeError:
         raise ConfigError(f"{os.path.basename(path)}: not UTF-8 text")
+
+
+def _comment(line: str, key: str) -> str:
+    """The comment that ends ``line`` — with the blanks before it — or ``""``. A ``#`` inside a
+    string is no comment: the comment starts at the first ``#`` before which the line reads as
+    the key alone."""
+    body = line.rstrip("\r\n")
+    for index, char in enumerate(body):
+        if char != "#":
+            continue
+        try:
+            if key in tomllib.loads(body[:index]):
+                return body[len(body[:index].rstrip()):]
+        except tomllib.TOMLDecodeError:
+            continue
+    return ""
 
 
 def set_keys(text: Optional[str], values: Dict[str, object], name: str, header: str,
@@ -117,25 +134,28 @@ def set_keys(text: Optional[str], values: Dict[str, object], name: str, header: 
 
     ``tomllib`` reads TOML but does not write it: the one line that holds a key is rewritten, or
     added, and every other line — the developer's own keys, their comments, the file's line
-    endings — is kept as it was. The result is read back: a key written some way a line cannot
-    hold is refused.
+    endings and byte order mark — is kept as it was, and so is the comment that ends the line
+    rewritten. The result is read back: a key written some way a line cannot hold is refused.
     """
     comments = comments or {}
     if text is None:
         text = header
+    bom = "\ufeff" if text.startswith("\ufeff") else ""
+    text = text[len(bom):]
     newline = "\r\n" if "\r\n" in text else "\n"
     lines = text.splitlines(keepends=True)
     for key, value in values.items():
-        line = f"{key} = {toml_value(value)}" + (f"    # {comments[key]}" if key in comments else "")
+        line = f"{key} = {toml_value(value)}"
         key_line = re.compile(rf"""^[ \t]*(?:{key}|"{key}"|'{key}')[ \t]*=""")
         for index, existing in enumerate(lines):
             if key_line.match(existing):
-                lines[index] = line + existing[len(existing.rstrip("\r\n")):]
+                kept = _comment(existing, key) or (f"    # {comments[key]}" if key in comments else "")
+                lines[index] = line + kept + existing[len(existing.rstrip("\r\n")):]
                 break
         else:
             if lines and not lines[-1].endswith(("\n", "\r")):
                 lines[-1] += newline
-            lines.append(line + newline)
+            lines.append(line + (f"    # {comments[key]}" if key in comments else "") + newline)
     text = "".join(lines)
     try:
         written = tomllib.loads(text)
@@ -145,7 +165,7 @@ def set_keys(text: Optional[str], values: Dict[str, object], name: str, header: 
         if written.get(key) != value:
             raise ConfigError(f"{name}: its {key} is written in a way cortex cannot rewrite — "
                               "remove that line and run the command again")
-    return text
+    return bom + text
 
 
 def render_spec(root: str, spec: str) -> str:
@@ -160,7 +180,7 @@ def render_project(root: str, values: Dict[str, object]) -> str:
     against the grammar before anything is written."""
     text = set_keys(_read_text(os.path.join(root, PROJECT_FILE)), values, PROJECT_FILE, PROJECT_HEADER)
     try:
-        project.check_project(tomllib.loads(text))
+        project.check_project(tomllib.loads(text.lstrip("\ufeff")))
     except project.ProjectFileError as error:
         raise ConfigError(str(error))
     return text
