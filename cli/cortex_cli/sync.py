@@ -18,6 +18,7 @@ switching back to ``store`` removes the link or the copy it made, and nothing el
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -170,18 +171,49 @@ def _discard(path: Path) -> None:
         os.unlink(path)
 
 
-STALE = 600       # seconds: a staging older than that belongs to no sync still running
+LOCK_WAIT = 120   # seconds a sync waits for another sync of the same project
+
+
+@contextlib.contextmanager
+def project_lock(root: Path):
+    """One sync of a project at a time on this machine: the others wait. Nothing is written for
+    it: on POSIX the project's directory is locked, on Windows a byte of ``cortex.toml`` far past
+    its end — no reader of the file meets it."""
+    if os.name == "nt":
+        fd = os.open(root / config.PROJECT_FILE, os.O_RDONLY)
+        os.lseek(fd, 2 ** 40, os.SEEK_SET)
+    else:
+        fd = os.open(root, os.O_RDONLY)
+    try:
+        deadline = time.monotonic() + LOCK_WAIT
+        while True:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() > deadline:
+                    raise SyncError(f"another cortex sync of {display(str(root))} has run for {LOCK_WAIT} seconds — "
+                                    "wait for it, then run cortex sync again")
+                time.sleep(0.1)
+        yield
+    finally:
+        os.close(fd)                                   # which releases the lock, on every system
 
 
 def tidy(root: Path) -> None:
     """Remove what an interrupted sync left beside ``cortex/`` — a staged link or copy, an old
-    entry moved aside. A link among them names this machine's store, and `/cortex` does not
-    keep it out of a commit."""
-    cutoff = time.time() - STALE
+    entry moved aside. Run under the project's lock: no other sync is using them. A link among
+    them names this machine's store, and `/cortex` does not keep it out of a commit."""
     for entry in root.glob(f"{STAGING}*"):
         try:
-            if os.lstat(entry).st_mtime < cutoff:
-                _discard(entry)
+            _discard(entry)
         except OSError:
             pass
 
@@ -251,8 +283,11 @@ def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path
     aside = None
     if old is not None:
         aside = _aside(target.parent)
-        _unseal(target)
-        os.rename(target, aside)
+        try:
+            _unseal(target)
+            os.rename(target, aside)
+        except FileNotFoundError as error:
+            raise SyncError(RACE) from error           # taken away since sync looked at it
     if new is not None:
         try:
             os.rename(new, target)
@@ -298,6 +333,11 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
     if root is None:
         raise SyncError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory "
                         "a Cortex project")
+    with project_lock(Path(root)):
+        _sync(root, mode, source, out, err)
+
+
+def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO) -> None:
     project = config.load(root)
     out.write(f"Project: {display(root)}\n")
     mode = mode or project.sync or "store"
@@ -339,6 +379,8 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
                       f"{', '.join(missing[:3])}{', …' if len(missing) > 3 else ''}: copied again\n")
         new = None if keep else stage_copy(Path(root), spec_source, None if source else str(project.version),
                                            display(str(spec_source)) if source else None)
+    if keep and mode == "copy":
+        _seal(target)                          # a sync cut short between its rename and the seal left it open
     try:
         aside = None if keep else swap(target, new, existing)
     except BaseException:

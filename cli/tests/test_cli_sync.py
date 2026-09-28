@@ -409,8 +409,36 @@ class HousekeepingTests(SyncTestCase):
         self.assert_ok(self.sync(project))
         self.assertFalse(os.path.lexists(old_link))
         self.assertFalse(os.path.lexists(old_copy))
-        self.assertTrue(os.path.lexists(fresh))            # another sync may be using it
+        self.assertFalse(os.path.lexists(fresh))           # under the project's lock, no sync is using it
         self.assertTrue(self.stored().is_dir())
+
+    def test_syncs_of_one_project_run_one_after_the_other(self):
+        # Racing, they failed in most runs with an errno on paths of their own; under the project's
+        # lock each one waits for the one before it.
+        project = self.project()
+        self.assert_ok(self.sync(project, "--copy"))
+        env = dict(self.env, PWD=str(project))
+        procs = [subprocess.Popen(harness.command("sync", mode), cwd=project, env=env, stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                 for mode in ("--link", "--copy") * 4]
+        results = [(p.wait(timeout=300), p.stderr.read().decode()) for p in procs]
+        for proc in procs:
+            proc.stdout.close()
+            proc.stderr.close()
+        self.assertEqual([code for code, _ in results], [0] * 8, "\n".join(err for _, err in results))
+        self.assertEqual(list(project.glob(".cortex-sync-*")), [])
+        self.assertEqual(self.spec(project), "cortex")
+        self.assertTrue(os.path.lexists(project / "cortex"))
+        self.assert_ok(self.validate(project))
+
+    def test_a_kept_copy_left_open_is_sealed_again(self):
+        if os.name == "nt":
+            self.skipTest("the mode of a directory is POSIX's")
+        project = self.project(extra='sync = "copy"\n')
+        self.assert_ok(self.sync(project))
+        os.chmod(project / "cortex", 0o755)                 # a sync killed between its rename and the seal
+        self.assert_ok(self.sync(project))
+        self.assertFalse(os.stat(project / "cortex").st_mode & 0o222)
 
     def test_a_failed_write_of_cortex_local_toml_puts_cortex_back(self):
         project = self.project(extra='sync = "copy"\n')
@@ -673,7 +701,7 @@ class ValidateTests(SyncTestCase):
                                                      encoding="utf-8")
                 proc = self.validate(project)
                 self.assertEqual(proc.returncode, 2)
-                self.assertIn("pins Cortex 9.9.8, and the spec synced is 9.9.7", proc.err)
+                self.assertIn('pins Cortex 9.9.8, and the spec synced is "9.9.7"', proc.err)
 
 
 if __name__ == "__main__":
