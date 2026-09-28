@@ -576,6 +576,26 @@ class LockTests(SyncTestCase):
                 self.assertIn(f"cannot be locked here ({os.strerror(code)})", err.getvalue())
                 self.assertTrue((project / "cortex.local.toml").is_file())
 
+    def test_two_projects_sync_at_the_same_time(self):
+        # On Windows they share one lock file, a byte each.
+        sync, version = in_process()
+        one, two = self.project("one", version=version), self.project("two", version=version)
+        with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), mock.patch.object(sync, "LOCK_WAIT", 0.3):
+            with sync.project_lock(one, io.StringIO()):
+                sync.sync(str(two), None, None, io.StringIO(), io.StringIO())
+        self.assertTrue((two / "cortex.local.toml").is_file())
+
+    def test_the_lock_leaves_one_file_at_most(self):
+        # A lock file per project piled up in the temporary directory on Windows, never removed.
+        sync, version = in_process()
+        temporary = self.tmp / "temporary"
+        temporary.mkdir()
+        with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), \
+                mock.patch.object(tempfile, "tempdir", str(temporary)):
+            for name in ("one", "two", "three"):
+                sync.sync(str(self.project(name, version=version)), None, None, io.StringIO(), io.StringIO())
+        self.assertEqual([entry.name for entry in temporary.iterdir()], ["cortex-sync.lock"] if os.name == "nt" else [])
+
     def test_the_project_file_can_be_replaced_while_a_sync_holds_the_lock(self):
         # Held on cortex.toml, the Windows lock failed a git pull, or an editor saving by renaming.
         sync, version = in_process()

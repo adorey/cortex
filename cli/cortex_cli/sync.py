@@ -184,30 +184,37 @@ LEFT_LOCAL = re.compile(re.escape(config.LOCAL_FILE) + r"\.[0-9]+\.tmp")   # con
 
 def lock_path(root: Path) -> Path:
     """What the lock is taken on. On POSIX, the project's directory: nothing is written for it. On
-    Windows, a file of the user's temporary directory named after the project: a file held open
-    cannot be replaced there, and held on ``cortex.toml`` the lock failed a ``git pull``, or an
-    editor that saves by renaming, for as long as a sync ran or waited."""
-    if os.name != "nt":
-        return root
+    Windows, one file of the user's temporary directory for every project, ``cortex-sync.lock``, of
+    which each project locks a byte (``lock_offset``). Not ``cortex.toml``: a file held open cannot
+    be replaced on Windows, and the lock failed a ``git pull``, or an editor that saves by renaming,
+    for as long as a sync ran or waited. Not a file per project either: they piled up there."""
+    return root if os.name != "nt" else Path(tempfile.gettempdir()) / "cortex-sync.lock"
+
+
+def lock_offset(root: Path) -> int:
+    """The byte of ``cortex-sync.lock`` a project locks, drawn from its path. Two projects that
+    draw the same one — one chance in 2**40 — only wait for each other."""
     key = os.path.normcase(os.path.realpath(root)).encode("utf-8", "surrogatepass")
-    return Path(tempfile.gettempdir()) / f"cortex-sync-{hashlib.sha256(key).hexdigest()[:16]}.lock"
+    return int.from_bytes(hashlib.sha256(key).digest()[:5], "big")
 
 
 def _try_lock(fd: int) -> None:
     if os.name == "nt":
         import msvcrt
 
-        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)       # the byte at the file's position
     else:
         import fcntl
 
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
-def _take(fd: int, root: Path) -> None:
+def _take(fd: int, at: int, root: Path) -> None:
     deadline = time.monotonic() + LOCK_WAIT
     while True:
         try:
+            if os.name == "nt":
+                os.lseek(fd, at, os.SEEK_SET)
             _try_lock(fd)
             return
         except OSError as error:
@@ -223,10 +230,12 @@ def _take(fd: int, root: Path) -> None:
 def project_lock(root: Path, err: TextIO):
     """One sync of a project at a time on this machine: the others wait for it. Where the lock
     cannot be taken at all, the sync runs without it, and says so."""
-    fd = None
+    fd, locked = None, False
+    at = lock_offset(root) if os.name == "nt" else 0
     try:
         fd = os.open(lock_path(root), os.O_RDONLY if os.name != "nt" else os.O_RDWR | os.O_CREAT)
-        _take(fd, root)
+        _take(fd, at, root)
+        locked = True
     except OSError as error:
         err.write(f"warning: {display(str(root))} cannot be locked here ({error.strerror}) — a sync of this project "
                   "run at the same time is not kept out\n")
@@ -238,6 +247,13 @@ def project_lock(root: Path, err: TextIO):
         yield
     finally:
         if fd is not None:
+            if locked and os.name == "nt":
+                # The file serves every project: its byte is freed now, not when Windows gets to it.
+                import msvcrt
+
+                with contextlib.suppress(OSError):
+                    os.lseek(fd, at, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
             os.close(fd)                               # which releases the lock, on every system
 
 
