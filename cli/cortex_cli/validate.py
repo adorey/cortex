@@ -70,7 +70,7 @@ def roots(cwd: str) -> Tuple[str, str]:
             off = sync.changed_files(copy, marker) + sync.missing_files(copy, marker)
             if off:
                 raise RootsError(f"{sync.LINK}/ no longer holds what sync copied — {len(off)} file(s) added, changed "
-                                 f"or missing, {off[0]} first: it would be validated against another spec. "
+                                 f"or missing, {shown(off[0])} first: it would be validated against another spec. "
                                  "Run `cortex sync`, which says what to do")
         return root, base
     if os.path.isdir(os.path.join(cwd, "cortex")):

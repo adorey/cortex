@@ -34,6 +34,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, TextIO
 
+from cortex_core.validate import shown
+
 from . import config, store
 from .paths import display, working_directory
 
@@ -136,7 +138,7 @@ def existing_entry(target: Path, the_store: store.Store, project: config.Project
         pointed = link_target(target)
         if _inside(pointed, the_store.versions) or (project.spec == LINK and is_checkout(Path(pointed))):
             return "link"
-        raise SyncError(f"{LINK}/ is a link to {display(pointed)}, which cortex sync did not make. Move or remove it, "
+        raise SyncError(f"{LINK}/ is a link to {shown(display(pointed))}, which cortex sync did not make. Move or remove it, "
                         "then run cortex sync again.")
     if target.is_dir() and not (target / ".git").exists() and (target / MARKER).is_file():
         marker = read_marker(target)
@@ -145,8 +147,8 @@ def existing_entry(target: Path, the_store: store.Store, project: config.Project
                             "Move or remove it, then run cortex sync again.")
         changed = changed_files(target, marker)
         if changed:
-            shown = "\n".join(f"    {rel}" for rel in changed[:20]) + ("\n    …" if len(changed) > 20 else "")
-            raise SyncError(f"{LINK}/ is a copy cortex sync made, and it holds files sync did not write:\n{shown}\n"
+            names = "\n".join(f"    {shown(rel)}" for rel in changed[:20]) + ("\n    …" if len(changed) > 20 else "")
+            raise SyncError(f"{LINK}/ is a copy cortex sync made, and it holds files sync did not write:\n{names}\n"
                             "Overlays belong in agents/, not in the copy. Move those files out, or remove cortex/ "
                             "yourself, then run cortex sync again.")
         return "copy"
