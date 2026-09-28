@@ -274,7 +274,7 @@ Acceptance criteria:
 
 - [ADR-007](ADR-007-cortex-core.md) — `base_root`, the golden fixtures, the self-hosting case
 - [ADR-002](ADR-002-cortex-runtime.md) §3.4 — the runtime binding this ADR extends
-- [`setup.sh`](../../setup.sh), [`bin/validate-overlays.sh`](../../bin/validate-overlays.sh) — the behaviour to reach
+- [`setup.sh`](https://github.com/adorey/cortex/blob/0.10.1/setup.sh), [`bin/validate-overlays.sh`](https://github.com/adorey/cortex/blob/0.10.1/bin/validate-overlays.sh) — the behaviour to reach, as Cortex 0.10.1 ships it: phase 5 deletes both
 - [`deploy/compose.yaml`](../../deploy/compose.yaml) — the runtime's mounts
 - [`.github/workflows/repo-checks.yml`](../../.github/workflows/repo-checks.yml) — the scaffold job phase 5 moves to the binary
 - [CONTRIBUTING.md — Versioning & releases](../../CONTRIBUTING.md#-versioning--releases)
