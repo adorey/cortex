@@ -65,9 +65,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stdout.write(usage())
         return 0
     if command in ("-V", "--version"):
-        if rest not in ([], ["-v"], ["--verbose"]):
-            unknown = next(arg for arg in rest if arg not in ("-v", "--verbose"))
-            sys.stderr.write(f"cortex: unknown option '{unknown}' for --version\n")
+        unknown = [arg for arg in rest if arg not in ("-v", "--verbose")]
+        if unknown:
+            sys.stderr.write(f"cortex: unknown option '{unknown[0]}' for --version\n")
             return 2
         sys.stdout.write(f"cortex {VERSION}\n")
         if rest:
