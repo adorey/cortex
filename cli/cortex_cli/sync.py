@@ -23,6 +23,7 @@ import errno
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import stat
@@ -176,6 +177,7 @@ LOCK_WAIT = 120   # seconds a sync waits for another sync of the same project
 # What the lock answers when another process holds it. Anything else is a file system without
 # the lock: NFS emulates flock with a POSIX lock, which a read-only descriptor cannot take (EBADF).
 HELD = {errno.EACCES, errno.EDEADLOCK} if os.name == "nt" else {errno.EWOULDBLOCK, errno.EAGAIN}
+LEFT_LOCAL = re.compile(re.escape(config.LOCAL_FILE) + r"\.[0-9]+\.tmp")   # config.write_local_text's
 
 
 def lock_path(root: Path) -> Path:
@@ -239,9 +241,11 @@ def project_lock(root: Path, err: TextIO):
 
 def tidy(root: Path) -> None:
     """Remove what an interrupted sync left beside ``cortex/`` — a staged link or copy, an old
-    entry moved aside. Run under the project's lock: no other sync is using them. A link among
-    them names this machine's store, and `/cortex` does not keep it out of a commit."""
-    for entry in root.glob(f"{STAGING}*"):
+    entry moved aside, a ``cortex.local.toml`` half written, which names this machine's paths and
+    which git does not ignore. Run under the project's lock: no other sync is using them. A link
+    among them names this machine's store, and `/cortex` does not keep it out of a commit."""
+    left = [entry for entry in root.glob(f"{config.LOCAL_FILE}.*.tmp") if LEFT_LOCAL.fullmatch(entry.name)]
+    for entry in [*root.glob(f"{STAGING}*"), *left]:
         try:
             _discard(entry)
         except OSError:
