@@ -10,6 +10,7 @@ and ``$`` a trailing newline — ``"1.0.0\\n"`` would then name a directory of t
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Mapping, Tuple
 
@@ -41,6 +42,12 @@ def is_theme(value: object) -> bool:
     return isinstance(value, str) and THEME.fullmatch(value) is not None
 
 
+def shown(value: object) -> str:
+    """A value of the file, quoted and escaped as JSON writes it: a committed ``cortex.toml`` may
+    hold a newline or a terminal's control sequence, which a message must not print raw."""
+    return json.dumps(value)
+
+
 def listed(keys: Tuple[str, ...]) -> str:
     return ", ".join(keys[:-1]) + f" and {keys[-1]}" if len(keys) > 1 else keys[0]
 
@@ -48,7 +55,7 @@ def listed(keys: Tuple[str, ...]) -> str:
 def _check_keys(name: str, data: Mapping, allowed: Tuple[str, ...], required: Tuple[str, ...]) -> None:
     for key in data:
         if key not in allowed:
-            raise ProjectFileError(f'{name}: unknown key "{key}" — {name} takes {listed(allowed)}'
+            raise ProjectFileError(f'{name}: unknown key {shown(key)} — {name} takes {listed(allowed)}'
                                    + (" only" if name == LOCAL_FILE else ""))
     for key in required:
         if key not in data:
@@ -66,17 +73,17 @@ def _check_keys(name: str, data: Mapping, allowed: Tuple[str, ...], required: Tu
 
 def _check_theme(name: str, theme: str) -> None:
     if not is_theme(theme):
-        raise ProjectFileError(f'{name}: theme "{theme}" is no theme name — letters, digits, ".", "_" and "-"')
+        raise ProjectFileError(f'{name}: theme {shown(theme)} is no theme name — letters, digits, ".", "_" and "-"')
 
 
 def check_project(data: Mapping) -> None:
     """Refuse a ``cortex.toml`` that is not one — ``ProjectFileError`` names the file and the key."""
     _check_keys(PROJECT_FILE, data, PROJECT_KEYS, PROJECT_REQUIRED)
     if not is_version(data["version"]):
-        raise ProjectFileError(f'{PROJECT_FILE}: version "{data["version"]}" is no version — X.Y.Z, for instance 1.0.0')
+        raise ProjectFileError(f'{PROJECT_FILE}: version {shown(data["version"])} is no version — X.Y.Z, for instance 1.0.0')
     _check_theme(PROJECT_FILE, data["theme"])
     if "sync" in data and data["sync"] not in MODES:
-        raise ProjectFileError(f'{PROJECT_FILE}: sync "{data["sync"]}" is none of {listed(MODES)}')
+        raise ProjectFileError(f'{PROJECT_FILE}: sync {shown(data["sync"])} is none of {listed(MODES)}')
 
 
 def check_local(data: Mapping) -> None:
