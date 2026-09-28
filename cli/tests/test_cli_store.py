@@ -102,6 +102,15 @@ class EmbeddedTests(StoreTestCase):
         self.assertEqual(the_store.ensure(Version("2.0.0")), "stored")
         self.assertFalse(os.stat(the_store.path(Version("2.0.0"))).st_mode & 0o222)
 
+    def test_a_file_left_writable_is_made_read_only_again(self):
+        # On Windows the read-only attribute is a file's, never a directory's: a file tells.
+        the_store = store.Store(self.home, own_version="2.0.0", checkout=REPO, fetch=self.no_network)
+        the_store.ensure(Version("2.0.0"))
+        card = the_store.path(Version("2.0.0")) / "agents" / "roles" / "prompt-manager.md"
+        os.chmod(card, 0o644)
+        self.assertEqual(the_store.ensure(Version("2.0.0")), "stored")
+        self.assertFalse(os.stat(card).st_mode & 0o222)
+
     def test_a_staging_left_for_a_day_is_removed(self):
         the_store = store.Store(self.home, own_version="2.0.0", checkout=REPO, fetch=self.no_network)
         the_store.ensure(Version("2.0.0"))

@@ -18,6 +18,7 @@ switching back to ``store`` removes the link or the copy it made, and nothing el
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -27,6 +28,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, TextIO
 
@@ -109,6 +111,11 @@ def changed_files(copy: Path, marker: dict) -> List[str]:
     return sorted(rel for rel, path in _files(copy).items() if written.get(rel) != _digest(path))
 
 
+def missing_files(copy: Path, marker: dict) -> List[str]:
+    """What sync wrote in the copy and is no longer there."""
+    return sorted(rel for rel in marker["files"] if not (copy / rel).is_file())
+
+
 def describe(path: Path) -> str:
     if (path / ".git").is_file():
         return "a git submodule"
@@ -150,14 +157,34 @@ def existing_entry(target: Path, the_store: store.Store, project: config.Project
 # Making, swapping and removing the link and the copy
 # --------------------------------------------------------------------------- #
 
-def _discard(kind: Optional[str], path: Path) -> None:
-    if kind == "link":
+def _discard(path: Path) -> None:
+    """Remove a link or a copy sync made — staged, or moved aside — by what it is now, not by
+    what it was when sync looked: another sync may have swapped it meanwhile."""
+    if is_link(path):
         if os.name == "nt":
             os.rmdir(path)                     # a junction, or a directory link: never what it points at
         else:
             os.unlink(path)
-    elif kind == "copy":
+    elif path.is_dir():
         store.remove_tree(path)
+    elif os.path.lexists(path):
+        os.unlink(path)
+
+
+STALE = 600       # seconds: a staging older than that belongs to no sync still running
+
+
+def tidy(root: Path) -> None:
+    """Remove what an interrupted sync left beside ``cortex/`` — a staged link or copy, an old
+    entry moved aside. A link among them names this machine's store, and `/cortex` does not
+    keep it out of a commit."""
+    cutoff = time.time() - STALE
+    for entry in root.glob(f"{STAGING}*"):
+        try:
+            if os.lstat(entry).st_mtime < cutoff:
+                _discard(entry)
+        except OSError:
+            pass
 
 
 def make_link(target: Path, source: Path) -> None:
@@ -205,7 +232,8 @@ def stage_copy(root: Path, source: Path, version: Optional[str], checkout: Optio
 
 def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path]:
     """Put ``new`` at ``target`` — or nothing — and return what was there, moved aside, for the
-    caller to remove once everything else is written. On failure, the old entry goes back."""
+    caller to remove once everything else is written. On failure, the old entry goes back —
+    unless another sync put its own at ``target`` meanwhile, and ours is not needed."""
     aside = None
     if old is not None:
         aside = _aside(target.parent)
@@ -215,9 +243,22 @@ def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path
             os.rename(new, target)
         except OSError:
             if aside is not None:
-                os.rename(aside, target)
+                try:
+                    os.rename(aside, target)
+                except OSError:
+                    _discard(aside)
             raise
     return aside
+
+
+def unswap(target: Path, aside: Optional[Path]) -> None:
+    """Undo ``swap``: what it put at ``target`` goes, what it moved aside comes back."""
+    if os.path.lexists(target):
+        gone = _aside(target.parent)
+        os.rename(target, gone)
+        _discard(gone)
+    if aside is not None:
+        os.rename(aside, target)
 
 
 # --------------------------------------------------------------------------- #
@@ -234,6 +275,7 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
     mode = mode or project.sync or "store"
     the_store = store.Store()
     target = Path(root) / LINK
+    tidy(Path(root))
     existing = existing_entry(target, the_store, project)
 
     if source is not None:
@@ -262,17 +304,30 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
         marker = read_marker(target) if existing == "copy" else None
         keep = bool(marker) and source is None and marker.get("version") == str(project.version) \
             and marker.get("from") is None
+        missing = missing_files(target, marker) if keep else []
+        if missing:
+            keep = False
+            err.write(f"note: {LINK}/ lacked {len(missing)} of the files sync copied — "
+                      f"{', '.join(missing[:3])}{', …' if len(missing) > 3 else ''}: copied again\n")
         new = None if keep else stage_copy(Path(root), spec_source, None if source else str(project.version),
                                            display(str(spec_source)) if source else None)
     try:
         aside = None if keep else swap(target, new, existing)
-    except OSError:
-        if new is not None:
-            _discard(mode, new)
+    except OSError as error:
+        if new is not None and os.path.lexists(new):
+            _discard(new)
+        if error.errno in (errno.ENOTEMPTY, errno.EEXIST):
+            raise SyncError(f"{LINK}/ was put back while this sync ran — by another cortex sync, most likely. "
+                            "Run cortex sync again.")
         raise
-    config.write_local_text(root, local_text)
+    try:
+        config.write_local_text(root, local_text)
+    except BaseException:
+        if not keep:
+            unswap(target, aside)
+        raise
     if aside is not None:
-        _discard(existing, aside)
+        _discard(aside)
 
     if mode == "store":
         out.write("The spec is read where it is: nothing of it is in the project.\n")

@@ -372,6 +372,79 @@ class GitIgnoreTests(SyncTestCase):
         self.assertIn("git does not ignore cortex.local.toml", proc.err)
 
 
+class HousekeepingTests(SyncTestCase):
+    """What an interrupted or a racing sync leaves, and a copy that lost a file."""
+
+    def test_a_copy_missing_a_file_is_refused_by_validate_and_copied_again_by_sync(self):
+        project = self.project(extra='sync = "copy"\n')
+        self.assert_ok(self.sync(project))
+        roles = project / "cortex" / "agents" / "roles"
+        os.chmod(roles, 0o755)
+        (roles / "prompt-manager.md").chmod(0o644)
+        (roles / "prompt-manager.md").unlink()
+        proc = self.validate(project)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("no longer holds what sync copied", proc.err)
+        proc = self.sync(project)
+        self.assert_ok(proc)
+        self.assertIn("lacked 1 of the files sync copied — agents/roles/prompt-manager.md: copied again", proc.err)
+        self.assertTrue((roles / "prompt-manager.md").is_file())
+        self.assertEqual(self.validate(project).returncode, 0)
+
+    def test_what_an_interrupted_sync_left_is_removed(self):
+        # A link among them names this machine's store, and /cortex does not keep it out of a commit.
+        project = self.project()
+        self.assert_ok(self.sync(project))
+        old_copy, fresh = project / ".cortex-sync-abandoned", project / ".cortex-sync-2-live"
+        (old_copy / "agents").mkdir(parents=True)
+        (old_copy / "agents" / "x.md").write_text("x\n", encoding="utf-8")
+        os.chmod(old_copy / "agents" / "x.md", 0o444)
+        fresh.mkdir()
+        os.utime(old_copy, (1, 1))
+        # A link's own time is set without following it on POSIX only; a junction's cannot be.
+        old_link = project / ".cortex-sync-1-dead"
+        if os.name != "nt":
+            old_link.symlink_to(self.stored(), target_is_directory=True)
+            os.utime(old_link, (1, 1), follow_symlinks=False)
+        self.assert_ok(self.sync(project))
+        self.assertFalse(os.path.lexists(old_link))
+        self.assertFalse(os.path.lexists(old_copy))
+        self.assertTrue(os.path.lexists(fresh))            # another sync may be using it
+        self.assertTrue(self.stored().is_dir())
+
+    def test_a_failed_write_of_cortex_local_toml_puts_cortex_back(self):
+        project = self.project(extra='sync = "copy"\n')
+        self.assert_ok(self.sync(project))
+        before = snapshot(project / "cortex")
+        (project / "cortex.local.toml").unlink()
+        (project / "cortex.local.toml").mkdir()
+        proc = self.sync(project, "--link")
+        self.assertEqual(proc.returncode, 1)
+        self.assertNotIn("Traceback", proc.err)
+        self.assertEqual(snapshot(project / "cortex"), before)
+        self.assertEqual(list(project.glob(".cortex-sync-*")), [])
+
+    def test_a_sync_that_loses_a_race_says_so_and_leaves_nothing(self):
+        sys.path[:0] = [str(Path(__file__).resolve().parents[1]), str(Path(__file__).resolve().parents[2] / "core")]
+        import io
+        from unittest import mock
+
+        from cortex_cli import sync
+        from cortex_cli.version import VERSION
+
+        project = self.project(version=VERSION, extra='sync = "copy"\n')
+        real = sync.swap
+
+        def racing(target, new, old):
+            (target / "agents").mkdir(parents=True)             # another sync's copy, put in place meanwhile
+            return real(target, new, old)
+
+        with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), mock.patch.object(sync, "swap", racing):
+            with self.assertRaisesRegex(sync.SyncError, "was put back while this sync ran"):
+                sync.sync(str(project), None, None, io.StringIO(), io.StringIO())
+        self.assertEqual(list(project.glob(".cortex-sync-*")), [])
+
+
 class SafetyTests(SyncTestCase):
     """Sync deletes nothing it did not write, and changes nothing before every check passed."""
 
