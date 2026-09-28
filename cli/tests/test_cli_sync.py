@@ -516,6 +516,18 @@ class HousekeepingTests(SyncTestCase):
                 self.assertEqual(list(project.glob(".cortex-sync-*")), [])
 
 
+    def test_a_local_file_half_written_is_removed(self):
+        # A sync killed while it wrote cortex.local.toml left its temporary file, which names this
+        # machine's paths and which git does not ignore.
+        project = self.project()
+        left, mine = project / "cortex.local.toml.4242.tmp", project / "cortex.local.toml.mine.tmp"
+        left.write_text('spec = "/home/someone/.cortex/versions/9.9.9"\n', encoding="utf-8")
+        mine.write_text("mine\n", encoding="utf-8")
+        self.assert_ok(self.sync(project))
+        self.assertFalse(os.path.lexists(left))
+        self.assertTrue(mine.is_file())                    # no name sync writes
+
+
 def in_process():
     sys.path[:0] = [str(Path(__file__).resolve().parents[1]), str(Path(__file__).resolve().parents[2] / "core")]
     from cortex_cli import sync
