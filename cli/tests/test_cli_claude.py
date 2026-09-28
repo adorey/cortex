@@ -78,6 +78,17 @@ class SettingsTests(unittest.TestCase):
         claude.update(self.root, None, self.v1)
         self.assertTrue(self.settings.is_file())
 
+    def test_turned_off_it_says_when_an_entry_of_the_developers_still_allows_the_spec(self):
+        self.write({"permissions": {"additionalDirectories": [self.v1]}})
+        claude.update(self.root, self.v1, None)          # already allowed: Cortex owns nothing
+        self.write({"permissions": {"additionalDirectories": [self.v2, self.v1]}})
+        said, owned = claude.update(self.root, None, self.v2, spec=self.v1)
+        self.assertIn("an entry of your own still lets Claude Code read", said)
+        self.assertEqual(self.read(), {"permissions": {"additionalDirectories": [self.v1]}})
+        said, _ = claude.update(self.root, self.v2, None)
+        said, _ = claude.update(self.root, None, self.v2, spec=self.v2)
+        self.assertIn("no longer reads the spec without asking", said)
+
     def test_no_file_and_nothing_to_allow(self):
         self.assertEqual(claude.update(self.root, None, None), (None, None))
         self.assertFalse(self.settings.exists())
