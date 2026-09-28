@@ -14,16 +14,13 @@ import os
 import re
 import tomllib
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
+
+from cortex_core import project
+from cortex_core.project import LOCAL_FILE, MODES, PROJECT_FILE  # noqa: F401 — part of this module's API
 
 from .semver import Version
 
-PROJECT_FILE = "cortex.toml"
-LOCAL_FILE = "cortex.local.toml"
-MODES = ("store", "link", "copy")
-# A theme names a directory: a name, never a path.
-_THEME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _SPEC_LINE = re.compile(r"""^[ \t]*(?:spec|"spec"|'spec')[ \t]*=""")
 LOCAL_HEADER = ("# This developer, on this machine — ignored by git (ADR-008 §3.4).\n"
                 "# `cortex sync` writes spec. A theme set here overrides cortex.toml's.\n")
@@ -78,45 +75,18 @@ def _read(path: str) -> Dict:
         raise ConfigError(f"{os.path.basename(path)}: {error}")
 
 
-def _check_keys(name: str, data: Dict, allowed: Tuple[str, ...], required: Tuple[str, ...]) -> None:
-    for key in data:
-        if key not in allowed:
-            raise ConfigError(f'{name}: unknown key "{key}" — {name} takes {_listed(allowed)}'
-                              + (" only" if name == LOCAL_FILE else ""))
-    for key in required:
-        if key not in data:
-            raise ConfigError(f'{name}: "{key}" is required')
-    for key, value in data.items():
-        if not isinstance(value, str):
-            raise ConfigError(f'{name}: "{key}" must be a string, in quotes')
-        if not value:
-            raise ConfigError(f'{name}: "{key}" is empty')
-
-
-def _listed(keys: Tuple[str, ...]) -> str:
-    return ", ".join(keys[:-1]) + f" and {keys[-1]}" if len(keys) > 1 else keys[0]
-
-
-def _check_theme(name: str, theme: str) -> None:
-    if not _THEME.match(theme):
-        raise ConfigError(f'{name}: theme "{theme}" is no theme name — letters, digits, ".", "_" and "-"')
-
-
 def load(root: str) -> Project:
-    """Read and validate both files of the project at ``root``."""
+    """Read and validate both files of the project at ``root`` — with the core's grammar, which
+    the runtime reads them with too."""
     data = _read(os.path.join(root, PROJECT_FILE))
-    _check_keys(PROJECT_FILE, data, ("version", "theme", "sync"), ("version", "theme"))
-    if not Version.valid(data["version"]):
-        raise ConfigError(f'{PROJECT_FILE}: version "{data["version"]}" is no version — X.Y.Z, for instance 1.0.0')
-    _check_theme(PROJECT_FILE, data["theme"])
-    if "sync" in data and data["sync"] not in MODES:
-        raise ConfigError(f'{PROJECT_FILE}: sync "{data["sync"]}" is none of {_listed(MODES)}')
     local = {}
-    if os.path.isfile(os.path.join(root, LOCAL_FILE)):
-        local = _read(os.path.join(root, LOCAL_FILE))
-        _check_keys(LOCAL_FILE, local, ("theme", "spec"), ())
-        if "theme" in local:
-            _check_theme(LOCAL_FILE, local["theme"])
+    try:
+        project.check_project(data)
+        if os.path.isfile(os.path.join(root, LOCAL_FILE)):
+            local = _read(os.path.join(root, LOCAL_FILE))
+            project.check_local(local)
+    except project.ProjectFileError as error:
+        raise ConfigError(str(error))
     return Project(root=root, version=Version(data["version"]), theme=data["theme"], sync=data.get("sync"),
                    local_theme=local.get("theme"), spec=local.get("spec"))
 
