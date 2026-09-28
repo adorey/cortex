@@ -40,15 +40,72 @@ param(
 function Install-Cortex {
     param([string] $Version, [string] $Name, [bool] $NoModifyPath)
 
-    # The file a path leads to, through a symbolic link.
+    # The file a path leads to, through every link and junction on the way - a directory of PATH
+    # may be one, and the file itself too.
     function Resolve-Final([string] $Path) {
-        $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
-        if ($item -and $item.LinkType -and $item.Target) {
-            $to = @($item.Target)[0]
-            if (-not [IO.Path]::IsPathRooted($to)) { $to = Join-Path (Split-Path -Parent $Path) $to }
-            return [IO.Path]::GetFullPath($to)
+        $full = [IO.Path]::GetFullPath($Path)
+        for ($round = 0; $round -lt 40; $round++) {
+            $root = [IO.Path]::GetPathRoot($full)
+            $parts = @($full.Substring($root.Length).Split(@('\', '/'), [StringSplitOptions]::RemoveEmptyEntries))
+            $current = $root
+            $moved = $false
+            for ($i = 0; $i -lt $parts.Count; $i++) {
+                $current = Join-Path $current $parts[$i]
+                $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+                if ($item -and $item.LinkType -and $item.Target) {
+                    $to = @($item.Target)[0]
+                    if (-not [IO.Path]::IsPathRooted($to)) { $to = Join-Path (Split-Path -Parent $current) $to }
+                    $rest = if ($i -lt $parts.Count - 1) { $parts[($i + 1)..($parts.Count - 1)] -join '\' } else { "" }
+                    $full = [IO.Path]::GetFullPath($(if ($rest) { Join-Path $to $rest } else { $to }))
+                    $moved = $true
+                    break
+                }
+            }
+            if (-not $moved) { return $full }
         }
-        return [IO.Path]::GetFullPath($Path)
+        return $full
+    }
+
+    # The releases' URL: https, or plain http to this machine for a test - its host exactly, a port
+    # of digits at most. No user part: http://127.0.0.1:1@example.com names example.com.
+    function Test-ReleasesUrl([string] $Url) {
+        if ($Url -match '[@\s]') { return $false }
+        return ($Url -match '^https://.') -or ($Url -match '^http://(127\.0\.0\.1|localhost|\[::1\])(:[0-9]+)?(/|$)')
+    }
+
+    # Invoke-WebRequest follows a redirect to any scheme: each hop is asked for, and checked, here -
+    # https only.
+    function Save-Url([string] $Url, [string] $OutFile) {
+        for ($hop = 0; $hop -le 10; $hop++) {
+            $request = [Net.HttpWebRequest]::Create($Url)
+            $request.AllowAutoRedirect = $false
+            $request.UserAgent = "cortex-install"
+            try {
+                $response = $request.GetResponse()
+            } catch [Net.WebException] {
+                if (-not $_.Exception.Response) { throw }
+                $response = $_.Exception.Response
+            }
+            try {
+                $code = [int] $response.StatusCode
+                if ($code -ge 300 -and $code -lt 400) {
+                    $location = $response.Headers["Location"]
+                    if (-not $location) { throw "a redirect without a location" }
+                    $next = (New-Object System.Uri ([Uri] $Url), $location).AbsoluteUri
+                    if ($next -notmatch '^https://') { throw "$Url redirects to $next, which is not https" }
+                    $Url = $next
+                    continue
+                }
+                if ($code -ne 200) { throw "HTTP $code" }
+                $in = $response.GetResponseStream()
+                $out = [IO.File]::Create($OutFile)
+                try { $in.CopyTo($out) } finally { $out.Dispose(); $in.Dispose() }
+                return
+            } finally {
+                $response.Close()
+            }
+        }
+        throw "more than 10 redirects"
     }
 
     # The cortex found first on PATH, unless it is the one in $BinDir, through a link or not.
@@ -86,8 +143,8 @@ function Install-Cortex {
     $releases = if ($env:CORTEX_RELEASES_URL) { $env:CORTEX_RELEASES_URL } else { "https://github.com/adorey/cortex/releases" }
     # SHA256SUMS comes from where the archive does: it proves the download whole, not its origin.
     # That origin is https - or this machine, for a test - never a plain http elsewhere.
-    if ($releases -notmatch '^https://' -and $releases -notmatch '^http://(127\.0\.0\.1|localhost)([:/]|$)') {
-        throw "install.ps1: CORTEX_RELEASES_URL must be https:// - http:// only to 127.0.0.1 or localhost (got $releases)"
+    if (-not (Test-ReleasesUrl $releases)) {
+        throw "install.ps1: CORTEX_RELEASES_URL must be https:// - http:// only to 127.0.0.1, localhost or [::1] (got $releases)"
     }
     $base = if ($Version) { "$releases/download/$Version" } else { "$releases/latest/download" }
     $cortexHome = if ($env:CORTEX_HOME) { $env:CORTEX_HOME } else { Join-Path $HOME ".cortex" }
@@ -104,7 +161,7 @@ function Install-Cortex {
         $zip = Join-Path $work $asset
         foreach ($download in @(@("$base/SHA256SUMS", $sums), @("$base/$asset", $zip))) {
             try {
-                Invoke-WebRequest -Uri $download[0] -OutFile $download[1] -UseBasicParsing
+                Save-Url $download[0] $download[1]
             } catch {
                 throw "install.ps1: could not download $($download[0]): $($_.Exception.Message)"
             }
@@ -140,13 +197,24 @@ function Install-Cortex {
             throw "install.ps1: $asset holds no cortex.exe - nothing was installed"
         }
         # Run once before it is installed: a binary Windows will not start - blocked, quarantined,
-        # no program at all - is neither installed nor put on PATH.
-        $installed = $null
+        # no program at all - or that starts and fails - a DLL missing, its files not unpacked - is
+        # neither installed nor put on PATH.
+        $output = @()
+        $previous = $ErrorActionPreference
         try {
-            $installed = (& $exe --version) 2>$null
+            # A native command's stderr is an error record: under "Stop", its first line would throw.
+            $ErrorActionPreference = "Continue"
+            $output = @(& $exe --version 2>&1 | ForEach-Object { "$_" })
+            $code = $LASTEXITCODE
         } catch {
             throw "install.ps1: cortex.exe does not run here - check that your antivirus let it through: $($_.Exception.Message). Nothing was installed."
+        } finally {
+            $ErrorActionPreference = $previous
         }
+        if ($code -ne 0) {
+            throw "install.ps1: cortex.exe does not run here - it exited with code $code$(if ($output) { ': ' + ($output -join ' ') }). Check that your antivirus let it through. Nothing was installed."
+        }
+        $installed = @($output | Where-Object { $_ })[0]
 
         # --- The command's name --------------------------------------------
         New-Item -ItemType Directory -Force -Path $binDir | Out-Null
