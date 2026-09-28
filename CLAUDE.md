@@ -21,7 +21,7 @@ Read `project-overview.md` at the repo root — vision, actors and constraints, 
 Read `project-context.md` at the repo root — stack, conventions and tools for developing Cortex.
 
 ### Step 3 — Active personality
-1. The active theme is `theme` in `cortex.local.toml` at the repo root — git-ignored, a developer's own choice — or `h2g2` when that file sets none.
+1. The active theme is `theme` in `cortex.local.toml` at the repo root — git-ignored, a developer's own choice — or `h2g2` when that file has no `theme` key.
    - **`none`** → skip this step entirely (no-personality mode).
 2. Read `agents/personalities/{theme}/theme.md` and `agents/personalities/{theme}/characters.md`. No cascade here — this directory is the base, not an overlay of something else.
 3. Find the character assigned to the `prompt-manager` role in `characters.md` — **that is YOU**.

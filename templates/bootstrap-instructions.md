@@ -4,7 +4,9 @@
 
 In these instructions, `cortex/` is the directory that `spec` names in `cortex.local.toml`, at the project root: an absolute path — where the spec is kept on this machine — or `cortex`, a directory of the project. Read `cortex.local.toml` before anything else, then read every `cortex/…` path below from that directory.
 
-**No `cortex.local.toml`, or no `spec` in it** → Cortex is not synced on this machine. Tell the user to run `cortex sync` at the project root, and go no further without these instructions.
+**No `cortex.local.toml`, or no `spec` in it** → Cortex is not synced on this machine. Tell the user to run `cortex sync` at the project root — `cortex-ai sync` where the command was installed under that name — and go no further without these instructions.
+
+**`spec` ends in a version other than `cortex.toml`'s** — `…/versions/1.1.0` where `version = "1.2.0"` → a teammate moved the project to another version, and this machine has not synced it yet. Tell the user to run `cortex sync` first.
 
 ## Bootstrap (MANDATORY at the start of every new conversation)
 
@@ -19,7 +21,7 @@ Read `project-context.md` at the project root to learn the stack, conventions an
 
 <!-- PERSONALITY:BEGIN -->
 ### Step 3 — Active personality
-1. The active theme is `theme` in `cortex.local.toml` or, when that file sets none, `theme` in `cortex.toml` (e.g. `h2g2`, `my-custom-theme`, `none`).
+1. The active theme is `theme` in `cortex.local.toml` or, when that file has no `theme` key, `theme` in `cortex.toml` (e.g. `h2g2`, `my-custom-theme`, `none`).
    - **`none`** → skip this step entirely (no-personality mode).
 2. Resolve theme files via the cascade (most specific path wins; if both base and overlay exist, treat as additive). For each of `theme.md`, `characters.md`, and the relevant character cards, look in this order:
    - `agents/personalities/{theme}/{file}` (project-level — overlay of a built-in theme, OR a fully custom theme)

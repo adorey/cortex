@@ -4,7 +4,9 @@
 
 In these instructions, `cortex/` is the directory that `spec` names in `cortex.local.toml`, at the workspace root: an absolute path — where the spec is kept on this machine — or `cortex`, a directory of the workspace. Read `cortex.local.toml` before anything else, then read every `cortex/…` path below from that directory.
 
-**No `cortex.local.toml`, or no `spec` in it** → Cortex is not synced on this machine. Tell the user to run `cortex sync` at the workspace root, and go no further without these instructions.
+**No `cortex.local.toml`, or no `spec` in it** → Cortex is not synced on this machine. Tell the user to run `cortex sync` at the workspace root — `cortex-ai sync` where the command was installed under that name — and go no further without these instructions.
+
+**`spec` ends in a version other than `cortex.toml`'s** — `…/versions/1.1.0` where `version = "1.2.0"` → a teammate moved the workspace to another version, and this machine has not synced it yet. Tell the user to run `cortex sync` first.
 
 ## Bootstrap (MANDATORY at the start of every new conversation)
 
@@ -25,7 +27,7 @@ Same two tiers, same order, for conventions:
 
 <!-- PERSONALITY:BEGIN -->
 ### Step 3 — Active personality
-1. The active theme is `theme` in `cortex.local.toml` or, when that file sets none, `theme` in `cortex.toml` (e.g. `h2g2`, `my-custom-theme`, `none`).
+1. The active theme is `theme` in `cortex.local.toml` or, when that file has no `theme` key, `theme` in `cortex.toml` (e.g. `h2g2`, `my-custom-theme`, `none`).
    - **`none`** → skip this step entirely (no-personality mode).
 2. Resolve theme files via the cascade (most specific path wins; additive merge from less specific levels also applies). For each of `theme.md`, `characters.md`, and the relevant character cards, look in this order:
    - `{service}/agents/personalities/{theme}/{file}` (active service overlay or service-only custom theme)
