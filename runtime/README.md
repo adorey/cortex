@@ -53,6 +53,8 @@ the overlay validator are one implementation and cannot drift apart (ADR-002 §3
 
 A project that uses the `cortex` binary holds no spec. Its `cortex.toml` pins a version, and the runtime reads that version from the store: `{CORTEX_HOME}/versions/{version}`, where `CORTEX_HOME` defaults to `~/.cortex` ([ADR-008 §3.6](../docs/adr/ADR-008-cortex-binary.md)). It never reads `spec` in `cortex.local.toml`, which is a path on the developer's machine. A project without `cortex.toml` keeps its base at `{root}/cortex`, as before. A run on a version the store does not hold is refused, `422`, and the error names the version.
 
+`cortex.toml` is read with the grammar `cortex sync` reads it with (`cortex_core.project`), once, when the run is accepted. The run then resolves on that version, whatever the file says by the time a worker takes it; the accepted run and its result name it, `cortex_version`. If the store no longer holds the version by then, the run is recorded as failed. Without `CORTEX_THEME`, the theme is the one `cortex.toml` names.
+
 ## The project's own files
 
 An agent sees the project as the Prompt Manager does in the editor ([ADR-002 §9](../docs/adr/ADR-002-cortex-runtime.md#9-amendments)):
