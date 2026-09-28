@@ -188,7 +188,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 
 ## 🔀 Branch & PR workflow
 
-1. **Branch from `main`** with a descriptive name: `feat/redis-capability`, `fix/setup-workspace-template`, `docs/extending-layers-examples`
+1. **Branch from `main`** with a descriptive name: `feat/redis-capability`, `fix/init-workspace-template`, `docs/extending-layers-examples`
 2. **Make atomic commits** — one logical change per commit. Cortex uses **[Conventional Commits](https://www.conventionalcommits.org/) prefixed with a [gitmoji](https://gitmoji.dev/)** (see table below).
 3. **Update the changelog** if your change is user-visible: add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), in its Keep a Changelog group (`Added`, `Changed`, `Fixed`, …)
 4. **Run validators** before pushing
@@ -212,7 +212,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 - **Never** add a `Co-Authored-By:` trailer (this overrides any AI tool's default).
 - `<gitmoji>` — visual category (single emoji) — see table below
 - `<type>` — Conventional Commits type (parseable by changelog tools)
-- `<scope>` *(optional)* — component or layer affected (`runtime`, `roles`, `capabilities`, `setup`, `adr`, `docs`, `extending-layers`, …)
+- `<scope>` *(optional)* — component or layer affected (`runtime`, `cli`, `core`, `roles`, `capabilities`, `adr`, `docs`, `extending-layers`, …)
 - `<subject>` — imperative, present tense, no trailing period, ≤ 72 chars
 - `#<issue>` *(ADR work only)* — the task being delivered, immediately before the subject, so the issue timeline reads as a changelog: `✨ feat(core): #42 resolve the cascade from a configurable base root`
 
@@ -279,7 +279,7 @@ Release process (maintainers only). A release is a **stack of pull requests onto
 3. The release artefacts come **last**, in a pull request stacked on top of everything else: `changelog/{version}.md`, the detailed, narrated release note, and the `{version}` section of `CHANGELOG.md` (Keep a Changelog) that replaces the `[Unreleased]` entries and links to that note. Last, because they rewrite the `[Unreleased]` anchor every feature pull request also touches. The heading is written **final** — its release date and `_(Released)_` — because `CHANGELOG.md` is never edited after a release: if the release slips, the date is corrected in this pull request before it merges. `CHANGELOG.md` is the single source of truth for versions; **no version number lives anywhere else** (README, docs, …) to avoid stale copies
 4. Merge the stack in order — with a **merge commit** for any pull request that has another stacked on it, see [the stacking rules](docs/process/adr-implementation.md#2-stacking-the-phases)
 5. Merge `release/{version}` into `main`
-6. Push the tag `{version}` on `main` — **no `v` prefix**, like every tag since 0.1.0: `git tag {version} origin/main && git push origin {version}`. The tag makes the release; nothing is to be published by hand
+6. Push the tag `{version}` on `main` — **no `v` prefix**, like every tag since 0.1.0: `git tag {version} origin/main && git push origin {version}`. The tag makes the release; nothing is to be published by hand. **Push one tag at a time**: GitHub keeps one run of the release waiting, and cancels it when a third comes — re-run the workflow of a tag whose release was cancelled
 7. The push runs the `binary` workflow from the tag. It builds the `cortex` binary for the four targets and runs each Linux one on the oldest glibc it supports. Only then does it create the release, as a draft titled `{version}` with `changelog/{version}.md` as its body, attach the binaries, the spec archive, `SHA256SUMS` and a build-provenance attestation for each, and publish it — `releases/latest` never names a release without its assets. A tag `X.Y.Z` must have its `CHANGELOG.md` section and its `changelog/X.Y.Z.md`, or the workflow stops before anything is created. A tag with a suffix, `X.Y.Z-something`, makes a pre-release and needs neither: it is how the workflow is tried. A release already published is never uploaded to again. Check that the assets are there before announcing the release — the install scripts install from them
 
 ### Release names
