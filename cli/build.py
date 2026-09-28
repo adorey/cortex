@@ -28,7 +28,6 @@ import gzip
 import hashlib
 import os
 import platform
-import re
 import subprocess
 import sys
 import tarfile
@@ -40,7 +39,8 @@ CLI = Path(__file__).resolve().parent
 REPO = CLI.parent
 BUILD = CLI / "build"
 STAMP = CLI / "cortex_cli" / "_stamp.py"
-VERSION = re.compile(r"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$")
+sys.path.insert(0, str(REPO / "core"))
+from cortex_core.project import is_version  # noqa: E402 — the grammar the command and the runtime read
 # (operating system, machine) as Python names them -> the target's name in the release (§3.1)
 SPEC_TREES = ("agents", "templates", "docs")
 SPEC_ARCHIVE = "cortex-spec.tar.gz"
@@ -141,7 +141,7 @@ def main() -> int:
     if args.checksums:
         print(checksums(args.checksums).read_text(encoding="utf-8"), end="")
         return 0
-    if not VERSION.match(args.version):
+    if not is_version(args.version):
         parser.error(f"not a version: {args.version!r}")
     target = machine_target()
     binary = build(args.version)

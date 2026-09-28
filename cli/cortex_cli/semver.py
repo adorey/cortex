@@ -1,23 +1,23 @@
 """Versions, as Semantic Versioning orders them — releases and pre-releases (ADR-008 §3.3).
 
 A version is ``X.Y.Z``, or ``X.Y.Z-pre.release`` for a build of no release. Build metadata
-(``+…``) is not accepted: a version names a directory of the store.
+(``+…``) is not accepted: a version names a directory of the store. The grammar is the core's
+(``cortex_core.project``), which the runtime reads with; the ordering is the command's.
 """
 
 from __future__ import annotations
 
-import re
 from functools import total_ordering
 from typing import Tuple
 
-_IDENTIFIER = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
-_VERSION = re.compile(rf"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-({_IDENTIFIER}(?:\.{_IDENTIFIER})*))?$")
+from cortex_core.project import VERSION, is_version
+
 
 
 @total_ordering
 class Version:
     def __init__(self, text: str):
-        match = _VERSION.match(text)
+        match = VERSION.fullmatch(text) if isinstance(text, str) else None
         if not match:
             raise ValueError(f"not a version: {text!r}")
         self.text = text
@@ -26,7 +26,7 @@ class Version:
 
     @staticmethod
     def valid(text: str) -> bool:
-        return bool(_VERSION.match(text))
+        return is_version(text)
 
     def _key(self) -> Tuple:
         # A pre-release comes before its release; its identifiers compare numerically when they
