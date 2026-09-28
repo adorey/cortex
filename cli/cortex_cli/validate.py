@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from cortex_core import validate
+from cortex_core.project import shown
 
 from . import config, store, sync
 from .paths import display, working_directory
@@ -58,10 +59,10 @@ def roots(cwd: str) -> Tuple[str, str]:
         if base is None:
             raise RootsError(f"{config.LOCAL_FILE} names no spec yet — run `cortex sync`")
         if not os.path.isdir(base):
-            raise RootsError(f"the spec {config.LOCAL_FILE} names, {display(base)}, is not there — run `cortex sync`")
+            raise RootsError(f"the spec {config.LOCAL_FILE} names, {shown(display(base))}, is not there — run `cortex sync`")
         synced = _synced_version(project, base)
         if synced and synced != str(project.version):
-            raise RootsError(f"{config.PROJECT_FILE} pins Cortex {project.version}, and the spec synced is {synced} "
+            raise RootsError(f"{config.PROJECT_FILE} pins Cortex {project.version}, and the spec synced is {shown(synced)} "
                              "— run `cortex sync`")
         copy = Path(project.root) / sync.LINK
         marker = sync.read_marker(copy) if project.spec == sync.LINK and not sync.is_link(copy) else None
