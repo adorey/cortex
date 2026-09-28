@@ -108,6 +108,8 @@ The active-theme marker **leaves the spec**: it lived inside `cortex/agents/pers
 2. makes sure the pinned version is in the store (§3.3);
 3. writes `spec` in `cortex.local.toml`, creating the file if needed and keeping its `theme`.
 
+One sync of a project runs at a time on a machine: another waits for it, up to two minutes. Where the file system has no such lock, sync runs without it and says so (§9, phase 2).
+
 **`cortex/` becomes a name, not a directory.** The spec's own text says `cortex/agents/…`, `cortex/templates/…`, `cortex/docs/…`, and every overlay's `Base:` header says `cortex/agents/…` — already a logical identifier since ADR-007 §3.4. The bootstrap templates give the rule once: *`cortex/` is the directory `spec` names*. Nothing else in the spec or in the overlays is edited.
 
 Three modes, chosen by `--store`, `--link` or `--copy`, or by `cortex.toml`'s `sync`, `store` by default:
@@ -360,4 +362,12 @@ Acceptance criteria:
 
 - **One sync of a project at a time** (§3.5): the others wait for it, up to two minutes. Racing, most of them failed on a path of their own, and a residue could outlive them. The lock writes nothing: on POSIX it is the project's directory, on Windows a byte of `cortex.toml` far past its end. Under it, what an interrupted sync left beside `cortex/` is removed at once, whatever its age, and a copy kept as it was is sealed again.
 - **A value of `spec` a message quotes is escaped**, as `cortex.toml`'s are.
+
+### Phase 2 — found in the fourth review
+
+- **A file system without the lock stops no sync** (§3.5). Only a lock another process holds is waited for. NFS emulates `flock` with a POSIX lock, which a read-only descriptor cannot take: each sync waited two minutes there, then blamed a sync that did not exist. Any other answer of the lock is now a warning, and the sync runs without it.
+- **The Windows lock is a file of the user's temporary directory**, named after the project, and no longer a byte of `cortex.toml`: a file held open cannot be replaced on Windows, and a `git pull`, or an editor that saves by renaming, failed on `cortex.toml` for as long as a sync ran or waited. On POSIX the lock is still the project's directory, and writes nothing.
+- **A `cortex.local.toml` half written is removed** with the rest of what an interrupted sync left: it names this machine's paths, and git does not ignore it.
+- **Names read from the project are printed escaped** — the target of a link at `cortex/`, a file listed as added, changed or missing — as the files' values are.
+- **A copy left writable is not an error of `cortex validate`.** A sync killed between putting a copy in place and sealing it leaves its root writable: validate reads it the same, and the next sync seals it again.
 
