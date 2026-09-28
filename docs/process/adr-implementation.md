@@ -241,11 +241,19 @@ stack, including the last one into `main`.
 - **ADR gate.** An ADR may declare a subset of its phases as mandatory before a release. Nothing
   that depends on the gate starts until those phases have merged into the release branch. Their
   tasks carry `gate:blocking`.
+- **Release gate.** A phase's pull request runs the tests from source. The `binary` workflow —
+  the four targets built, the suite replayed through each binary, the glibc floor — runs where
+  code integrates: on a push to a `release/**` branch, on every pull request into `main`, on
+  `main` and on a tag. So the stack merges **into its release branch**, never around it into
+  `main`; the binaries go green there, and only then does the final pull request open (§9). It
+  builds them once more, on what `main` will be. A phase that needs the build before that runs
+  the workflow by hand on its branch (*Run workflow*).
 
 ## 9. Closing an ADR
 
-1. Final pull request: `release/adr-NNN-slug` → `main`, describing the whole decision and
-   carrying **every** `Closes #NN` line, one per issue (§6).
+1. Final pull request: `release/adr-NNN-slug` → `main`, opened once the `binary` workflow is
+   green on the release branch (§8), describing the whole decision and carrying **every**
+   `Closes #NN` line, one per issue (§6). It merges when its own run is green.
 2. The ADR status becomes `Implemented`, with an amendment entry recording what changed during
    implementation. An ADR is appended to, never rewritten.
 3. `release/X.Y.Z` — `changelog/X.Y.Z.md` and the `CHANGELOG.md` section — stacked last, so the
