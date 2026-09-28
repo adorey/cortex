@@ -183,7 +183,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs: [build, floor]
     runs-on: ubuntu-latest
-    # One release at a time: two tags pushed together would race for "latest".
+    # One release at a time: two tags pushed together would race for "latest". GitHub keeps one
+    # run waiting per group, and cancels it when a third comes: push one tag at a time, and re-run
+    # the workflow of a tag whose publish was cancelled (CONTRIBUTING).
     concurrency:
       group: release
       cancel-in-progress: false
@@ -249,8 +251,10 @@ jobs:
           gh release upload "$tag" "$RUNNER_TEMP/release-assets"/* --clobber
           # "latest" is the highest version released, not the last one: a patch of an older line,
           # 1.0.3 after 1.1.0, is published without taking it.
-          highest="$({ gh release list --exclude-drafts --exclude-pre-releases --limit 1000 --json tagName --jq '.[].tagName'; echo "$tag"; } |
-                     grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
+          # Unlisted, every release would look older than this one: stop rather than guess.
+          released="$(gh release list --exclude-drafts --exclude-pre-releases --limit 1000 --json tagName --jq '.[].tagName')" ||
+            { echo "::error::could not list the releases: $tag is left a draft"; exit 1; }
+          highest="$({ printf '%s\n' "$released"; echo "$tag"; } | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
           if [ "$prerelease" = true ]; then
             gh release edit "$tag" --draft=false --prerelease --latest=false
           elif [ "$highest" = "$tag" ]; then
