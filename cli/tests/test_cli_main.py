@@ -33,6 +33,12 @@ class VersionTests(unittest.TestCase):
     def test_short_option(self):
         self.assertEqual(harness.run("-V").stdout, harness.run("--version").stdout)
 
+    def test_an_unknown_option_of_version_is_named(self):
+        proc = harness.run("--version", "--bogus")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn(b"unknown option '--bogus'", proc.stderr)
+        self.assertEqual(proc.stdout, b"")
+
     def test_a_source_checkout_is_no_release(self):
         self.assertTrue(VERSION_PATTERN.match(VERSION), VERSION)
 

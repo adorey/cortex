@@ -46,6 +46,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stdout.write(usage())
         return 0
     if command in ("-V", "--version"):
+        if rest:
+            sys.stderr.write(f"cortex: unknown option '{rest[0]}' for --version\n")
+            return 2
         sys.stdout.write(f"cortex {VERSION}\n")
         return 0
     if command not in COMMANDS:
