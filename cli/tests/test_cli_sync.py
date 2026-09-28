@@ -686,6 +686,15 @@ class ValidateTests(SyncTestCase):
         self.assertIn(f"Cortex dir:    {display(self.stored())}", proc.out)
         self.assertIn(f"Project root:  {display(project)}", proc.out)
 
+
+    def test_a_spec_that_is_not_there_is_quoted_escaped(self):
+        # cortex.local.toml is this machine's, but a message prints no control sequence raw.
+        project = self.project()
+        (project / "cortex.local.toml").write_text('spec = "\\u001b]0;pwned\\u0007/nowhere"\n', encoding="utf-8")
+        proc = self.validate(project)
+        self.assertEqual(proc.returncode, 2)
+        self.assertNotIn("\x1b", proc.err)
+        self.assertIn("\\u001b", proc.err)
     def test_validate_before_sync(self):
         proc = self.validate(self.project())
         self.assertEqual(proc.returncode, 2)
