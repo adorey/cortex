@@ -30,7 +30,7 @@ class FileTests(unittest.TestCase):
         project.check_project({"version": "1.0.0", "theme": "h2g2", "sync": "link"})
 
     def test_what_a_project_file_refuses(self):
-        for data, fragment in (({"version": "1.0.0\n", "theme": "h2g2"}, 'version "1.0.0\n" is no version'),
+        for data, fragment in (({"version": "1.0.0\n", "theme": "h2g2"}, 'version "1.0.0\\n" is no version'),
                                ({"version": "1.0.0", "theme": "h2g2\n"}, "is no theme name"),
                                ({"version": "1.0.0", "theme": "../x"}, "is no theme name"),
                                ({"version": "1.0.0"}, '"theme" is required'),
@@ -40,6 +40,16 @@ class FileTests(unittest.TestCase):
                 with self.assertRaises(project.ProjectFileError) as caught:
                     project.check_project(data)
                 self.assertIn(fragment, str(caught.exception))
+
+    def test_a_value_is_never_printed_raw(self):
+        # A committed cortex.toml may hold a terminal's control sequence: the message escapes it.
+        for data in ({"version": "1.0.0", "theme": "\x1b[2Jred"}, {"version": "\x1b]0;x\x07", "theme": "h2g2"},
+                     {"version": "1.0.0", "theme": "h2g2", "\x1b[31mkey": "x"}):
+            with self.subTest(data=data):
+                with self.assertRaises(project.ProjectFileError) as caught:
+                    project.check_project(data)
+                self.assertNotIn("\x1b", str(caught.exception))
+                self.assertIn("\\u001b", str(caught.exception))
 
     def test_a_local_file(self):
         project.check_local({"theme": "none", "spec": "/x"})
