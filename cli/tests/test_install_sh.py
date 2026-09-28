@@ -155,8 +155,78 @@ class InstallShTests(unittest.TestCase):
                 subprocess.run(["sh", "-s"], input=cut, env=env, capture_output=True)
                 self.assertFalse(self.cortex_home.exists())
 
+    def test_installed_as_cortex_it_keeps_its_name_under_another_cortex(self):
+        # Installed with --name cortex while another cortex comes first: the next run, without
+        # --name, upgrades that cortex — it does not add a cortex-ai beside a stale one.
+        other = self.fake_cortex()
+        self.install("9.9.8", "--name", "cortex", first_on_path=[other])
+        proc = self.install(first_on_path=[other])
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertFalse(self.installed("cortex-ai").exists())
+        self.assertEqual(subprocess.run([str(self.installed()), "--version"], capture_output=True,
+                                        text=True).stdout, "cortex 9.9.9\n")
+        self.assertIn(f"another cortex command comes first on PATH, {other / 'cortex'}", proc.stderr)
+
+    def test_installed_as_cortex_ai_it_stays_cortex_ai(self):
+        other = self.fake_cortex()
+        self.install("9.9.8", first_on_path=[other])
+        proc = self.install()                    # the other cortex gone from PATH meanwhile
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertFalse(self.installed("cortex").exists())
+        self.assertIn("Installed cortex 9.9.9 as", proc.stdout)
+
+    def test_a_link_to_it_first_on_path_is_no_other_cortex(self):
+        self.install()
+        links = self.tmp / "local-bin"
+        links.mkdir()
+        (links / "cortex").symlink_to(self.installed())
+        proc = self.install(first_on_path=[links])
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("Another cortex", proc.stdout)
+        self.assertNotIn("another cortex", proc.stderr)
+        self.assertFalse(self.installed("cortex-ai").exists())
+
+    def test_forced_as_cortex_under_another_cortex_it_says_so(self):
+        other = self.fake_cortex()
+        proc = self.install("--name", "cortex", first_on_path=[other])
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("typing cortex runs it, not this one", proc.stderr)
+
+    def test_plain_http_elsewhere_is_refused(self):
+        for url in ("http://example.com/releases", "file:///tmp/releases", "ftp://example.com"):
+            with self.subTest(url=url):
+                env = {"HOME": str(self.home), "CORTEX_HOME": str(self.cortex_home), "CORTEX_RELEASES_URL": url,
+                       "PATH": os.pathsep.join(SYSTEM_PATH)}
+                proc = subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True,
+                                      stdin=subprocess.DEVNULL)
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn("CORTEX_RELEASES_URL must be https://", proc.stderr)
+                self.assertFalse(self.cortex_home.exists())
+
+    def test_a_binary_that_cannot_run_says_why(self):
+        self.release.replace_binary(self.target, b"#!/bin/sh\necho 'cannot map libpython' >&2\nexit 127\n")
+        proc = self.install()
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("cannot map libpython", proc.stderr)
+        self.assertIn("a TMPDIR it may execute from", proc.stderr)
+        self.assertFalse(self.installed().exists())
+
+    def test_cut_anywhere_in_its_last_line_it_runs_nothing(self):
+        # A cut just before "$@" would otherwise run main with no argument — the latest release
+        # instead of the version asked for.
+        script = SCRIPT.read_bytes()
+        last = script.rstrip(b"\n").rsplit(b"\n", 1)[1]
+        env = {"HOME": str(self.home), "CORTEX_HOME": str(self.cortex_home),
+               "CORTEX_RELEASES_URL": self.release.url, "PATH": os.pathsep.join(SYSTEM_PATH)}
+        head = script[:len(script.rstrip(b"\n")) - len(last)]
+        for cut in range(len(last)):
+            with self.subTest(cut=last[:cut]):
+                subprocess.run(["sh", "-s", "--", "9.9.8"], input=head + last[:cut], env=env, capture_output=True)
+                self.assertFalse(self.cortex_home.exists())
+
     def test_bad_arguments(self):
         for args, message in ((["--frobnicate"], "unknown option"), (["latest"], "not a version"),
+                              (["9.9.8\nfoo"], "not a version"),
                               (["--name", "cx"], "--name is cortex or cortex-ai"), (["--name"], "needs a value")):
             with self.subTest(args=args):
                 proc = self.install(*args)

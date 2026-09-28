@@ -19,7 +19,8 @@
 #   CORTEX_HOME           where Cortex lives on this machine (default: ~/.cortex)
 #   CORTEX_RELEASES_URL   where the releases are downloaded from (default: the GitHub
 #                         releases of adorey/cortex) — a mirror serving the same layout,
-#                         latest/download/ASSET and download/VERSION/ASSET
+#                         latest/download/ASSET and download/VERSION/ASSET, over https;
+#                         http only to this machine (127.0.0.1, localhost), for tests
 #
 # POSIX sh, not Bash: dash runs it on Debian and Ubuntu.
 # ============================================================================
@@ -74,12 +75,22 @@ main() {
         esac
     done
 
+    # grep reads lines: a version holding a newline would pass on its first line alone.
+    case "$VERSION" in
+        *[!0-9A-Za-z.-]*) fail "not a version: $VERSION (expected X.Y.Z)" ;;
+    esac
     if [ -n "$VERSION" ] && ! printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
         fail "not a version: $VERSION (expected X.Y.Z)"
     fi
     case "$NAME" in
         ""|cortex|cortex-ai) ;;
         *) fail "--name is cortex or cortex-ai (got $NAME)" ;;
+    esac
+    # SHA256SUMS comes from where the archive does: it proves the download whole, not its origin.
+    # That origin is https — or this machine, for a test — never a plain http elsewhere.
+    case "$RELEASES_URL" in
+        https://*|http://127.0.0.1|http://127.0.0.1[:/]*|http://localhost|http://localhost[:/]*) ;;
+        *) fail "CORTEX_RELEASES_URL must be https:// — http:// only to 127.0.0.1 or localhost (got $RELEASES_URL)" ;;
     esac
 
     # --- This machine ------------------------------------------------------------
@@ -109,7 +120,7 @@ main() {
 
     # --- Tools -----------------------------------------------------------------
     if command -v curl >/dev/null 2>&1; then
-        fetch() { curl --fail --silent --show-error --location --retry 2 --output "$2" "$1"; }
+        fetch() { curl --fail --silent --show-error --location --proto '=https,http' --proto-redir '=https' --retry 2 --output "$2" "$1"; }
     elif command -v wget >/dev/null 2>&1; then
         fetch() { wget --quiet --tries=3 --output-document="$2" "$1"; }
     else
@@ -133,8 +144,7 @@ main() {
 
     bin_dir="$CORTEX_HOME/bin"
     mkdir -p "$CORTEX_HOME"
-    # Next to the binary's final place: one file system, so the last step is a rename; and not
-    # /tmp, which some systems mount noexec — the binary is run once before it is installed.
+    # Next to the binary's final place: one file system, so that the last step is a rename.
     work="$(mktemp -d "$CORTEX_HOME/.install.XXXXXX")"
     trap 'rm -rf "$work"' EXIT
     trap 'exit 130' INT TERM
@@ -155,27 +165,48 @@ main() {
     tar -xzf "$work/$asset" -C "$work/unpacked"
     [ -f "$work/unpacked/cortex" ] || fail "$asset holds no cortex binary — nothing was installed"
     chmod 755 "$work/unpacked/cortex"
-    installed_version="$("$work/unpacked/cortex" --version)" \
-        || fail "the binary does not run on this machine — Linux needs glibc 2.28 or later. Nothing was installed."
+    # Run once before it is installed, and say why when it cannot: the binary unpacks itself in
+    # $TMPDIR at every start, so a noexec /tmp stops it as surely as an older glibc does.
+    if ! installed_version="$("$work/unpacked/cortex" --version 2>"$work/run.err")"; then
+        say "The binary does not run on this machine:" >&2
+        sed 's/^/    /' "$work/run.err" >&2
+        fail "it needs a 64-bit Linux with glibc 2.28 or later, or macOS on Apple silicon, and a TMPDIR it may execute from. Nothing was installed."
+    fi
 
     # --- The command's name ----------------------------------------------------
     mkdir -p "$bin_dir"
-    # Directories are compared resolved: PATH may name one another way than CORTEX_HOME does.
     physical_dir() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"; }
     physical_bin_dir="$(physical_dir "$bin_dir")"
+    # The cortex found first on PATH, unless it is this one — through a link or not: files are
+    # compared by identity (-ef, which dash, busybox and bash 3.2 all have), not by directory.
+    other_cortex() {
+        found="$(command -v cortex 2>/dev/null || true)"
+        # shellcheck disable=SC3013
+        if [ -n "$found" ] && ! [ "$found" -ef "$bin_dir/cortex" ]; then
+            printf '%s\n' "$found"
+        fi
+    }
     if [ -z "$NAME" ]; then
-        NAME="cortex"
-        existing="$(command -v cortex 2>/dev/null || true)"
-        if [ -n "$existing" ] && [ "$(physical_dir "$(dirname "$existing")")" != "$physical_bin_dir" ]; then
-            say "Another cortex command comes first on PATH: $existing"
+        # Installed before, it keeps its name: running the script again is the upgrade.
+        if [ -e "$bin_dir/cortex" ]; then
+            NAME="cortex"
+        elif [ -e "$bin_dir/cortex-ai" ]; then
+            NAME="cortex-ai"
+        elif [ -n "$(other_cortex)" ]; then
+            say "Another cortex command comes first on PATH: $(other_cortex)"
             say "Installing as cortex-ai instead — run the script with --name cortex to install as cortex anyway."
             NAME="cortex-ai"
+        else
+            NAME="cortex"
         fi
     fi
 
     # --- Install ---------------------------------------------------------------
     mv -f "$work/unpacked/cortex" "$bin_dir/$NAME"
     say "Installed $installed_version as $bin_dir/$NAME"
+    if [ "$NAME" = cortex ] && [ -n "$(other_cortex)" ]; then
+        say "note: another cortex command comes first on PATH, $(other_cortex): typing cortex runs it, not this one." >&2
+    fi
 
     on_path=false
     old_ifs="$IFS"
@@ -199,4 +230,4 @@ main() {
     esac
 }
 
-main "$@"
+{ main "$@"; }

@@ -9,6 +9,7 @@ file that is no program at all — what is checked is how the scripts download, 
 import functools
 import importlib.util
 import io
+import os
 import shutil
 import tarfile
 import tempfile
@@ -25,10 +26,28 @@ build = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(build)
 
 
+def _windows_program():
+    """A program Windows starts, when this machine has one to copy: ``hostname.exe``."""
+    for path in (os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32", "hostname.exe"),
+                 "/mnt/c/Windows/System32/HOSTNAME.EXE"):
+        if os.path.isfile(path):
+            with open(path, "rb") as fh:
+                return fh.read()
+    return None
+
+
 def stand_in(version, windows):
+    """The binary of a fake release. On Windows, a real program — the install script runs it once
+    before installing it — with the version appended: Windows ignores what follows the image."""
     if windows:
-        return f"not a program: cortex {version} for Windows\n".encode()
+        program = _windows_program()
+        if program is None:
+            return f"not a program: cortex {version} for Windows\n".encode()
+        return program + f"cortex {version}\n".encode()
     return f'#!/bin/sh\necho "cortex {version}"\n'.encode()
+
+
+NOT_A_PROGRAM = b"not a program at all\n"
 
 
 def _asset(directory, target, version):
@@ -77,6 +96,24 @@ class FakeRelease:
     def asset(self, target, version=None):
         directory = self.root / ("latest/download" if version is None else f"download/{version}")
         return next(directory.glob(f"cortex-{target}.*"))
+
+    def replace_binary(self, target, content, version=None):
+        """Republish the asset of ``target`` — of the latest release, or of ``version`` — with
+        ``content`` as its binary, its checksum rewritten."""
+        directory = self.root / ("latest/download" if version is None else f"download/{version}")
+        path = directory / f"cortex-{target}.tar.gz"
+        with tarfile.open(path, "w:gz") as archive:
+            info = tarfile.TarInfo("cortex")
+            info.size, info.mode = len(content), 0o755
+            archive.addfile(info, io.BytesIO(content))
+        build.checksums(directory)
+
+    def replace_windows_binary(self, content):
+        """Republish the latest release's Windows asset with ``content`` as its cortex.exe."""
+        directory = self.root / "latest/download"
+        with zipfile.ZipFile(directory / "cortex-windows-x86_64.zip", "w") as archive:
+            archive.writestr("cortex.exe", content)
+        build.checksums(directory)
 
     def alter_one_byte(self, target):
         """Change one byte of the latest release's asset, after its checksum was written."""
