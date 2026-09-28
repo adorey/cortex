@@ -2,7 +2,8 @@
 
 The script runs against a release served from this machine (``release_fixture``), under Windows
 PowerShell 5.1 and PowerShell 7 when both are there. Its stand-in binary is a copy of
-``hostname.exe``: a program Windows starts, which the script runs once before installing it. What
+``doskey.exe``: a program Windows starts, and whose ``--version`` exits 0, which the script runs
+once before installing it. What
 is checked is what the script downloads, verifies, and installs under which name; the binary
 workflow installs the real one.
 
@@ -19,7 +20,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # the fixture, not a package named tests
-from release_fixture import FakeRelease, stand_in  # noqa: E402
+from release_fixture import FakeRelease, failing_windows_program, stand_in  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parents[2] / "install.ps1"
 SHELLS = [shell for shell in ("powershell", "pwsh") if os.name == "nt" and shutil.which(shell)]
@@ -112,6 +113,46 @@ class InstallPs1Tests(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("does not run here", proc.stderr)
         self.assertFalse(self.installed().exists())
+
+    def test_a_program_that_starts_and_fails_is_not_installed(self):
+        # A DLL missing, the files of a onefile binary not unpacked: Windows starts it, it exits
+        # with an error, and nothing may be installed.
+        self.release.replace_windows_binary(failing_windows_program())
+        proc = self.install()
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("does not run here - it exited with code 1", " ".join(proc.stderr.split()))
+        self.assertFalse(self.installed().exists())
+
+    def test_a_redirect_off_https_is_refused(self):
+        self.release.redirect("/latest/download/SHA256SUMS", f"{self.release.url}/download/9.9.9/SHA256SUMS")
+        proc = self.install()
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("which is not https", " ".join(proc.stderr.split()))     # PowerShell wraps its errors
+        self.assertFalse(self.installed().exists())
+
+    def test_a_user_part_or_a_port_that_is_no_number_is_refused(self):
+        for url in ("http://127.0.0.1:1@example.invalid", "https://user@github.com/adorey/cortex/releases",
+                    "http://localhost:x/releases", "http://127.0.0.1.example.com/releases"):
+            with self.subTest(url=url):
+                self.release.url, saved = url, self.release.url
+                try:
+                    proc = self.install()
+                finally:
+                    self.release.url = saved
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn("CORTEX_RELEASES_URL must be https://", proc.stderr)
+                self.assertFalse(self.cortex_home.exists())
+
+    def test_a_junction_on_path_to_its_directory_is_no_other_cortex(self):
+        self.install("-Version", "9.9.8")
+        junction = self.tmp / "tools"
+        made = self.powershell(f"New-Item -ItemType Junction -Path '{junction}' -Target '{self.cortex_home / 'bin'}'")
+        self.assertEqual(made.returncode, 0, made.stderr)
+        proc = self.install(first_on_path=[junction])
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("another cortex", proc.stdout.lower())
+        self.assertEqual(self.installed().read_bytes(), stand_in("9.9.9", windows=True))
+        self.assertFalse(self.installed("cortex-ai").exists())
 
     def test_installed_as_cortex_it_keeps_its_name_under_another_cortex(self):
         other = self.fake_cortex()
