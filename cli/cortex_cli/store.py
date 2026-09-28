@@ -7,7 +7,14 @@ checked against the release's ``SHA256SUMS``. Once written it is read-only, so t
 the spec, through any project, fails instead of changing every project on that version.
 
 A version is written beside its final place and renamed into it: an interrupted write never
-leaves a half-written version, and two syncs writing the same one at once both end with it.
+leaves a half-written version, and two syncs writing the same one at once both end with it. A
+version is there only when its three trees are, and read-only: one left writable by an interrupted
+sync is made read-only again, and a staging left behind for a day is removed.
+
+A download is checked against ``SHA256SUMS``, which comes from where the archive does: that
+proves it whole, not who published it. A built binary also carries the checksum of every spec
+archive released before it, taken when it was built: a spec archive of those versions replaced
+since — a release overwritten — is refused, whatever its ``SHA256SUMS`` says.
 """
 
 from __future__ import annotations
@@ -19,8 +26,9 @@ import stat
 import sys
 import tarfile
 import tempfile
+import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 from . import net
 from .semver import FIRST_SPEC_ARCHIVE, Version
@@ -45,8 +53,24 @@ def cortex_home() -> Path:
 
 
 def releases_url() -> str:
-    """Where releases are downloaded from — ``$CORTEX_RELEASES_URL``, as for the install scripts."""
-    return (os.environ.get("CORTEX_RELEASES_URL") or DEFAULT_RELEASES_URL).rstrip("/")
+    """Where releases are downloaded from — ``$CORTEX_RELEASES_URL``, as for the install scripts:
+    https, or http to this machine for tests."""
+    url = (os.environ.get("CORTEX_RELEASES_URL") or DEFAULT_RELEASES_URL).rstrip("/")
+    try:
+        net.check_url(url)
+    except net.DownloadError as error:
+        raise StoreError(f"CORTEX_RELEASES_URL: {error}")
+    return url
+
+
+def known_specs() -> Dict[str, str]:
+    """The checksum of every spec archive released before this binary was built — written by
+    ``cli/build.py`` for the build. A source checkout knows none."""
+    try:
+        from ._known_specs import KNOWN
+    except ImportError:
+        return {}
+    return dict(KNOWN)
 
 
 def upgrade_command(version: Version) -> str:
@@ -115,19 +139,35 @@ def remove_tree(root: Path) -> None:
 class Store:
     def __init__(self, home: Optional[Path] = None, own_version: str = VERSION,
                  embedded: Optional[Path] = None, checkout: Optional[Path] = None,
-                 fetch: Callable[[str, int], bytes] = net.get):
+                 fetch: Callable[[str, int], bytes] = net.get, known: Optional[Dict[str, str]] = None):
         self.home = home or cortex_home()
         self.versions = self.home / "versions"
         self.own = Version(own_version)
         self.embedded = embedded if embedded is not None else embedded_archive()
         self.checkout = checkout if checkout is not None or self.embedded else source_checkout()
         self.fetch = fetch
+        self.known = known_specs() if known is None else known
 
     def path(self, version: Version) -> Path:
         return self.versions / str(version)
 
     def has(self, version: Version) -> bool:
-        return self.path(version).is_dir()
+        """A version is there when its three trees are — an empty directory is none."""
+        return all((self.path(version) / tree).is_dir() for tree in SPEC_TREES)
+
+    def _tidy(self, version: Version) -> None:
+        """Make a stored version read-only again — a sync interrupted between the rename and the
+        chmod left it writable — and remove the stagings older than a day."""
+        path = self.path(version)
+        if os.name != "nt" and os.stat(path).st_mode & stat.S_IWUSR:
+            make_read_only(path)
+        cutoff = time.time() - 86400
+        for entry in self.versions.glob(".*"):
+            try:
+                if entry.stat().st_mtime < cutoff:
+                    remove_tree(entry) if entry.is_dir() else entry.unlink()
+            except OSError:
+                pass
 
     def check_served(self, version: Version) -> None:
         """Refuse a version this binary does not serve: newer than itself — the tool is newer than
@@ -144,7 +184,11 @@ class Store:
         ``"written"`` from this binary, or ``"downloaded"``."""
         self.check_served(version)
         if self.has(version):
+            self._tidy(version)
             return "stored"
+        if self.path(version).exists():
+            raise StoreError(f"{self.path(version)} is there, and holds no complete spec — remove it, "
+                             "then run the command again")
         self.versions.mkdir(parents=True, exist_ok=True)
         if version == self.own:
             if self.embedded is not None:
@@ -167,6 +211,11 @@ class Store:
                          if len(line.split()) == 2 and line.split()[1].lstrip("*") == SPEC_ARCHIVE), None)
         if expected is None:
             raise StoreError(f"the SHA256SUMS of Cortex {version} lists no {SPEC_ARCHIVE} — nothing was written")
+        known = self.known.get(str(version))
+        if known is not None and known != expected:
+            raise StoreError(f"the SHA256SUMS of Cortex {version} names {expected}, and this cortex knows its spec "
+                             f"archive as {known}: the release was changed since this binary was built. "
+                             "Nothing was written.")
         try:
             data = self.fetch(f"{base}/{SPEC_ARCHIVE}", MAX_ARCHIVE)
         except net.DownloadError as error:
