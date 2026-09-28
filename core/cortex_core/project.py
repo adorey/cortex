@@ -19,7 +19,7 @@ LOCAL_FILE = "cortex.local.toml"
 MODES = ("store", "link", "copy")
 PROJECT_KEYS: Tuple[str, ...] = ("version", "theme", "sync", "claude_access")
 PROJECT_REQUIRED: Tuple[str, ...] = ("version", "theme")
-LOCAL_KEYS: Tuple[str, ...] = ("theme", "spec", "claude_access")
+LOCAL_KEYS: Tuple[str, ...] = ("theme", "spec", "claude_access", "claude_entry")
 BOOLEAN_KEYS: Tuple[str, ...] = ("claude_access",)
 
 _IDENTIFIER = r"(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"

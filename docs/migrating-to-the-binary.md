@@ -102,7 +102,7 @@ What it means today:
   - `claude_access = true` in `cortex.toml`, for the whole team. `cortex init --tool claude` asks for it on a terminal, and `--claude-access` sets it unattended.
   - `cortex sync --claude-access`, for you alone: it writes `claude_access = true` in `cortex.local.toml`.
 
-  `cortex sync` then keeps the store's path of the pinned version in `.claude/settings.local.json`, under `permissions.additionalDirectories`. That file holds Claude Code's settings for you on this machine, which git ignores. Sync replaces the path when the version changes, and removes it when access is turned off. Measured with Claude Code 2.1.273: the Prompt Manager's card is reached with no prompt at all.
+  `cortex sync` then keeps the store's path of the pinned version in `.claude/settings.local.json`, under `permissions.additionalDirectories`. That file holds Claude Code's settings for you on this machine, which git ignores. Sync replaces the path when the version changes, and removes it when access is turned off — the path it wrote, which `cortex.local.toml` records as `claude_entry`, and no other: an entry you added yourself, by hand or through Claude Code's own prompt, stays yours. While neither file sets `claude_access`, sync does not touch the file. Measured with Claude Code 2.1.273: the Prompt Manager's card is reached with no prompt at all.
 
   Without it, you answer the permission prompt once per session. `sync = "copy"` needs no setting either.
 - **The tools not measured yet** start in `store`. Switch the project to `link`, then to `copy`, if a conversation does not reach the Prompt Manager's card.
