@@ -268,6 +268,20 @@ class OptionTests(InitTestCase):
         self.assertIn("CLAUDE.md is there and was kept: it holds no Cortex bootstrap — "
                       "cortex init --tool claude --force replaces it", proc.err)
 
+    def test_an_older_bootstrap_is_said(self):
+        # Written before cortex.toml, it reads cortex/ as the submodule it was: there is no spec there.
+        older = "# Cortex AI Team\n\nRead `cortex/agents/roles/prompt-manager.md` first.\n"
+        (self.project / "CLAUDE.md").write_text(older, encoding="utf-8")
+        proc = self.init()
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertTrue((self.project / ".github" / "copilot-instructions.md").is_file())
+        self.assertEqual(self.read("CLAUDE.md"), older)
+        self.assertIn("CLAUDE.md is there and was kept: an older Cortex bootstrap, which does not read "
+                      "cortex.local.toml — cortex init --tool claude --force replaces it", proc.err)
+        proc = self.init("--tool", "claude")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("CLAUDE.md is an older Cortex bootstrap: it does not read cortex.local.toml", proc.err)
+
     def test_a_kept_file_without_the_bootstrap_is_said(self):
         (self.project / "CLAUDE.md").write_text("# Our own notes\n", encoding="utf-8")
         proc = self.init("--tool", "claude")
