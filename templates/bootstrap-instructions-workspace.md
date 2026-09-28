@@ -6,7 +6,7 @@ In these instructions, `cortex/` is the directory that `spec` names in `cortex.l
 
 **No `cortex.local.toml`, or no `spec` in it** → Cortex is not synced on this machine. Tell the user to run `cortex sync` at the workspace root — `cortex-ai sync` where the command was installed under that name — and go no further without these instructions.
 
-**`spec` ends in a version other than `cortex.toml`'s** — `…/versions/1.1.0` where `version = "1.2.0"` → a teammate moved the workspace to another version, and this machine has not synced it yet. Tell the user to run `cortex sync` first.
+**The spec is of a version other than `cortex.toml`'s** — `spec` ends in `…/versions/1.1.0`, or, for a copy (`spec = "cortex"`), `cortex/.synced` says `"version": "1.1.0"`, where `version = "1.2.0"` → a teammate moved the workspace to another version, and this machine has not synced it yet. Tell the user to run `cortex sync` first. A link names no version: there is nothing to compare.
 
 ## Bootstrap (MANDATORY at the start of every new conversation)
 
