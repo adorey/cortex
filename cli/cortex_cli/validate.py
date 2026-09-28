@@ -63,6 +63,14 @@ def roots(cwd: str) -> Tuple[str, str]:
         if synced and synced != str(project.version):
             raise RootsError(f"{config.PROJECT_FILE} pins Cortex {project.version}, and the spec synced is {synced} "
                              "— run `cortex sync`")
+        copy = Path(project.root) / sync.LINK
+        marker = sync.read_marker(copy) if project.spec == sync.LINK and not sync.is_link(copy) else None
+        if marker is not None:
+            off = sync.changed_files(copy, marker) + sync.missing_files(copy, marker)
+            if off:
+                raise RootsError(f"{sync.LINK}/ no longer holds what sync copied — {len(off)} file(s) added, changed "
+                                 f"or missing, {off[0]} first: it would be validated against another spec. "
+                                 "Run `cortex sync`, which says what to do")
         return root, base
     if os.path.isdir(os.path.join(cwd, "cortex")):
         return cwd, f"{cwd}/cortex"

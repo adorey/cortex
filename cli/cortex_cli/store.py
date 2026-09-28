@@ -115,6 +115,11 @@ def make_read_only(root: Path) -> None:
             os.chmod(directory, stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
 
 
+def _a_file_writable(root: Path) -> bool:
+    return any(os.stat(os.path.join(directory, name)).st_mode & stat.S_IWUSR
+               for directory, _, files in os.walk(root) for name in files)
+
+
 def make_writable(root: Path) -> None:
     if os.name != "nt":
         os.chmod(root, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
@@ -157,9 +162,11 @@ class Store:
 
     def _tidy(self, version: Version) -> None:
         """Make a stored version read-only again — a sync interrupted between the rename and the
-        chmod left it writable — and remove the stagings older than a day."""
+        chmod left it writable — and remove the stagings older than a day. Every file tells, on
+        every target — the chmod runs from the deepest files up, so a sync cut short leaves any of
+        them writable — and a directory too, but on Windows."""
         path = self.path(version)
-        if os.name != "nt" and os.stat(path).st_mode & stat.S_IWUSR:
+        if (os.name != "nt" and os.stat(path).st_mode & stat.S_IWUSR) or _a_file_writable(path):
             make_read_only(path)
         cutoff = time.time() - 86400
         for entry in self.versions.glob(".*"):
