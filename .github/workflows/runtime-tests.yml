@@ -2,6 +2,7 @@ name: runtime tests
 
 on:
   push:
+    branches: [main, "release/**"]     # a pull request's branch runs as a pull request, once
     paths:
       - "runtime/**"
       - "core/**"
@@ -11,6 +12,12 @@ on:
       - "runtime/**"
       - "core/**"
       - ".github/workflows/runtime-tests.yml"
+
+# A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
+# branch or a tag, a run in progress is never cut short.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
