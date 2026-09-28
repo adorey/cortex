@@ -178,7 +178,7 @@ class OptionTests(InitTestCase):
         proc = self.init("--copy")
         self.assertEqual(proc.returncode, 0, proc.err)
         self.assertEqual((self.project / ".gitignore").read_bytes(),
-                         b"\xef\xbb\xbfcortex.local.toml\r\ncaf\xe9/\r\n/cortex\r\n")
+                         b"\xef\xbb\xbfcortex.local.toml\r\ncaf\xe9/\r\n/cortex\r\n/.cortex-sync-*\r\n")
 
     def test_a_second_init_keeps_cortex_toml_but_for_the_options_given(self):
         self.init("--theme", "acme", "--link")
@@ -270,6 +270,53 @@ class OptionTests(InitTestCase):
         self.assertEqual(subprocess.run(["git", "-C", str(self.project), "check-ignore", "-q", "cortex"]).returncode, 0)
         self.assertNotIn("git does not ignore", proc.err)
 
+    def test_a_new_project_keeps_the_default_tool_whatever_file_is_there(self):
+        # A CLAUDE.md written by hand is no reason to take Claude for the tool: it holds no Cortex
+        # bootstrap, and --force would have replaced it. The script wrote copilot's file, and said nothing.
+        (self.project / "CLAUDE.md").write_text("# Our own notes\n", encoding="utf-8")
+        proc = self.init()
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertTrue((self.project / ".github" / "copilot-instructions.md").is_file())
+        self.assertEqual(self.read("CLAUDE.md"), "# Our own notes\n")
+        self.assertIn("CLAUDE.md is there and was kept: it holds no Cortex bootstrap — "
+                      "cortex init --tool claude --force replaces it", proc.err)
+
+    def test_a_kept_file_without_the_bootstrap_is_said(self):
+        (self.project / "CLAUDE.md").write_text("# Our own notes\n", encoding="utf-8")
+        proc = self.init("--tool", "claude")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("CLAUDE.md holds no Cortex bootstrap: the tool will not find Cortex", proc.err)
+
+    def test_a_second_init_of_a_custom_tool_says_what_it_wrote(self):
+        self.assertEqual(self.init("--tool", "custom", "--instructions-file", "docs/ai.md").returncode, 0)
+        proc = self.init()
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("no instructions file of a known tool was here", proc.err)
+
+    def test_a_bootstrap_for_the_other_layout_is_said(self):
+        self.assertEqual(self.init("--tool", "claude").returncode, 0)
+        proc = self.init("--tool", "claude", "--workspace")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("was written for a single project", proc.err)
+
+    def test_the_backup_is_said_to_be_left_to_git(self):
+        (self.project / "CLAUDE.md").write_text("# mine\n", encoding="utf-8")
+        proc = self.init("--tool", "claude", "--force")
+        self.assertIn("CLAUDE.md.bak: the file --force replaces, as it was — git does not ignore it", proc.out)
+
+    def test_outside_a_repository_an_existing_gitignore_is_said_to_do_nothing(self):
+        (self.project / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+        proc = self.init()
+        self.assertIn("its .gitignore keeps nothing out of a commit", proc.err)
+        self.assertNotIn("no .gitignore is written", proc.err)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_what_a_killed_sync_leaves_is_ignored_too(self):
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        self.assertEqual(self.init("--link").returncode, 0)
+        check = subprocess.run(["git", "-C", str(self.project), "check-ignore", "-q", ".cortex-sync-1234-abcd"])
+        self.assertEqual(check.returncode, 0)
+
     def test_a_file_where_a_folder_is_to_be_made_is_refused_first(self):
         (self.project / "api").write_text("a file\n", encoding="utf-8")
         (self.project / ".cursor").write_text("a file\n", encoding="utf-8")
@@ -280,6 +327,13 @@ class OptionTests(InitTestCase):
                 self.assertIn("is a file, not a folder", proc.err)
                 self.assertNotIn("Traceback", proc.err)
                 self.assertEqual(sorted(p.name for p in self.project.iterdir()), [".cursor", "api"])
+        if os.name != "nt":                                 # a link that leads nowhere is no folder either
+            (self.project / ".cursor").unlink()
+            (self.project / ".cursor").symlink_to(self.project / "gone")
+            proc = self.init("--tool", "cursor")
+            self.assertEqual(proc.returncode, 1)
+            self.assertIn("is a file, not a folder", proc.err)
+            self.assertEqual(sorted(p.name for p in self.project.iterdir()), [".cursor", "api"])
 
     def test_force_never_overwrites_a_backup(self):
         (self.project / "CLAUDE.md").write_text("# mine, first\n", encoding="utf-8")
@@ -341,6 +395,8 @@ class OptionTests(InitTestCase):
                               (["--tool", "custom", "--instructions-file", "cortex.toml"], "writes for itself"),
                               (["--tool", "custom", "--instructions-file", ".gitignore"], "writes for itself"),
                               (["--tool", "custom", "--instructions-file", "cortex"], "writes for itself"),
+                              (["--tool", "custom", "--instructions-file", "CORTEX.TOML"], "writes for itself"),
+                              (["--tool", "custom", "--instructions-file", ".git/config", "--force"], "of git's own"),
                               (["--workspace", "--service", "api", "--tool", "custom", "--instructions-file",
                                 "api/project-overview.md"], "writes for itself")):
             with self.subTest(args=args):
