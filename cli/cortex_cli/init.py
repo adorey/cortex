@@ -8,20 +8,28 @@ working tree. The files are written byte for byte as the script wrote them, from
 the version the project pins, in the store.
 
 It also writes ``cortex.toml`` at the binary's own version, adds ``cortex.local.toml`` to
-``.gitignore`` — and ``cortex/`` in ``link`` and ``copy`` modes — then runs ``cortex sync``.
+``.gitignore`` — and ``/cortex`` in ``link`` and ``copy`` modes — then runs ``cortex sync``. In a
+project that has one, ``cortex.toml`` keeps its version, and changes only for the options given:
+``--theme`` or ``--no-personality``, ``--link`` or ``--copy``.
 
 Two deliberate differences: services are named by a repeatable ``--service``, the interactive
 prompt remaining only when stdin is a terminal and none was given; and an existing instructions
-file is kept unless ``--force``, instead of a ``y/N`` prompt that blocks every unattended run.
+file is kept unless ``--force``, instead of a ``y/N`` prompt that blocks every unattended run —
+``--force`` keeps the file it replaces as ``FILE.bak``.
+
+Everything is checked before anything of the project is written: a refusal leaves it as it was.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 from pathlib import Path, PurePosixPath
-from typing import List, Optional, TextIO
+from typing import Dict, List, TextIO
+
+from cortex_core.project import is_theme
 
 from . import config, store, sync
 from .paths import display, working_directory
@@ -75,8 +83,9 @@ def is_git_working_tree(directory: Path) -> bool:
 
 
 def service_path(name: str) -> str:
-    """A service is a folder of the workspace: relative, never climbing out of it."""
-    path = PurePosixPath(name.replace("\\", "/"))
+    """A service is a folder of the workspace: relative, never climbing out of it. A backslash
+    separates folders on Windows only: elsewhere it is a character of the name."""
+    path = PurePosixPath(name.replace("\\", "/") if os.name == "nt" else name)
     if not name or path.is_absolute() or ".." in path.parts or (len(name) > 1 and name[1] == ":"):
         raise InitError(f"--service {name}: a service is a folder inside the workspace")
     return str(path)
@@ -91,7 +100,7 @@ def prompt_services(out: TextIO) -> List[str]:
         line = sys.stdin.readline()
         if not line or not line.strip():
             break
-        names.append(line.rstrip("\r\n"))
+        names.append(line.strip())
     return names
 
 
@@ -99,63 +108,130 @@ def prompt_services(out: TextIO) -> List[str]:
 # The command
 # --------------------------------------------------------------------------- #
 
-def add_to_gitignore(root: Path, lines: List[str]) -> List[str]:
+def add_to_gitignore(root: Path, entries: Dict[str, str]) -> List[str]:
+    """Add to ``.gitignore`` each line of ``entries`` whose path — its value — git does not ignore
+    yet, and return them. The file keeps its bytes: its encoding, its byte order mark, its line
+    endings. Without a repository to ask, a line is added unless it, or one that means the same,
+    is there."""
     path = root / ".gitignore"
-    existing = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-    missing = [line for line in lines if line not in (entry.strip() for entry in existing)]
+    data = path.read_bytes() if path.is_file() else b""
+    present = {line.strip().lstrip("\ufeff") for line in data.decode("utf-8", errors="replace").splitlines()}
+    missing = []
+    for line, probe in entries.items():
+        state = sync.ignored(root, probe)
+        if state is None:                       # no repository to ask
+            name = probe.rstrip("/")
+            state = bool(present & ({name, f"/{name}"} | ({f"{name}/", f"/{name}/"} if probe.endswith("/") else set())))
+        if not state and line not in present:
+            missing.append(line)
     if missing:
-        text = path.read_text(encoding="utf-8") if path.is_file() else ""
-        if text and not text.endswith("\n"):
-            text += "\n"
-        path.write_text(text + "".join(f"{line}\n" for line in missing), encoding="utf-8", newline="")
+        newline = b"\r\n" if b"\r\n" in data else b"\n"
+        if data and not data.endswith(b"\n"):
+            data += newline
+        path.write_bytes(data + b"".join(line.encode("utf-8") + newline for line in missing))
     return missing
 
 
+def _refuse_instructions_file(root: Path, path: Path) -> None:
+    """``--instructions-file`` names the tool's file: never a directory, never a file cortex init
+    writes for itself, never the spec."""
+    if path.is_dir():
+        raise InitError(f"--instructions-file {display(str(path))}: a directory")
+    own = {os.path.normcase(os.path.abspath(root / name)) for name in
+           (config.PROJECT_FILE, config.LOCAL_FILE, ".gitignore", "project-overview.md", "project-context.md")}
+    target = os.path.normcase(os.path.abspath(path))
+    spec = os.path.normcase(os.path.abspath(root / sync.LINK))
+    if target in own or target.startswith(spec + os.sep):
+        raise InitError(f"--instructions-file {display(str(path))}: a file cortex init writes for itself — "
+                        "name the tool's instructions file")
+
+
+def _services(options: argparse.Namespace, root: Path, out: TextIO, err: TextIO) -> List[str]:
+    """The workspace's services, checked: each a folder inside it, none an existing file."""
+    names = list(options.service)
+    if options.workspace and not names:
+        if sys.stdin is not None and sys.stdin.isatty():
+            names = prompt_services(out)
+        else:
+            err.write("note: no service created — --service NAME adds one; names are asked for on a terminal only\n")
+    for name in names:
+        folder = root / service_path(name)
+        if folder.exists() and not folder.is_dir():
+            raise InitError(f"--service {name}: {display(str(folder))} is a file, not a folder")
+    return [service_path(name) for name in names]
+
+
 def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> None:
-    root = Path(os.path.join(cwd, options.dir) if options.dir else cwd)
-    root.mkdir(parents=True, exist_ok=True)
-    root = Path(display(os.path.normpath(str(root))))
+    root = Path(display(os.path.normpath(os.path.join(cwd, options.dir) if options.dir else cwd)))
     personality = not options.no_personality
     theme = options.theme if personality else "none"
     mode = "link" if options.link else "copy" if options.copy else None
 
+    # Everything is checked before anything of the project is written: its instructions file,
+    # its services, its theme, its cortex.toml, what is at cortex/.
     if options.tool == "custom":
         if not options.instructions_file:
             raise InitError("--tool custom needs --instructions-file PATH")
         instructions_file = Path(os.path.join(cwd, options.instructions_file))
+        _refuse_instructions_file(root, instructions_file)
     else:
         if options.instructions_file:
             raise InitError("--instructions-file goes with --tool custom")
         instructions_file = root / TOOLS[options.tool]
+    if theme is not None and not is_theme(theme):
+        raise InitError(f'--theme {theme}: no theme name — letters, digits, ".", "_" and "-"')
+    services = _services(options, root, out, err) if options.workspace else []
 
-    # Nothing is written before every refusal had its chance: a submodule or a clone at cortex/,
-    # a theme the spec does not have.
     the_store = store.Store()
     existing_project = (root / config.PROJECT_FILE).is_file()
-    project = config.load(str(root)) if existing_project else None
+    try:
+        project = config.load(str(root)) if existing_project else None
+    except config.ConfigError as error:
+        raise InitError(f"{error}\ncortex init keeps an existing {config.PROJECT_FILE}: fix it, or remove it to "
+                        "start over")
     sync.existing_entry(root / sync.LINK, the_store, project or _blank(root))
-    # The version the project pins, or — for a new project, or one --force rewrites — this binary's.
-    version = project.version if project and not options.force else the_store.own
+    # A project keeps the version it pins — never another, older or newer; a new one takes this
+    # binary's. A version newer than this binary is refused here.
+    version = project.version if project else the_store.own
     the_store.ensure(version)
     spec = the_store.path(version)
-    if personality and not (spec / "agents" / "personalities" / theme).is_dir():
+    if project is None and theme is None:
+        theme = "h2g2"
+    if theme not in (None, "none") and not (spec / "agents" / "personalities" / theme).is_dir():
         themes = sorted(p.name for p in (spec / "agents" / "personalities").iterdir() if p.is_dir())
         raise InitError(f"theme '{theme}' is not in Cortex {version} — the themes are: {', '.join(themes)}")
-
-    # cortex.toml, and what git must ignore
-    if existing_project and not options.force:
-        out.write(f"✓ {config.PROJECT_FILE} kept, at Cortex {version} — --force rewrites it\n")
+    # cortex.toml: a new one, or only the keys the options name.
+    if project is None:
+        values = {"version": str(version), "theme": theme, **({"sync": mode} if mode else {})}
     else:
-        text = f'version = "{version}"\ntheme = "{theme}"\n'
-        if mode:
-            text += f'sync = "{mode}"\n'
-        (root / config.PROJECT_FILE).write_text(
-            "# Written by `cortex init`. Committed: the Cortex version this project uses, and the team's theme.\n"
-            + text, encoding="utf-8", newline="")
+        values = {**({"theme": theme} if theme is not None and theme != project.theme else {}),
+                  **({"sync": mode} if mode and mode != project.sync else {})}
+    project_text = config.render_project(str(root), values) if values else None
+    personality = (theme if theme is not None else project.theme) != "none"
+
+    # Now the writes.
+    root.mkdir(parents=True, exist_ok=True)
+    if project_text is not None:
+        config.write_text(str(root / config.PROJECT_FILE), project_text)
+    if project is None:
         out.write(f"✓ {config.PROJECT_FILE}: Cortex {version}, theme {theme}\n")
-    ignored = add_to_gitignore(root, [config.LOCAL_FILE] + ([f"/{sync.LINK}/"] if mode else []))
+    elif values:
+        shown = ", ".join(f"{key} = {config.toml_value(value)}" for key, value in values.items())
+        out.write(f"✓ {config.PROJECT_FILE}: {shown} — the rest kept, at Cortex {version}\n")
+    else:
+        out.write(f"✓ {config.PROJECT_FILE} kept, at Cortex {version}\n")
+    spec_mode = mode or (project.sync if project else None)
+    entries = {config.LOCAL_FILE: config.LOCAL_FILE}
+    if spec_mode in ("link", "copy"):
+        # A link is a file to git: `cortex/` would not match it. `/cortex` matches the link and the copy.
+        entries[f"/{sync.LINK}"] = sync.LINK if spec_mode == "link" else f"{sync.LINK}/"
+    ignored = add_to_gitignore(root, entries)
     if ignored:
         out.write(f"✓ .gitignore: {', '.join(ignored)}\n")
+    if sync.ignored(root, config.LOCAL_FILE) is None:
+        err.write(f"note: {display(str(root))} is in no git repository: {config.PROJECT_FILE} is committed nowhere, "
+                  "and .gitignore does nothing here. Where the workspace root is no repository (ADR-006, 2.B), each "
+                  "developer runs cortex init in their own, and pins the version of their own cortex (ADR-008 §9).\n")
 
     # The spec, where the project finds it
     sync.sync(str(root), mode, None, out, err)
@@ -168,6 +244,10 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
     else:
         replaced = instructions_file.exists()
         instructions_file.parent.mkdir(parents=True, exist_ok=True)
+        if replaced:
+            backup = instructions_file.with_name(instructions_file.name + ".bak")
+            os.replace(instructions_file, backup)
+            out.write(f"✓ {display(str(backup))}: the file --force replaces, as it was\n")
         instructions_file.write_bytes(instructions(bootstrap.read_bytes(), personality))
         out.write(f"✓ {display(str(instructions_file))} {'replaced' if replaced else 'written'}\n")
 
@@ -179,17 +259,14 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
             out.write(f"✓ {name} written — fill it in\n")
 
     if workspace:
-        names = options.service
-        if not names and sys.stdin is not None and sys.stdin.isatty():
-            names = prompt_services(out)
-        for name in names:
-            folder = root / service_path(name)
+        for name in services:
+            folder = root / name
             folder.mkdir(parents=True, exist_ok=True)
-            alias = PurePosixPath(service_path(name)).name
+            alias = PurePosixPath(name).name
             for file, content in (("project-overview.md", overview), ("project-context.md", context)):
                 if not (folder / file).exists():
                     (folder / file).write_bytes(with_alias(content, alias))
-                    out.write(f"✓ {service_path(name)}/{file} — @{alias}\n")
+                    out.write(f"✓ {name}/{file} — @{alias}\n")
         agents = root / "agents"
         if is_git_working_tree(agents):
             for file, content in (("project-overview.md", overview), ("project-context.md", context)):
@@ -211,7 +288,7 @@ def run(args: List[str]) -> int:
         description="Make a directory a Cortex project: its cortex.toml, the AI tool's instructions file, "
                     "project-overview.md and project-context.md — setup.sh, at parity (ADR-008 §3.7).")
     parser.add_argument("dir", nargs="?", metavar="DIR", help="the project's root (default: the current directory)")
-    parser.add_argument("--theme", default="h2g2", help="the team's personality theme (default: h2g2)")
+    parser.add_argument("--theme", help="the team's personality theme (default: h2g2, or the one cortex.toml names)")
     parser.add_argument("--no-personality", action="store_true", help="no personality layer — wins over --theme")
     parser.add_argument("--workspace", action="store_true", help="multi-service workspace mode")
     parser.add_argument("--service", action="append", default=[], metavar="NAME",
@@ -222,14 +299,19 @@ def run(args: List[str]) -> int:
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--link", action="store_true", help="link cortex/ to the spec: cortex.toml's sync = \"link\"")
     modes.add_argument("--copy", action="store_true", help="copy the spec into cortex/: cortex.toml's sync = \"copy\"")
-    parser.add_argument("--force", action="store_true", help="replace an existing instructions file and cortex.toml")
+    parser.add_argument("--force", action="store_true",
+                        help="replace an existing instructions file, kept as FILE.bak — cortex.toml changes only "
+                             "for the options given")
     options = parser.parse_args(args)
     if options.service and not options.workspace:
         parser.error("--service goes with --workspace")
     try:
         init(options, working_directory(), sys.stdout, sys.stderr)
     except (InitError, config.ConfigError, store.StoreError, sync.SyncError) as error:
-        sys.stdout.flush()
-        sys.stderr.write(f"cortex init: {error}\n")
-        return 1
+        return sync.failed("cortex init", str(error))
+    except OSError as error:
+        return sync.failed("cortex init", sync.os_error(error))
+    except subprocess.CalledProcessError as error:
+        return sync.failed("cortex init", f"{' '.join(map(str, error.cmd))} failed: "
+                                          f"{(error.stderr or b'').decode(errors='replace').strip() or error.returncode}")
     return 0
