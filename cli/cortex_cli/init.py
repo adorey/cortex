@@ -7,10 +7,12 @@ as ``setup.sh``: the tool's instructions file, the root ``project-overview.md`` 
 working tree. The files are written byte for byte as the script wrote them, from the templates of
 the version the project pins, in the store.
 
-It also writes ``cortex.toml`` at the binary's own version, adds ``cortex.local.toml`` to
-``.gitignore`` — and ``/cortex`` in ``link`` and ``copy`` modes — then runs ``cortex sync``. In a
-project that has one, ``cortex.toml`` keeps its version, and changes only for the options given:
-``--theme`` or ``--no-personality``, ``--link`` or ``--copy``.
+It also writes ``cortex.toml`` at the binary's own version, runs ``cortex sync``, then adds to
+``.gitignore`` what git does not ignore yet: ``cortex.local.toml`` — and, in ``link`` and ``copy``
+modes, ``/cortex`` and ``/.cortex-sync-*``, what a sync killed half-way leaves beside it. Outside a
+git repository no ``.gitignore`` is created, and a note says so. In a project that has one,
+``cortex.toml`` keeps its version, and changes only for the options given: ``--theme`` or
+``--no-personality``, ``--link`` or ``--copy``.
 
 Two deliberate differences: services are named by a repeatable ``--service``, the interactive
 prompt remaining only when stdin is a terminal and none was given; and an existing instructions
