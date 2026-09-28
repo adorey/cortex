@@ -354,4 +354,5 @@ Acceptance criteria:
 - **A copy that lost a file is copied again** by sync, which says which files; `cortex validate` refuses a copy that no longer matches its manifest — a file added, changed or missing — rather than validate against another spec.
 - **A value `cortex.toml` is refused for is shown escaped**, as JSON writes it: a committed file may hold a newline or a terminal's control sequence.
 - **A stored version left writable is found by its files**, on every target: on Windows a directory never tells.
+- **A copy's own directory is made read-only once in place**, and writable again before it is moved: macOS renames no directory its owner may not write in, where Linux does — a copy sealed before its rename never reached `cortex/` there. What the copy holds is read-only throughout.
 

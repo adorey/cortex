@@ -222,11 +222,26 @@ def stage_copy(root: Path, source: Path, version: Optional[str], checkout: Optio
                   "files": {rel: _digest(path) for rel, path in sorted(_files(staging).items())}}
         (staging / MARKER).write_text(json.dumps(marker, indent=1) + "\n", encoding="utf-8")
         store.make_read_only(staging)
+        _unseal(staging)                       # sealed once in place: see _seal
     except BaseException:
         if staging.exists():
             store.remove_tree(staging)
         raise
     return staging
+
+
+def _seal(path: Path) -> None:
+    """Make a copy's own directory read-only, once it is in place. Everything in it is read-only
+    already; the directory itself stays writable while it is moved, since macOS renames no
+    directory its owner may not write in — Linux does."""
+    if os.name != "nt" and path.is_dir() and not is_link(path):
+        os.chmod(path, stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+
+
+def _unseal(path: Path) -> None:
+    """Let a copy's own directory be moved — see ``_seal``."""
+    if os.name != "nt" and path.is_dir() and not is_link(path):
+        os.chmod(path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
 
 
 def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path]:
@@ -236,6 +251,7 @@ def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path
     aside = None
     if old is not None:
         aside = _aside(target.parent)
+        _unseal(target)
         os.rename(target, aside)
     if new is not None:
         try:
@@ -246,12 +262,14 @@ def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path
             if aside is not None:
                 try:
                     os.rename(aside, target)
+                    _seal(target)
                 except OSError:
                     _discard(aside)
                     raise SyncError(RACE) from error
             elif os.path.lexists(target):
                 raise SyncError(RACE) from error
             raise
+        _seal(target)
     return aside
 
 
@@ -263,10 +281,12 @@ def unswap(target: Path, aside: Optional[Path]) -> None:
     """Undo ``swap``: what it put at ``target`` goes, what it moved aside comes back."""
     if os.path.lexists(target):
         gone = _aside(target.parent)
+        _unseal(target)
         os.rename(target, gone)
         _discard(gone)
     if aside is not None:
         os.rename(aside, target)
+        _seal(target)
 
 
 # --------------------------------------------------------------------------- #

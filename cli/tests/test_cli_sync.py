@@ -424,6 +424,35 @@ class HousekeepingTests(SyncTestCase):
         self.assertEqual(snapshot(project / "cortex"), before)
         self.assertEqual(list(project.glob(".cortex-sync-*")), [])
 
+    @unittest.skipIf(os.name == "nt", "the mode of a directory is POSIX's")
+    def test_a_copy_is_moved_as_macos_moves_directories(self):
+        # macOS renames no directory its owner may not write in: a copy sealed before it was put in
+        # place, or moved aside sealed, would never move there.
+        sys.path[:0] = [str(Path(__file__).resolve().parents[1]), str(Path(__file__).resolve().parents[2] / "core")]
+        import errno
+        import io
+        from unittest import mock
+
+        from cortex_cli import sync
+        from cortex_cli.version import VERSION
+
+        real = os.rename
+
+        def as_macos(src, dst):
+            if os.path.isdir(src) and not os.path.islink(src) and not os.stat(src).st_mode & stat.S_IWUSR:
+                raise PermissionError(errno.EACCES, "Permission denied", str(src), None, str(dst))
+            return real(src, dst)
+
+        project = self.project(version=VERSION)
+        with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), mock.patch.object(sync.os, "rename", as_macos):
+            for mode in ("copy", "link", "copy", "store"):
+                with self.subTest(mode=mode):
+                    sync.sync(str(project), mode, None, io.StringIO(), io.StringIO())
+                    if mode == "copy":
+                        self.assertFalse(os.stat(project / "cortex").st_mode & 0o222)     # sealed once in place
+        self.assertFalse(os.path.lexists(project / "cortex"))
+        self.assertEqual(list(project.glob(".cortex-sync-*")), [])
+
     def test_a_sync_that_loses_a_race_says_so_and_leaves_nothing(self):
         sys.path[:0] = [str(Path(__file__).resolve().parents[1]), str(Path(__file__).resolve().parents[2] / "core")]
         import io
