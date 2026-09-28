@@ -4,12 +4,14 @@ name: repo checks
 # LLM reads and the shell a host project runs — which had no automated check at all.
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
 
+# A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
+# branch or a tag, a run in progress is never cut short.
 concurrency:
-  group: repo-checks-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

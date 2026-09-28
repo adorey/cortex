@@ -5,6 +5,7 @@ name: cli tests
 # suite in the binary workflow; this one runs on every change first.
 on:
   push:
+    branches: [main, "release/**"]     # a pull request's branch runs as a pull request, once
     paths:
       - "cli/**"
       - "core/**"
@@ -22,6 +23,12 @@ on:
       - "install.sh"
       - "install.ps1"
       - ".github/workflows/cli-tests.yml"
+
+# A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
+# branch or a tag, a run in progress is never cut short.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

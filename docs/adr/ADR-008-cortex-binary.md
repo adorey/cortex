@@ -40,7 +40,7 @@ It is otherwise **no more than parity**. The organisation-wide configuration cas
 ### 3.1 The binary
 
 - Built with **PyInstaller** from `cortex_core` and a new `cortex_cli` package, both standard library only. It embeds the interpreter: the host needs **no Python**.
-- **Targets:** Linux `x86_64` and `aarch64` (glibc 2.28 or later — built in a `manylinux_2_28` image), macOS `arm64`, Windows `x86_64`. Intel macOS and Windows on ARM are not built.
+- **Targets:** Linux `x86_64` and `aarch64` (glibc 2.28 or later — built in a `manylinux_2_28` image; in AlmaLinux 8 since, §9, phase 1), macOS `arm64`, Windows `x86_64`. Intel macOS and Windows on ARM are not built.
 - **Named `cortex`** (`cortex.exe` on Windows), with **`cortex-ai`** as its fallback name. Other projects already ship a `cortex` command — the Cortex Labs CLI, the Prometheus-compatible Cortex server — so a machine may have one. The binary behaves the same under either name; nothing reads the name it was called by.
 - **Its version is the release's**, stamped at build time from the tag — `cortex --version` prints it. `CHANGELOG.md` stays the single source of truth for versions.
 - **The same output on every platform.** Paths are printed with `/`, the output is UTF-8 whatever the console's code page, and a file with CRLF line endings — what git produces on Windows with `core.autocrlf` — reads the same as with LF.
@@ -307,3 +307,8 @@ Acceptance criteria:
 - **A binary that starts and fails is not installed either.** `install.ps1` checks the exit code of `cortex.exe --version`, not only that Windows started it: a missing DLL, a onefile binary that cannot unpack itself, exit with an error. `install.sh` names `CORTEX_HOME` beside `TMPDIR` as a directory the binary must be allowed to execute from.
 - **A link or a junction on the way to a `cortex` on `PATH`** — a directory of `PATH` that is a junction to `~/.cortex/bin` — is followed by `install.ps1`, as `-ef` does for `install.sh`: that `cortex` is the installed one, not another.
 - **The latest release is the highest version**, not the last published: a patch of an older line is published without becoming `releases/latest`. Releases are made one at a time, and no job keeps the checkout's token.
+
+### Phase 1 — the maintainer's arbitration on CI time (2026-09-28)
+
+- **The binaries are built where code integrates**, not on every pull request (§3.1). The binary workflow took about nine minutes a run, its Windows build most of it, on every pull request of a stack, where the tests from source run first anyway. It runs on a push to `main` or to a `release/**` branch, on a pull request into `main` — every one, whatever it changes — on a tag, and by hand. So a stack merges into its release branch, the binaries go green there, and only then does the release branch's pull request into `main` open: merged straight into `main`, a stack would skip the one build of what ships. A tag's push alone releases; a run started by hand on a tag builds and stops there.
+- **A pull request's run is cancelled when its branch is pushed again**, in every workflow; the tests' workflows run on a push only to `main` and `release/**`, since a pull request's branch already runs as a pull request.
