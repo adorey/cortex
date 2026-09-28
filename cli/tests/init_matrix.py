@@ -41,6 +41,8 @@ CASES = {
     "single-other-theme": (["--tool", "claude", "--theme", "acme"], [], {}),
     "single-files-already-there": (["--tool", "claude"], [], {
         "project-overview.md": "# Ours\n", "project-context.md": "# Our stack <!-- ex: keep -->\n"}),
+    # A hand-written CLAUDE.md in a new project, no --tool: copilot's file is written, the other kept.
+    "single-own-instructions-file": ([], [], {"CLAUDE.md": "# Our own notes\n"}),
     "workspace-copilot": (["--workspace"], [], {}),
     "workspace-services": (["--workspace", "--tool", "claude"], ["api", "core/web"], {}),
     "workspace-no-personality": (["--workspace", "--tool", "agents", "--no-personality"], ["api"], {}),
