@@ -38,6 +38,10 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn(b"unknown option '--bogus'", proc.stderr)
         self.assertEqual(proc.stdout, b"")
+        self.assertEqual(harness.run("--version", "--verbose", "--bogus").returncode, 2)
+        verbose = harness.run("--version", "--verbose")
+        self.assertEqual(verbose.returncode, 0, verbose.stderr)
+        self.assertIn(b"known spec archives: ", verbose.stdout)
 
     def test_a_source_checkout_is_no_release(self):
         self.assertTrue(VERSION_PATTERN.match(VERSION), VERSION)
