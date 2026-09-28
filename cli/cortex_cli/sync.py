@@ -18,7 +18,6 @@ switching back to ``store`` removes the link or the copy it made, and nothing el
 from __future__ import annotations
 
 import argparse
-import errno
 import hashlib
 import json
 import os
@@ -241,14 +240,23 @@ def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path
     if new is not None:
         try:
             os.rename(new, target)
-        except OSError:
+        except OSError as error:
+            # Something is at cortex/ that neither this sync put there nor moved away: another sync
+            # got there first. Every system says so its own way — ENOTEMPTY, EEXIST, EACCES on macOS.
             if aside is not None:
                 try:
                     os.rename(aside, target)
                 except OSError:
                     _discard(aside)
+                    raise SyncError(RACE) from error
+            elif os.path.lexists(target):
+                raise SyncError(RACE) from error
             raise
     return aside
+
+
+RACE = (f"{LINK}/ was put back while this sync ran — by another cortex sync, most likely. "
+        "Run cortex sync again.")
 
 
 def unswap(target: Path, aside: Optional[Path]) -> None:
@@ -313,12 +321,9 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
                                            display(str(spec_source)) if source else None)
     try:
         aside = None if keep else swap(target, new, existing)
-    except OSError as error:
+    except BaseException:
         if new is not None and os.path.lexists(new):
             _discard(new)
-        if error.errno in (errno.ENOTEMPTY, errno.EEXIST):
-            raise SyncError(f"{LINK}/ was put back while this sync ran — by another cortex sync, most likely. "
-                            "Run cortex sync again.")
         raise
     try:
         config.write_local_text(root, local_text)
