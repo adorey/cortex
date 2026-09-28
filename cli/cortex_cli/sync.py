@@ -18,14 +18,17 @@ switching back to ``store`` removes the link or the copy it made, and nothing el
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
+import secrets
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional, TextIO
+from typing import Dict, List, Optional, TextIO
 
 from . import config, store
 from .paths import display, working_directory
@@ -33,6 +36,7 @@ from .paths import display, working_directory
 LINK = "cortex"
 MARKER = ".synced"
 MARKER_NOTE = "A read-only copy of the Cortex spec, written by `cortex sync`: run it again to change this copy, never edit it."
+STAGING = ".cortex-sync-"
 
 
 class SyncError(Exception):
@@ -68,11 +72,41 @@ def _inside(path: str, directory: Path) -> bool:
     return path.startswith(directory + os.sep)
 
 
-def synced_version(copy: Path) -> Optional[str]:
+def is_checkout(path: Path) -> bool:
+    """A checkout of Cortex holds the spec's three trees — ``--from`` copies or links all three."""
+    return all((path / tree).is_dir() for tree in store.SPEC_TREES)
+
+
+def _digest(path: Path) -> str:
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+def _files(root: Path) -> Dict[str, Path]:
+    return {p.relative_to(root).as_posix(): p for p in root.rglob("*") if p.is_file() and p.name != MARKER}
+
+
+def read_marker(copy: Path) -> Optional[dict]:
+    """The ``.synced`` marker of a copy sync made — ``None`` when it is none: the version it copied
+    (``None`` for a checkout), the checkout (``from``), and the digest of every file it wrote."""
     try:
-        return (copy / MARKER).read_text(encoding="utf-8").split("\n", 1)[0].strip()
-    except OSError:
+        marker = json.loads((copy / MARKER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return None
+    if not isinstance(marker, dict) or not isinstance(marker.get("files"), dict):
+        return None
+    return marker
+
+
+def synced_version(copy: Path) -> Optional[str]:
+    marker = read_marker(copy)
+    return marker.get("version") if marker else None
+
+
+def changed_files(copy: Path, marker: dict) -> List[str]:
+    """What the copy holds that sync did not write: a file added since, or modified."""
+    written = marker["files"]
+    return sorted(rel for rel, path in _files(copy).items() if written.get(rel) != _digest(path))
 
 
 def describe(path: Path) -> str:
@@ -85,16 +119,27 @@ def describe(path: Path) -> str:
 
 def existing_entry(target: Path, the_store: store.Store, project: config.Project) -> Optional[str]:
     """What sync made at ``cortex/`` — ``"link"``, ``"copy"`` — or ``None`` when nothing is there.
-    Anything else there is refused."""
+    Anything else there is refused, and so is a copy holding a file sync did not write: removing
+    it would lose that file."""
     if not os.path.lexists(target):
         return None
     if is_link(target):
         pointed = link_target(target)
-        if _inside(pointed, the_store.versions) or project.spec == LINK:
+        if _inside(pointed, the_store.versions) or (project.spec == LINK and is_checkout(Path(pointed))):
             return "link"
         raise SyncError(f"{LINK}/ is a link to {display(pointed)}, which cortex sync did not make. Move or remove it, "
                         "then run cortex sync again.")
-    if target.is_dir() and (target / MARKER).is_file():
+    if target.is_dir() and not (target / ".git").exists() and (target / MARKER).is_file():
+        marker = read_marker(target)
+        if marker is None:
+            raise SyncError(f"{LINK}/ holds a {MARKER} file cortex sync cannot read: it did not write this directory. "
+                            "Move or remove it, then run cortex sync again.")
+        changed = changed_files(target, marker)
+        if changed:
+            shown = "\n".join(f"    {rel}" for rel in changed[:20]) + ("\n    …" if len(changed) > 20 else "")
+            raise SyncError(f"{LINK}/ is a copy cortex sync made, and it holds files sync did not write:\n{shown}\n"
+                            "Overlays belong in agents/, not in the copy. Move those files out, or remove cortex/ "
+                            "yourself, then run cortex sync again.")
         return "copy"
     raise SyncError(f"{LINK}/ is {describe(target)}, which cortex sync did not write. It would shadow the spec "
                     f"{config.LOCAL_FILE} names, and sync never deletes what it did not write: move or remove it, "
@@ -102,17 +147,17 @@ def existing_entry(target: Path, the_store: store.Store, project: config.Project
 
 
 # --------------------------------------------------------------------------- #
-# Making and removing the link and the copy
+# Making, swapping and removing the link and the copy
 # --------------------------------------------------------------------------- #
 
-def remove_entry(kind: Optional[str], target: Path) -> None:
+def _discard(kind: Optional[str], path: Path) -> None:
     if kind == "link":
         if os.name == "nt":
-            os.rmdir(target)                   # a junction, or a directory link: never what it points at
+            os.rmdir(path)                     # a junction, or a directory link: never what it points at
         else:
-            os.unlink(target)
+            os.unlink(path)
     elif kind == "copy":
-        store.remove_tree(target)
+        store.remove_tree(path)
 
 
 def make_link(target: Path, source: Path) -> None:
@@ -130,22 +175,49 @@ def make_link(target: Path, source: Path) -> None:
         subprocess.run([cmd, "/c", "mklink", "/J", str(target), str(source)], check=True, capture_output=True)
 
 
-def make_copy(target: Path, source: Path, label: str) -> None:
-    staging = Path(tempfile.mkdtemp(prefix=".cortex-sync-", dir=target.parent))
+def _aside(root: Path) -> Path:
+    return root / f"{STAGING}{os.getpid()}-{secrets.token_hex(4)}"
+
+
+def stage_link(root: Path, source: Path) -> Path:
+    path = _aside(root)
+    make_link(path, source)
+    return path
+
+
+def stage_copy(root: Path, source: Path, version: Optional[str], checkout: Optional[str]) -> Path:
+    """A read-only copy of ``source``'s three trees, beside ``cortex/``, with its manifest."""
+    staging = Path(tempfile.mkdtemp(prefix=STAGING, dir=root))
     try:
         for tree in store.SPEC_TREES:
-            shutil.copytree(source / tree, staging / tree, ignore=shutil.ignore_patterns(".active-theme"))
-        (staging / MARKER).write_text(f"{label}\n{MARKER_NOTE}\n", encoding="utf-8")
-        os.rename(staging, target)
+            # A checkout's theme marker is its developer's choice, never the project's.
+            shutil.copytree(source / tree, staging / tree, ignore=shutil.ignore_patterns(".active-*"))
+        marker = {"note": MARKER_NOTE, "version": version, "from": checkout,
+                  "files": {rel: _digest(path) for rel, path in sorted(_files(staging).items())}}
+        (staging / MARKER).write_text(json.dumps(marker, indent=1) + "\n", encoding="utf-8")
+        store.make_read_only(staging)
     except BaseException:
         if staging.exists():
             store.remove_tree(staging)
         raise
-    store.make_read_only(target)
+    return staging
 
 
-def is_checkout(path: Path) -> bool:
-    return all((path / tree).is_dir() for tree in ("agents", "templates"))
+def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path]:
+    """Put ``new`` at ``target`` — or nothing — and return what was there, moved aside, for the
+    caller to remove once everything else is written. On failure, the old entry goes back."""
+    aside = None
+    if old is not None:
+        aside = _aside(target.parent)
+        os.rename(target, aside)
+    if new is not None:
+        try:
+            os.rename(new, target)
+        except OSError:
+            if aside is not None:
+                os.rename(aside, target)
+            raise
+    return aside
 
 
 # --------------------------------------------------------------------------- #
@@ -158,6 +230,7 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
         raise SyncError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory "
                         "a Cortex project")
     project = config.load(root)
+    out.write(f"Project: {display(root)}\n")
     mode = mode or project.sync or "store"
     the_store = store.Store()
     target = Path(root) / LINK
@@ -166,42 +239,49 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
     if source is not None:
         spec_source = Path(os.path.abspath(source))
         if not is_checkout(spec_source):
-            raise SyncError(f"--from {display(source)}: no Cortex checkout there — it holds no agents/ and templates/")
+            raise SyncError(f"--from {display(source)}: no Cortex checkout there — it holds no agents/, templates/ "
+                            "and docs/")
         err.write(f"warning: the spec is the checkout at {display(str(spec_source))}, not Cortex {project.version}: "
                   "no version is checked (--from)\n")
-        label = f"from {display(str(spec_source))}"
     else:
         how = the_store.ensure(project.version)
         spec_source = the_store.path(project.version)
-        label = str(project.version)
         said = {"stored": "in the store", "written": "written to the store, from this cortex",
                 "downloaded": "downloaded to the store, checked against its SHA256SUMS"}[how]
         out.write(f"Cortex {project.version}: {said} — {display(str(spec_source))}\n")
 
+    # Everything is prepared and checked before anything of the project moves: the new
+    # cortex.local.toml, the new link or copy beside cortex/. Then one rename puts it in place.
+    spec = display(str(spec_source)) if mode == "store" else LINK
+    local_text = config.render_spec(root, spec)
+    keep, new = False, None
+    if mode == "link":
+        keep = existing == "link" and os.path.normcase(link_target(target)) == os.path.normcase(str(spec_source))
+        new = None if keep else stage_link(Path(root), spec_source)
+    elif mode == "copy":
+        marker = read_marker(target) if existing == "copy" else None
+        keep = bool(marker) and source is None and marker.get("version") == str(project.version) \
+            and marker.get("from") is None
+        new = None if keep else stage_copy(Path(root), spec_source, None if source else str(project.version),
+                                           display(str(spec_source)) if source else None)
+    try:
+        aside = None if keep else swap(target, new, existing)
+    except OSError:
+        if new is not None:
+            _discard(mode, new)
+        raise
+    config.write_local_text(root, local_text)
+    if aside is not None:
+        _discard(existing, aside)
+
     if mode == "store":
-        remove_entry(existing, target)
-        spec = display(str(spec_source))
         out.write("The spec is read where it is: nothing of it is in the project.\n")
     elif mode == "link":
-        if existing == "link" and os.path.normcase(link_target(target)) == os.path.normcase(str(spec_source)):
-            pass
-        else:
-            remove_entry(existing, target)
-            make_link(target, spec_source)
-        spec = LINK
         out.write(f"{LINK}/ links to {display(str(spec_source))}.\n")
     else:
-        if not (existing == "copy" and source is None and synced_version(target) == label):
-            remove_entry(existing, target)
-            make_copy(target, spec_source, label)
-        spec = LINK
         out.write(f"{LINK}/ is a read-only copy of {display(str(spec_source))}.\n")
-
-    config.write_spec(root, spec)
     out.write(f'{config.LOCAL_FILE}: spec = "{spec}"\n')
-    if mode != "store" and not _ignored(Path(root)):
-        err.write(f"note: {LINK}/ is not in {Path(root).name}/.gitignore — add a `/{LINK}/` line, so that git "
-                  "does not track it\n")
+    _notes(Path(root), mode, err)
     theme = project.active_theme
     if theme != "none" and not any((base / "agents" / "personalities" / theme).is_dir()
                                    for base in (spec_source, Path(root))):
@@ -209,12 +289,39 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
                   "the Prompt Manager would not find it\n")
 
 
-def _ignored(root: Path) -> bool:
+def ignored(root: Path, name: str) -> Optional[bool]:
+    """Whether git ignores ``name`` in the project: asked of git when the project is a repository
+    of it; ``None`` when there is no repository to ask about."""
+    git = shutil.which("git")
+    if git is not None:
+        try:
+            proc = subprocess.run([git, "-C", str(root), "check-ignore", "-q", "--", name],
+                                  capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            proc = None
+        if proc is not None and proc.returncode in (0, 1):
+            return proc.returncode == 0
+        if proc is not None:
+            return None                                    # no repository here
+    if not (root / ".git").exists():
+        return None
+    # No git to ask: .gitignore's own lines. A link is a file to git — `cortex/` does not match it.
+    directory = (root / name).is_dir() and not is_link(root / name)
+    wanted = {name, f"/{name}"} | ({f"{name}/", f"/{name}/"} if directory else set())
     try:
-        lines = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+        lines = (root / ".gitignore").read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return False
-    return any(line.strip() in (LINK, f"{LINK}/", f"/{LINK}", f"/{LINK}/") for line in lines)
+    return any(line.strip() in wanted for line in lines)
+
+
+def _notes(root: Path, mode: str, err: TextIO) -> None:
+    if mode != "store" and ignored(root, LINK) is False:
+        err.write(f"note: git does not ignore {LINK}/ — add a `/{LINK}` line to .gitignore, without the final slash: "
+                  "a link is a file to git\n")
+    if ignored(root, config.LOCAL_FILE) is False:
+        err.write(f"note: git does not ignore {config.LOCAL_FILE}, which holds this machine's paths — add it to "
+                  ".gitignore\n")
 
 
 def run(args: List[str]) -> int:
@@ -235,7 +342,22 @@ def run(args: List[str]) -> int:
     try:
         sync(working_directory(), options.mode, options.source, sys.stdout, sys.stderr)
     except (config.ConfigError, store.StoreError, SyncError) as error:
-        sys.stdout.flush()
-        sys.stderr.write(f"cortex sync: {error}\n")
-        return 1
+        return failed("cortex sync", str(error))
+    except OSError as error:
+        return failed("cortex sync", os_error(error))
+    except subprocess.CalledProcessError as error:
+        return failed("cortex sync", f"{' '.join(map(str, error.cmd))} failed: "
+                                     f"{(error.stderr or b'').decode(errors='replace').strip() or error.returncode}")
     return 0
+
+
+def os_error(error: OSError) -> str:
+    """An OSError as the user reads it: what failed, on which path."""
+    paths = [display(str(p)) for p in (error.filename, error.filename2) if p]
+    return f"{error.strerror or error}" + (f": {' → '.join(paths)}" if paths else "")
+
+
+def failed(command: str, message: str, code: int = 1) -> int:
+    sys.stdout.flush()
+    sys.stderr.write(f"{command}: {message}\n")
+    return code
