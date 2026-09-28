@@ -42,12 +42,12 @@ class InstallShTests(unittest.TestCase):
         self.cortex_home = self.home / ".cortex"
         self.target = machine_target()
 
-    def install(self, *args, shell="sh", first_on_path=(), stdin=False):
+    def install(self, *args, shell="sh", first_on_path=(), stdin=False, system_path=None):
         env = {
             "HOME": str(self.home),
             "CORTEX_HOME": str(self.cortex_home),
             "CORTEX_RELEASES_URL": self.release.url,
-            "PATH": os.pathsep.join([*map(str, first_on_path), *SYSTEM_PATH]),
+            "PATH": os.pathsep.join([*map(str, first_on_path), *(system_path or SYSTEM_PATH)]),
         }
         if stdin:       # curl … | sh -s -- ARGS
             with open(SCRIPT, "rb") as script:
@@ -203,12 +203,53 @@ class InstallShTests(unittest.TestCase):
                 self.assertIn("CORTEX_RELEASES_URL must be https://", proc.stderr)
                 self.assertFalse(self.cortex_home.exists())
 
+    def without_curl(self):
+        """The system's commands, but curl: install.sh downloads with wget."""
+        if not shutil.which("wget"):
+            self.skipTest("needs wget")
+        tools = self.tmp / "no-curl"
+        tools.mkdir()
+        for directory in reversed(SYSTEM_PATH):
+            for entry in Path(directory).glob("*") if os.path.isdir(directory) else ():
+                if entry.name != "curl" and not (tools / entry.name).exists():
+                    (tools / entry.name).symlink_to(entry)
+        return [str(tools)]
+
+    def test_with_wget_it_installs(self):
+        proc = self.install(system_path=self.without_curl())
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(self.installed().exists())
+
+    def test_a_redirect_off_https_is_refused_with_curl_and_with_wget(self):
+        # The releases may redirect — GitHub's do — but only to https: the first URL may be plain
+        # http to this machine, for a test, and no redirect may.
+        self.release.redirect("/latest/download/SHA256SUMS", f"{self.release.url}/download/9.9.9/SHA256SUMS")
+        for tools in (None, "wget"):
+            with self.subTest(tools=tools or "curl"):
+                proc = self.install(system_path=self.without_curl() if tools else None)
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn("could not download", proc.stderr)
+                self.assertFalse(self.installed().exists())
+                shutil.rmtree(self.tmp / "no-curl", ignore_errors=True)
+
+    def test_a_user_part_or_a_port_that_is_no_number_is_refused(self):
+        for url in ("http://127.0.0.1:1@example.invalid", "https://user@github.com/adorey/cortex/releases",
+                    "http://localhost:x/releases", "http://127.0.0.1.example.com/releases", "http://[::1]:/x"):
+            with self.subTest(url=url):
+                env = {"HOME": str(self.home), "CORTEX_HOME": str(self.cortex_home), "CORTEX_RELEASES_URL": url,
+                       "PATH": os.pathsep.join(SYSTEM_PATH)}
+                proc = subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True,
+                                      stdin=subprocess.DEVNULL)
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn("CORTEX_RELEASES_URL must be https://", proc.stderr)
+                self.assertFalse(self.cortex_home.exists())
+
     def test_a_binary_that_cannot_run_says_why(self):
         self.release.replace_binary(self.target, b"#!/bin/sh\necho 'cannot map libpython' >&2\nexit 127\n")
         proc = self.install()
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("cannot map libpython", proc.stderr)
-        self.assertIn("a TMPDIR it may execute from", proc.stderr)
+        self.assertIn("a TMPDIR and a CORTEX_HOME it may execute from", proc.stderr)
         self.assertFalse(self.installed().exists())
 
     def test_cut_anywhere_in_its_last_line_it_runs_nothing(self):

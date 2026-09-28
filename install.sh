@@ -46,6 +46,51 @@ usage() {
 # Everything runs from main(), called on the script's last line: piped from curl, a download
 # cut short defines a function and runs nothing, where top-level commands would have run up to
 # the cut.
+# The releases' URL: https, or plain http to this machine for a test — its host exactly, a port of
+# digits at most. No user part: `http://127.0.0.1:1@example.com` names example.com.
+releases_url_ok() {
+    case "$1" in
+        *@*|*[[:space:]]*) return 1 ;;
+        https://?*) return 0 ;;
+        http://*) ;;
+        *) return 1 ;;
+    esac
+    hostport="${1#http://}"
+    hostport="${hostport%%/*}"
+    case "$hostport" in
+        127.0.0.1|localhost|"[::1]") return 0 ;;
+        127.0.0.1:*|localhost:*|"[::1]":*) port="${hostport##*:}" ;;
+        *) return 1 ;;
+    esac
+    case "$port" in
+        ""|*[!0-9]*) return 1 ;;
+    esac
+}
+
+# wget follows a redirect to any scheme: each hop is asked for, and checked, here — https only, as
+# curl's --proto-redir does.
+wget_fetch() {
+    url="$1"
+    hops=0
+    while :; do
+        if response="$(wget --quiet --server-response --max-redirect=0 --tries=3 --output-document="$2" "$url" 2>&1)"; then
+            return 0
+        fi
+        location="$(printf '%s\n' "$response" | sed -n 's/^ *[Ll]ocation: *//p' | tr -d '\r' | tail -n 1)"
+        [ -n "$location" ] || return 1
+        case "$location" in
+            /*) location="${url%%://*}://$(printf '%s' "${url#*://}" | cut -d / -f 1)$location" ;;
+        esac
+        case "$location" in
+            https://*) ;;
+            *) say "refused: $url redirects to $location, which is not https" >&2; return 1 ;;
+        esac
+        hops=$((hops + 1))
+        [ "$hops" -le 10 ] || return 1
+        url="$location"
+    done
+}
+
 main() {
     # --- Arguments -------------------------------------------------------------
     while [ $# -gt 0 ]; do
@@ -88,10 +133,8 @@ main() {
     esac
     # SHA256SUMS comes from where the archive does: it proves the download whole, not its origin.
     # That origin is https — or this machine, for a test — never a plain http elsewhere.
-    case "$RELEASES_URL" in
-        https://*|http://127.0.0.1|http://127.0.0.1[:/]*|http://localhost|http://localhost[:/]*) ;;
-        *) fail "CORTEX_RELEASES_URL must be https:// — http:// only to 127.0.0.1 or localhost (got $RELEASES_URL)" ;;
-    esac
+    releases_url_ok "$RELEASES_URL" ||
+        fail "CORTEX_RELEASES_URL must be https:// — http:// only to 127.0.0.1, localhost or [::1] (got $RELEASES_URL)"
 
     # --- This machine ------------------------------------------------------------
     os="$(uname -s)"
@@ -121,10 +164,10 @@ main() {
     # --- Tools -----------------------------------------------------------------
     if command -v curl >/dev/null 2>&1; then
         fetch() { curl --fail --silent --show-error --location --proto '=https,http' --proto-redir '=https' --retry 2 --output "$2" "$1"; }
-    elif command -v wget >/dev/null 2>&1; then
-        fetch() { wget --quiet --tries=3 --output-document="$2" "$1"; }
+    elif command -v wget >/dev/null 2>&1 && wget --help 2>&1 | grep -q -- '--max-redirect'; then
+        fetch() { wget_fetch "$1" "$2"; }
     else
-        fail "needs curl or wget to download the release"
+        fail "needs curl, or GNU wget, to download the release"
     fi
 
     if command -v sha256sum >/dev/null 2>&1; then
@@ -170,7 +213,7 @@ main() {
     if ! installed_version="$("$work/unpacked/cortex" --version 2>"$work/run.err")"; then
         say "The binary does not run on this machine:" >&2
         sed 's/^/    /' "$work/run.err" >&2
-        fail "it needs a 64-bit Linux with glibc 2.28 or later, or macOS on Apple silicon, and a TMPDIR it may execute from. Nothing was installed."
+        fail "it needs a 64-bit Linux with glibc 2.28 or later, or macOS on Apple silicon, and a TMPDIR and a CORTEX_HOME it may execute from. Nothing was installed."
     fi
 
     # --- The command's name ----------------------------------------------------
