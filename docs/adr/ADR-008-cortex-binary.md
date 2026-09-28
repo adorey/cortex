@@ -371,3 +371,7 @@ Acceptance criteria:
 - **Names read from the project are printed escaped** — the target of a link at `cortex/`, a file listed as added, changed or missing — as the files' values are.
 - **A copy left writable is not an error of `cortex validate`.** A sync killed between putting a copy in place and sealing it leaves its root writable: validate reads it the same, and the next sync seals it again.
 
+### Phase 2 — found in the fifth review
+
+- **One lock file on Windows, not one per project.** A file per project piled up in the user's temporary directory, and none was ever removed — removing a lock file is a race of its own. Every project now locks a byte of the same file, `cortex-sync.lock`, at an offset drawn from its path: two projects that draw the same byte only wait for each other.
+
