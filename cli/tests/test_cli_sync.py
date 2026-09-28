@@ -432,17 +432,28 @@ class HousekeepingTests(SyncTestCase):
         from cortex_cli import sync
         from cortex_cli.version import VERSION
 
-        project = self.project(version=VERSION, extra='sync = "copy"\n')
-        real = sync.swap
+        import errno
+
+        real_swap, real_rename = sync.swap, os.rename
 
         def racing(target, new, old):
             (target / "agents").mkdir(parents=True)             # another sync's copy, put in place meanwhile
-            return real(target, new, old)
+            return real_swap(target, new, old)
 
-        with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), mock.patch.object(sync, "swap", racing):
-            with self.assertRaisesRegex(sync.SyncError, "was put back while this sync ran"):
-                sync.sync(str(project), None, None, io.StringIO(), io.StringIO())
-        self.assertEqual(list(project.glob(".cortex-sync-*")), [])
+        def as_macos(src, dst):
+            # macOS answers EACCES, not ENOTEMPTY, for a read-only directory renamed onto another.
+            if os.path.isdir(dst):
+                raise PermissionError(errno.EACCES, "Permission denied", str(src), None, str(dst))
+            return real_rename(src, dst)
+
+        for name, rename in (("this system", real_rename), ("macOS", as_macos)):
+            with self.subTest(rename=name):
+                project = self.project(f"app-{name.replace(' ', '-')}", version=VERSION, extra='sync = "copy"\n')
+                with mock.patch.dict(os.environ, {"CORTEX_HOME": str(self.home)}), \
+                        mock.patch.object(sync, "swap", racing), mock.patch.object(sync.os, "rename", rename):
+                    with self.assertRaisesRegex(sync.SyncError, "was put back while this sync ran"):
+                        sync.sync(str(project), None, None, io.StringIO(), io.StringIO())
+                self.assertEqual(list(project.glob(".cortex-sync-*")), [])
 
 
 class SafetyTests(SyncTestCase):
