@@ -169,7 +169,8 @@ class Runtime:
         )
 
         if result.skipped:
-            return {"skipped": True, "reason": result.reason, "subject": subject}
+            return {"skipped": True, "reason": result.reason, "run_id": result.run_id, "subject": subject,
+                    "cortex_version": resolved.cortex_version}
         if result.error:  # the run was recorded as failed; surface it without a raw 500
             return {"failed": True, "error": result.error, "run_id": result.run_id, "subject": subject,
                     "cortex_version": resolved.cortex_version}
