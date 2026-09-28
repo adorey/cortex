@@ -149,6 +149,12 @@ def bootstrap_of_cortex(content: bytes) -> bool:
     return content.startswith(b"# Cortex AI Team") or PERSONALITY_BEGIN in content
 
 
+def reads_the_local_file(content: bytes) -> bool:
+    """A bootstrap of this cortex's templates, which read ``spec`` in ``cortex.local.toml``. An
+    older one reads ``cortex/`` as the submodule it was, and finds no spec once it is gone."""
+    return config.LOCAL_FILE.encode() in content
+
+
 def _refuse_a_file_on_the_way(path: Path, what: str) -> None:
     """A directory to create — ``path`` or one of its parents — that is a file already would stop
     the writes half-way: refused before any of them."""
@@ -332,6 +338,9 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         if not bootstrap_of_cortex(kept):
             err.write(f"note: {display(str(instructions_file))} holds no Cortex bootstrap: the tool will not find "
                       f"Cortex — {again}\n")
+        elif not reads_the_local_file(kept):
+            err.write(f"note: {display(str(instructions_file))} is an older Cortex bootstrap: it does not read "
+                      f"{config.LOCAL_FILE}, which names the spec now — {again}\n")
         elif kept.split(b"\n", 1)[0] != bootstrap.read_bytes().split(b"\n", 1)[0]:
             err.write(f"note: {display(str(instructions_file))} was written for "
                       f"{'a single project' if workspace else 'a workspace'} — {again}\n")
@@ -360,9 +369,17 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         # Found, not written: a file of another tool's, which a new project's default leaves alone.
         for name, rel in TOOLS.items():
             other = root / rel
-            if other != instructions_file and other.is_file() and not bootstrap_of_cortex(other.read_bytes()):
-                err.write(f"note: {rel} is there and was kept: it holds no Cortex bootstrap — "
-                          f"cortex init --tool {name} --force replaces it, and keeps it as .bak\n")
+            if other == instructions_file or not other.is_file():
+                continue
+            content = other.read_bytes()
+            if not bootstrap_of_cortex(content):
+                found = "it holds no Cortex bootstrap"
+            elif not reads_the_local_file(content):
+                found = f"an older Cortex bootstrap, which does not read {config.LOCAL_FILE}"
+            else:
+                continue
+            err.write(f"note: {rel} is there and was kept: {found} — "
+                      f"cortex init --tool {name} --force replaces it, and keeps it as .bak\n")
         if project is not None and not known_before and instructions_file is not None:
             err.write(f"note: no instructions file of a known tool was here, and {TOOLS['copilot']} is written: "
                       "a project of --tool custom names it again, with --instructions-file\n")
