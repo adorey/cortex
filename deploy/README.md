@@ -50,10 +50,15 @@ into the image).
 
 A project with a `cortex.toml` also needs the store that `cortex sync` fills on the host. Set
 `CORTEX_STORE_PATH` in `.env` to it — usually `~/.cortex`, written as an absolute path — and
-compose mounts it read-only at `/cortex-home`. The runtime then resolves the version the project
-pins from there ([ADR-008 §3.6](../docs/adr/ADR-008-cortex-binary.md)). When it is unset, an empty
-directory stands in: a project without `cortex.toml` needs no store, and a pinned version is
-refused, `422`, with the version named.
+compose mounts its `versions/`, and nothing else of it, read-only at `/cortex-home/versions`: the
+container never sees the binary or the machine's own settings. The runtime then resolves the
+version the project pins from there ([ADR-008 §3.6](../docs/adr/ADR-008-cortex-binary.md)). When
+it is unset, an empty store stands in: a project without `cortex.toml` needs no store, and a
+pinned version is refused, `422`, with the version named. Run `cortex sync` in the project before
+setting it: compose asks Docker not to create a missing `versions/`, which it would own as root,
+but Docker Desktop creates it all the same.
+
+The theme is the one `cortex.toml` names, unless `CORTEX_THEME` sets another.
 
 **Explore the API**: Swagger UI at `https://cortex.local.dev/docs`, ReDoc at `/redoc`. A
 versioned OpenAPI + a ready-to-import **Postman collection** live in [`docs/api/`](../docs/api/)

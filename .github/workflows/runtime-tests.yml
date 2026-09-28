@@ -6,11 +6,13 @@ on:
     paths:
       - "runtime/**"
       - "core/**"
+      - "deploy/**"
       - ".github/workflows/runtime-tests.yml"
   pull_request:
     paths:
       - "runtime/**"
       - "core/**"
+      - "deploy/**"
       - ".github/workflows/runtime-tests.yml"
 
 # A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
