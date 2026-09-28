@@ -43,9 +43,6 @@ usage() {
     say "                 (default: cortex, or cortex-ai when another cortex comes first on PATH)"
 }
 
-# Everything runs from main(), called on the script's last line: piped from curl, a download
-# cut short defines a function and runs nothing, where top-level commands would have run up to
-# the cut.
 # The releases' URL: https, or plain http to this machine for a test — its host exactly, a port of
 # digits at most. No user part: `http://127.0.0.1:1@example.com` names example.com.
 releases_url_ok() {
@@ -73,11 +70,15 @@ wget_fetch() {
     url="$1"
     hops=0
     while :; do
-        if response="$(wget --quiet --server-response --max-redirect=0 --tries=3 --output-document="$2" "$url" 2>&1)"; then
+        if response="$(wget --no-verbose --server-response --max-redirect=0 --tries=3 --output-document="$2" "$url" 2>&1)"; then
             return 0
         fi
         location="$(printf '%s\n' "$response" | sed -n 's/^ *[Ll]ocation: *//p' | tr -d '\r' | tail -n 1)"
-        [ -n "$location" ] || return 1
+        if [ -z "$location" ]; then
+            # Why: wget's own lines — a certificate, a name that does not resolve — not the headers.
+            printf '%s\n' "$response" | grep -v '^  ' | sed 's/^/    /' >&2
+            return 1
+        fi
         case "$location" in
             /*) location="${url%%://*}://$(printf '%s' "${url#*://}" | cut -d / -f 1)$location" ;;
         esac
@@ -91,6 +92,9 @@ wget_fetch() {
     done
 }
 
+# Everything runs from main(), called on the script's last line: piped from curl, a download
+# cut short defines a function and runs nothing, where top-level commands would have run up to
+# the cut.
 main() {
     # --- Arguments -------------------------------------------------------------
     while [ $# -gt 0 ]; do

@@ -240,6 +240,20 @@ class InstallShTests(unittest.TestCase):
                 self.assertFalse(self.installed().exists())
                 shutil.rmtree(self.tmp / "no-curl", ignore_errors=True)
 
+    def test_wget_says_why_a_download_failed(self):
+        # "could not download" alone hid the cause: a certificate, a name, a refused connection.
+        import socket
+
+        with socket.socket() as probe:          # a port nothing listens on
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        self.release.url = f"https://127.0.0.1:{port}/releases"
+        proc = self.install(system_path=self.without_curl())
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("could not download", proc.stderr)
+        self.assertRegex(proc.stderr, r"(?i)refused|failed")
+        self.assertFalse(self.installed().exists())
+
     def test_a_user_part_or_a_port_that_is_no_number_is_refused(self):
         for url in ("http://127.0.0.1:1@example.invalid", "https://user@github.com/adorey/cortex/releases",
                     "http://localhost:x/releases", "http://127.0.0.1.example.com/releases", "http://[::1]:/x"):
