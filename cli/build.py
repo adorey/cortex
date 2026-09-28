@@ -50,7 +50,7 @@ REPO = CLI.parent
 BUILD = CLI / "build"
 STAMP = CLI / "cortex_cli" / "_stamp.py"
 KNOWN_SPECS = CLI / "cortex_cli" / "_known_specs.py"
-sys.path.insert(0, str(REPO / "core"))
+sys.path[:0] = [str(REPO / "core"), str(CLI)]     # run from anywhere, or loaded by the tests
 from cortex_core.project import is_version  # noqa: E402 — the grammar the command and the runtime read
 from cortex_cli.semver import FIRST_SPEC_ARCHIVE, Version  # noqa: E402
 # (operating system, machine) as Python names them -> the target's name in the release (§3.1)
