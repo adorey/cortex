@@ -53,6 +53,16 @@ class FileTests(unittest.TestCase):
 
     def test_a_local_file(self):
         project.check_local({"theme": "none", "spec": "/x"})
+        # sync's own keys: the developer's claude_access, and the entry it keeps for Claude Code.
+        project.check_local({"spec": "/x", "claude_access": False, "claude_entry": "/home/x/.cortex/versions/1.0.0"})
+        for data, fragment in (({"claude_entry": 1}, '"claude_entry" must be a string'),
+                               ({"claude_entry": ""}, '"claude_entry" is empty'),
+                               ({"claude_access": "yes"}, '"claude_access" must be true or false')):
+            with self.subTest(data=data):
+                with self.assertRaisesRegex(project.ProjectFileError, fragment):
+                    project.check_local(data)
+        with self.assertRaisesRegex(project.ProjectFileError, 'unknown key "claude_entry"'):
+            project.check_project({"version": "1.0.0", "theme": "h2g2", "claude_entry": "/x"})
         with self.assertRaisesRegex(project.ProjectFileError, 'unknown key "version"'):
             project.check_local({"version": "1.0.0"})
 
