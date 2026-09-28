@@ -347,3 +347,11 @@ Acceptance criteria:
 - **Sync names the project root** it found. The search still goes up through the directories: in a workspace, a service is a repository of its own inside the workspace root, and stopping at a repository's edge would miss the workspace's `cortex.toml`.
 - **An empty certificate directory** where the build machine kept one counts as no certificates: the system's bundle is loaded.
 
+### Phase 2 — found in the second review
+
+- **A release from 1.0.0 without its spec archive fails the build** (§3.3). The build skipped it in silence, and the binary would have checked that version against its `SHA256SUMS` alone; a release before 1.0.0 still has none to give. `cortex --version --verbose` prints the table a binary carries, and CI checks, of each binary it builds, that it is the table the build was given — a module left out of the bundle would otherwise check nothing, as a build made without `--known-specs` does, which says so.
+- **What an interrupted or a racing sync leaves beside `cortex/` is removed** (§3.5): a staged link or copy, an entry moved aside, once no sync can still be using it — ten minutes. A link among them named this machine's store, and `/cortex` did not keep it out of a commit. What is removed is decided by what it is, not by what it was when sync looked; a `cortex.local.toml` sync cannot write puts `cortex/` back as it was; and a sync that finds `cortex/` put back meanwhile says so.
+- **A copy that lost a file is copied again** by sync, which says which files; `cortex validate` refuses a copy that no longer matches its manifest — a file added, changed or missing — rather than validate against another spec.
+- **A value `cortex.toml` is refused for is shown escaped**, as JSON writes it: a committed file may hold a newline or a terminal's control sequence.
+- **A stored version left writable is found by its files**, on every target: on Windows a directory never tells.
+
