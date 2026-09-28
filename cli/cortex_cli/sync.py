@@ -470,9 +470,9 @@ def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, er
     project = config.load(root)
     out.write(f"Project: {display(root)}\n")
     if claude_access is not None:
-        # This developer's choice, kept for the next syncs: cortex.local.toml's wins over the team's.
-        config.write_local(root, "claude_access", claude_access)
-        project = config.load(root)
+        # This developer's choice, written with spec and kept for the next syncs: cortex.local.toml's
+        # wins over the team's.
+        project.local_claude_access = claude_access
     mode = mode or project.sync or "store"
     the_store = store.Store()
     target = Path(root) / LINK
@@ -496,7 +496,9 @@ def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, er
     # Everything is prepared and checked before anything of the project moves: the new
     # cortex.local.toml, the new link or copy beside cortex/. Then one rename puts it in place.
     spec = display(str(spec_source)) if mode == "store" else LINK
-    local_text = config.render_spec(root, spec)
+    local_text = config.render_local(root, {"spec": spec, **({"claude_access": claude_access}
+                                                             if claude_access is not None else {})},
+                                     {"spec": "written by `cortex sync`"})
     keep, new = False, None
     if mode == "link":
         keep = existing == "link" and os.path.normcase(link_target(target)) == os.path.normcase(str(spec_source))
@@ -538,7 +540,7 @@ def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, er
     out.write(f'{config.LOCAL_FILE}: spec = "{spec}"\n')
     if notes:
         _notes(Path(root), mode, err)
-    _claude(Path(root), project, the_store, None if mode == "copy" else spec_source, out, err)
+    _claude(Path(root), project, None if mode == "copy" else spec_source, out, err)
     theme = project.active_theme
     if theme != "none" and not any((base / "agents" / "personalities" / theme).is_dir()
                                    for base in (spec_source, Path(root))):
@@ -546,16 +548,23 @@ def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, er
                   "the Prompt Manager would not find it\n")
 
 
-def _claude(root: Path, project: config.Project, the_store: store.Store, spec: Optional[Path],
-            out: TextIO, err: TextIO) -> None:
+def _claude(root: Path, project: config.Project, spec: Optional[Path], out: TextIO, err: TextIO) -> None:
     """Keep Claude Code's permission to read the spec without asking, when the project or the
-    developer asks for it (``claude_access``). A copy is inside the project: nothing to allow."""
-    allow = display(str(spec)) if project.active_claude_access and spec is not None else None
+    developer asks for it (``claude_access``) — and only the entry Cortex wrote, recorded as
+    ``claude_entry``. A copy is inside the project: nothing to allow. While neither file sets
+    ``claude_access``, and Cortex wrote no entry, Claude Code's settings are left alone."""
+    access = project.active_claude_access
+    if access is None and project.claude_entry is None:
+        return
+    allow = claude.entry_for(spec) if access and spec is not None else None
     try:
-        said = claude.update(root, the_store.versions, allow)
+        said, owned = claude.update(root, allow, project.claude_entry)
     except claude.ClaudeSettingsError as error:
         err.write(f"warning: {error}\n")
         return
+    if owned != project.claude_entry:
+        config.write_local(str(root), {"claude_entry": owned},
+                           {"claude_entry": f"written by `cortex sync` — the entry it keeps in {claude.SETTINGS}"})
     if said:
         out.write(f"{said}\n")
     if allow is not None:
