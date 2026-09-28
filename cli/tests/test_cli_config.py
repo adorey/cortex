@@ -19,7 +19,8 @@ class VersionTests(unittest.TestCase):
         self.assertEqual([str(v) for v in sorted(map(Version, reversed(ordered)))], ordered)
 
     def test_what_is_no_version(self):
-        for text in ("1.0", "v1.0.0", "01.0.0", "1.0.0+build", "1.0.0-", "1.0.0-01", "latest", "", "1.0.0 "):
+        for text in ("1.0", "v1.0.0", "01.0.0", "1.0.0+build", "1.0.0-", "1.0.0-01", "latest", "", "1.0.0 ",
+                     "1.0.0\n", "\u0661.0.0"):
             with self.subTest(text=text):
                 self.assertFalse(Version.valid(text))
                 with self.assertRaises(ValueError):
@@ -81,7 +82,7 @@ class ProjectFileTests(ConfigTestCase):
         self.assert_refused('version "1.0" is no version')
 
     def test_a_theme_is_a_name_not_a_path(self):
-        for theme in ("../evil", "a/b", ".hidden", "a b"):
+        for theme in ("../evil", "a/b", ".hidden", "a b", "h2g2\\n"):
             with self.subTest(theme=theme):
                 self.write("cortex.toml", f'version = "1.0.0"\ntheme = "{theme}"\n')
                 self.assert_refused("is no theme name")
