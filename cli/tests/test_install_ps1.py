@@ -1,9 +1,10 @@
 """``install.ps1`` — the one-line install on Windows (ADR-008 §3.2).
 
 The script runs against a release served from this machine (``release_fixture``), under Windows
-PowerShell 5.1 and PowerShell 7 when both are there. Its stand-in binary is no program: what is
-checked is what the script downloads, verifies, and installs under which name. The binary
-workflow installs a real one.
+PowerShell 5.1 and PowerShell 7 when both are there. Its stand-in binary is a copy of
+``hostname.exe``: a program Windows starts, which the script runs once before installing it. What
+is checked is what the script downloads, verifies, and installs under which name; the binary
+workflow installs the real one.
 
 The user's PATH is left alone (``CORTEX_NO_MODIFY_PATH``), but by the one test that checks it is
 written, which runs in CI only and puts the value back.
@@ -102,6 +103,36 @@ class InstallPs1Tests(unittest.TestCase):
         proc = self.install()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(self.installed().read_bytes(), stand_in("9.9.9", windows=True))
+
+    def test_a_file_windows_does_not_start_is_not_installed(self):
+        from release_fixture import NOT_A_PROGRAM
+
+        self.release.replace_windows_binary(NOT_A_PROGRAM)
+        proc = self.install()
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("does not run here", proc.stderr)
+        self.assertFalse(self.installed().exists())
+
+    def test_installed_as_cortex_it_keeps_its_name_under_another_cortex(self):
+        other = self.fake_cortex()
+        self.install("-Version", "9.9.8", "-Name", "cortex", first_on_path=[other])
+        proc = self.install(first_on_path=[other])
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertFalse(self.installed("cortex-ai").exists())
+        self.assertEqual(self.installed().read_bytes(), stand_in("9.9.9", windows=True))
+        self.assertIn("typing cortex runs it, not this one", proc.stdout)
+
+    def test_plain_http_elsewhere_is_refused(self):
+        for url in ("http://example.com/releases", "file:///C:/releases"):
+            with self.subTest(url=url):
+                self.release.url, saved = url, self.release.url
+                try:
+                    proc = self.install()
+                finally:
+                    self.release.url = saved
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn("CORTEX_RELEASES_URL must be https://", proc.stderr)
+                self.assertFalse(self.cortex_home.exists())
 
     def test_bad_arguments(self):
         for args, message in ((["-Version", "latest"], "not a version"), (["-Name", "cx"], "-Name is cortex or cortex-ai")):

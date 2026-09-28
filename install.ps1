@@ -21,7 +21,8 @@
 #   CORTEX_HOME             where Cortex lives on this machine (default: %USERPROFILE%\.cortex)
 #   CORTEX_RELEASES_URL     where the releases are downloaded from (default: the GitHub
 #                           releases of adorey/cortex) - a mirror serving the same layout,
-#                           latest/download/ASSET and download/VERSION/ASSET
+#                           latest/download/ASSET and download/VERSION/ASSET, over https;
+#                           http only to this machine (127.0.0.1, localhost), for tests
 #   CORTEX_NO_MODIFY_PATH   set to 1 to leave the user's PATH as it is (-NoModifyPath)
 #
 # Windows PowerShell 5.1 and PowerShell 7 alike. ASCII only: Windows PowerShell reads a script
@@ -39,10 +40,29 @@ param(
 function Install-Cortex {
     param([string] $Version, [string] $Name, [bool] $NoModifyPath)
 
+    # The file a path leads to, through a symbolic link.
+    function Resolve-Final([string] $Path) {
+        $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+        if ($item -and $item.LinkType -and $item.Target) {
+            $to = @($item.Target)[0]
+            if (-not [IO.Path]::IsPathRooted($to)) { $to = Join-Path (Split-Path -Parent $Path) $to }
+            return [IO.Path]::GetFullPath($to)
+        }
+        return [IO.Path]::GetFullPath($Path)
+    }
+
+    # The cortex found first on PATH, unless it is the one in $BinDir, through a link or not.
+    function Get-OtherCortex([string] $BinDir) {
+        $found = Get-Command cortex -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found -and (Resolve-Final $found.Source) -ne (Resolve-Final (Join-Path $BinDir "cortex.exe"))) {
+            return $found.Source
+        }
+    }
+
     $ErrorActionPreference = "Stop"
     $ProgressPreference = "SilentlyContinue"     # Windows PowerShell's progress bar slows a download tenfold
 
-    if ($Version -and $Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') {
+    if ($Version -and $Version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\z') {
         throw "install.ps1: not a version: $Version (expected X.Y.Z)"
     }
     if ($Name -and $Name -cnotin @("cortex", "cortex-ai")) {
@@ -64,6 +84,11 @@ function Install-Cortex {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
     $releases = if ($env:CORTEX_RELEASES_URL) { $env:CORTEX_RELEASES_URL } else { "https://github.com/adorey/cortex/releases" }
+    # SHA256SUMS comes from where the archive does: it proves the download whole, not its origin.
+    # That origin is https - or this machine, for a test - never a plain http elsewhere.
+    if ($releases -notmatch '^https://' -and $releases -notmatch '^http://(127\.0\.0\.1|localhost)([:/]|$)') {
+        throw "install.ps1: CORTEX_RELEASES_URL must be https:// - http:// only to 127.0.0.1 or localhost (got $releases)"
+    }
     $base = if ($Version) { "$releases/download/$Version" } else { "$releases/latest/download" }
     $cortexHome = if ($env:CORTEX_HOME) { $env:CORTEX_HOME } else { Join-Path $HOME ".cortex" }
     $binDir = Join-Path $cortexHome "bin"
@@ -114,20 +139,30 @@ function Install-Cortex {
         if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
             throw "install.ps1: $asset holds no cortex.exe - nothing was installed"
         }
+        # Run once before it is installed: a binary Windows will not start - blocked, quarantined,
+        # no program at all - is neither installed nor put on PATH.
+        $installed = $null
+        try {
+            $installed = (& $exe --version) 2>$null
+        } catch {
+            throw "install.ps1: cortex.exe does not run here - check that your antivirus let it through: $($_.Exception.Message). Nothing was installed."
+        }
 
         # --- The command's name --------------------------------------------
         New-Item -ItemType Directory -Force -Path $binDir | Out-Null
         $binDir = (Resolve-Path -LiteralPath $binDir).ProviderPath.TrimEnd("\")
         if (-not $Name) {
-            $Name = "cortex"
-            $existing = Get-Command cortex -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($existing) {
-                $existingDir = (Split-Path -Parent $existing.Source).TrimEnd("\")
-                if ($existingDir -ne $binDir) {
-                    Write-Host "Another cortex command comes first on PATH: $($existing.Source)"
-                    Write-Host "Installing as cortex-ai instead - run the script with -Name cortex to install as cortex anyway."
-                    $Name = "cortex-ai"
-                }
+            # Installed before, it keeps its name: running the script again is the upgrade.
+            if (Test-Path -LiteralPath (Join-Path $binDir "cortex.exe")) {
+                $Name = "cortex"
+            } elseif (Test-Path -LiteralPath (Join-Path $binDir "cortex-ai.exe")) {
+                $Name = "cortex-ai"
+            } elseif (Get-OtherCortex $binDir) {
+                Write-Host "Another cortex command comes first on PATH: $(Get-OtherCortex $binDir)"
+                Write-Host "Installing as cortex-ai instead - run the script with -Name cortex to install as cortex anyway."
+                $Name = "cortex-ai"
+            } else {
+                $Name = "cortex"
             }
         }
 
@@ -142,12 +177,13 @@ function Install-Cortex {
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    $installed = $null
-    try { $installed = (& $target --version) 2>$null } catch { }
     if ($installed) {
         Write-Host "Installed $installed as $target"
     } else {
-        Write-Host "Installed $target - but it did not run here: check that your antivirus let it through."
+        Write-Host "Installed $target"
+    }
+    if ($Name -ceq "cortex" -and (Get-OtherCortex $binDir)) {
+        Write-Host "note: another cortex command comes first on PATH, $(Get-OtherCortex $binDir): typing cortex runs it, not this one."
     }
 
     # --- PATH ----------------------------------------------------------------
