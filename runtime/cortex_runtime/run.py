@@ -13,11 +13,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from cortex_core.workspace import service_index
 
-from .base import base_root_for
+from .base import Pin, base_for, read_pin
 from .context import derive_capabilities, read_project_context, read_project_overview
 from .resolver import build_system_prompt, find_workflow_relpath, layers_for, read_resolved
 from .safety import ActionPolicy
@@ -58,6 +58,7 @@ class ResolvedRun:
     layers: List[Tuple[str, str]]        # (layer, file) pairs that built the identity
     model: Optional[str]
     allowed_actions: List[str]           # autonomy granted for this run (gating allowlist)
+    cortex_version: Optional[str] = None  # the version cortex.toml pins; None: the base is {root}/cortex
 
 
 def _service_inside(service: Optional[str]) -> Optional[str]:
@@ -75,14 +76,31 @@ def _service_inside(service: Optional[str]) -> Optional[str]:
     return str(path)
 
 
-def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> ResolvedRun:
+class _ReadNow:
+    def __repr__(self) -> str:
+        return "READ_NOW"
+
+
+# resolve_run's default pin: the project's cortex.toml, read as it is now.
+READ_NOW: Any = _ReadNow()
+
+
+def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None, *,
+                pin: Union[Pin, None, _ReadNow] = READ_NOW) -> ResolvedRun:
     """Compile a request into a resolved bundle. ``theme`` is the workspace's active theme
-    (deployment config — NOT the gitignored local ``.active-theme`` marker). The base is the
-    store's copy of the version the project's ``cortex.toml`` pins, or ``{root}/cortex`` without
-    one (ADR-008 §3.6): a version the store lacks is a ``ValueError``, as a bad service is."""
+    (deployment config); without one, the theme the project's ``cortex.toml`` names. The base is
+    the store's copy of the version ``cortex.toml`` pins, or ``{root}/cortex`` without one
+    (ADR-008 §3.6): a version the store lacks is a ``ValueError``, as a bad service is.
+
+    ``pin`` is what ``cortex.toml`` said when the run was accepted — a queued run resolves as it
+    was checked, whatever the file says by the time a worker takes it (``None``: it had none)."""
     root = Path(root)
     req = replace(req, service=_service_inside(req.service))
-    base_root = base_root_for(root)
+    if pin is READ_NOW:
+        pin = read_pin(root)
+    base_root = base_for(pin)
+    if theme is None and pin is not None:
+        theme = pin.theme
 
     capabilities = derive_capabilities(root, req.service, base_root=base_root)
     system_prompt = build_system_prompt(
@@ -113,4 +131,5 @@ def resolve_run(req: RunRequest, root: Path, theme: Optional[str] = None) -> Res
         layers=layers_for(req.role, theme, root, base_root=base_root),
         model=req.model,
         allowed_actions=sorted(k.value for k in policy.allowed),
+        cortex_version=pin.version if pin is not None else None,
     )

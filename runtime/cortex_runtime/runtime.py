@@ -20,7 +20,8 @@ from .app import WorkspaceConfig, build_run_request
 from .demo_model import DemoModelClient
 from .local_tools import local_tool_registry
 from .loop import AgentLoop, ModelClient
-from .run import ResolvedRun, resolve_run
+from .base import Pin, read_pin
+from .run import READ_NOW, ResolvedRun, resolve_run
 from .safety import ActionPolicy
 from .secret_provider import SecretProvider, local_secret_provider
 from .session import run_session
@@ -116,18 +117,24 @@ class Runtime:
         :meth:`execute`. ``run_id`` lets the caller supply a pre-minted id (an idempotency
         claim). Validation still fails fast, synchronously: the request is resolved here as the
         run will resolve it — an unknown workspace is a 404, a service outside the workspace or an
-        unknown autonomy action a 422 — before any record is queued."""
+        unknown autonomy action a 422 — before any record is queued.
+
+        What the project's ``cortex.toml`` says is read here, once, and returned as ``cortex``
+        for the job: the run resolves against the version checked now (ADR-008 §3.6)."""
         req = build_run_request(payload, alias)
         wcfg = self._workspace(req.workspace)
-        resolve_run(req, wcfg.root, wcfg.theme)
+        pin = read_pin(wcfg.root)
+        resolved = resolve_run(req, wcfg.root, wcfg.theme, pin=pin)
         subject = self._subject(req)
         run_id = self.cfg.store.start_run(req.workspace, req.role, subject, req.model, run_id=run_id)
-        return {"run_id": run_id, "subject": subject}
+        return {"run_id": run_id, "subject": subject, "cortex_version": resolved.cortex_version,
+                "cortex": pin.to_job() if pin is not None else None}
 
     def execute(self, job: Mapping[str, Any]) -> Dict[str, Any]:
         """The job-queue handler: run a previously :meth:`prepare`d job by its ``run_id``."""
         req = build_run_request(job["payload"], job.get("alias"))
-        return self._execute(req, run_id=job["run_id"])
+        pin = Pin.from_job(job["cortex"]) if "cortex" in job else READ_NOW
+        return self._execute(req, run_id=job["run_id"], pin=pin)
 
     def build_queue(self):
         """An in-process job queue wired to :meth:`execute`, sized from the config (ADR-005).
@@ -136,15 +143,21 @@ class Runtime:
         return InProcessJobQueue(self.execute, max_workers=self.cfg.max_concurrent_runs,
                                  max_pending=self.cfg.max_pending_runs)
 
-    def _execute(self, req, run_id: Optional[str] = None) -> Dict[str, Any]:
+    def _execute(self, req, run_id: Optional[str] = None, pin=READ_NOW) -> Dict[str, Any]:
         wcfg = self._workspace(req.workspace)
-        resolved = resolve_run(req, wcfg.root, wcfg.theme)
-
-        registry, comments = local_tool_registry(wcfg.root)
-        model = make_model_client(self.cfg.model_backend, registry, self.cfg.secrets, req.model,
-                                  root=wcfg.root, allowed_actions=resolved.allowed_actions,
-                                  mcp_servers=wcfg.mcp_servers, mcp_bindings=wcfg.mcp_bindings,
-                                  timeout=self.cfg.run_timeout)
+        try:
+            resolved = resolve_run(req, wcfg.root, wcfg.theme, pin=pin)
+            registry, comments = local_tool_registry(wcfg.root)
+            model = make_model_client(self.cfg.model_backend, registry, self.cfg.secrets, req.model,
+                                      root=wcfg.root, allowed_actions=resolved.allowed_actions,
+                                      mcp_servers=wcfg.mcp_servers, mcp_bindings=wcfg.mcp_bindings,
+                                      timeout=self.cfg.run_timeout)
+        except Exception as exc:
+            # A queued run never stays queued: the version it was accepted on may have left the
+            # store since, or the backend may refuse its configuration.
+            if run_id is not None:
+                self.cfg.store.fail_run(run_id, f"{type(exc).__name__}: {exc}")
+            raise
         loop = AgentLoop(registry, ActionPolicy.from_names(req.autonomy), self.cfg.max_iterations)
         subject = self._subject(req)
 
@@ -158,7 +171,8 @@ class Runtime:
         if result.skipped:
             return {"skipped": True, "reason": result.reason, "subject": subject}
         if result.error:  # the run was recorded as failed; surface it without a raw 500
-            return {"failed": True, "error": result.error, "run_id": result.run_id, "subject": subject}
+            return {"failed": True, "error": result.error, "run_id": result.run_id, "subject": subject,
+                    "cortex_version": resolved.cortex_version}
         o = result.outcome
         return {
             "skipped": False,
@@ -172,6 +186,7 @@ class Runtime:
             "final_text": o.final_text,
             "comments": list(comments),
             "allowed_actions": resolved.allowed_actions,
+            "cortex_version": resolved.cortex_version,
         }
 
 
