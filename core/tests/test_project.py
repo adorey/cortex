@@ -1,0 +1,51 @@
+"""The grammar of cortex.toml and cortex.local.toml — ADR-008 §3.4, one definition for the
+command and the runtime."""
+
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from cortex_core import project  # noqa: E402
+
+
+class VersionTests(unittest.TestCase):
+    def test_versions(self):
+        for text in ("1.0.0", "0.0.0-dev", "0.0.0-dev.3", "1.0.0-rc.1", "10.20.30", "1.0.0-x-y.7z"):
+            with self.subTest(text=text):
+                self.assertTrue(project.is_version(text))
+
+    def test_what_is_no_version(self):
+        # A trailing newline and the digits of other scripts would name another directory of the
+        # store; leading zeros are no semver.
+        for text in ("1.0.0\n", "1.0.0\n2", "١.0.0", "1.0.0-١", "01.0.0", "1.0.0-01", "1.0", "v1.0.0",
+                     "1.0.0+build", "1.0.0 ", "", None, 1):
+            with self.subTest(text=text):
+                self.assertFalse(project.is_version(text))
+
+
+class FileTests(unittest.TestCase):
+    def test_a_project_file(self):
+        project.check_project({"version": "1.0.0", "theme": "h2g2", "sync": "link"})
+
+    def test_what_a_project_file_refuses(self):
+        for data, fragment in (({"version": "1.0.0\n", "theme": "h2g2"}, 'version "1.0.0\n" is no version'),
+                               ({"version": "1.0.0", "theme": "h2g2\n"}, "is no theme name"),
+                               ({"version": "1.0.0", "theme": "../x"}, "is no theme name"),
+                               ({"version": "1.0.0"}, '"theme" is required'),
+                               ({"version": "1.0.0", "theme": "h2g2", "sync": "bogus"}, 'sync "bogus"'),
+                               ({"version": "1.0.0", "theme": "h2g2", "verison": "x"}, 'unknown key "verison"')):
+            with self.subTest(data=data):
+                with self.assertRaises(project.ProjectFileError) as caught:
+                    project.check_project(data)
+                self.assertIn(fragment, str(caught.exception))
+
+    def test_a_local_file(self):
+        project.check_local({"theme": "none", "spec": "/x"})
+        with self.assertRaisesRegex(project.ProjectFileError, 'unknown key "version"'):
+            project.check_local({"version": "1.0.0"})
+
+
+if __name__ == "__main__":
+    unittest.main()
