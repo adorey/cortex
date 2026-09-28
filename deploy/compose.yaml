@@ -30,9 +30,17 @@ services:
       CORTEX_MCP_CONFIG: /config/cortex-mcp.json
     volumes:
       - ${CORTEX_PROJECT_PATH}:/workspace:ro          # the project the agent investigates
-      # The host's store, read-only. Unset, an empty directory of this repository stands in: a
-      # project without cortex.toml needs none, and Docker never creates ~/.cortex owned by root.
-      - ${CORTEX_STORE_PATH:-./no-store}:/cortex-home:ro
+      # The versions of the host's store, read-only — never its bin/ or its config.toml, the
+      # machine's settings. Unset, an empty store of this repository stands in: a project without
+      # cortex.toml needs none. Run `cortex sync` once before setting it: a missing versions/ is
+      # not to be created, owned by root where the developer's own sync could not write — Docker
+      # Desktop creates it all the same.
+      - type: bind
+        source: ${CORTEX_STORE_PATH:-./no-store}/versions
+        target: /cortex-home/versions
+        read_only: true
+        bind:
+          create_host_path: false
       - ./cortex-mcp.json:/config/cortex-mcp.json:ro  # the mcp_bindings
     depends_on:
       postgres:
