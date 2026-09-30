@@ -61,7 +61,7 @@ class ProjectFileTests(ConfigTestCase):
 
     def test_an_unknown_key_is_refused_and_named(self):
         self.write("cortex.toml", 'version = "1.0.0"\ntheme = "h2g2"\nverison = "1.1.0"\n')
-        self.assert_refused('unknown key "verison"', "version, theme and sync")
+        self.assert_refused('unknown key "verison"', "version, theme, sync and claude_access")
 
     def test_a_table_is_an_unknown_key(self):
         self.write("cortex.toml", 'version = "1.0.0"\ntheme = "h2g2"\n[models]\ndefault = "x"\n')
@@ -110,11 +110,23 @@ class LocalFileTests(ConfigTestCase):
         self.write("cortex.local.toml", 'theme = "star-wars"\n')
         self.assertEqual(config.load(str(self.root)).active_theme, "star-wars")
 
-    def test_only_theme_and_spec(self):
+    def test_only_theme_spec_claude_access_and_claude_entry(self):
         for key in ("version", "sync", "specs"):
             with self.subTest(key=key):
                 self.write("cortex.local.toml", f'{key} = "x"\n')
-                self.assert_refused(f'unknown key "{key}"', "theme and spec only")
+                self.assert_refused(f'unknown key "{key}"', "theme, spec, claude_access and claude_entry only")
+
+    def test_claude_access_is_the_teams_unless_the_developer_says(self):
+        # Neither file sets it: None, not False — Claude Code's settings are then left alone.
+        self.assertIsNone(config.load(str(self.root)).active_claude_access)
+        self.write("cortex.toml", 'version = "1.0.0"\ntheme = "h2g2"\nclaude_access = true\n')
+        self.assertTrue(config.load(str(self.root)).active_claude_access)
+        self.write("cortex.local.toml", "claude_access = false\n")
+        self.assertFalse(config.load(str(self.root)).active_claude_access)
+
+    def test_claude_access_is_a_boolean(self):
+        self.write("cortex.local.toml", 'claude_access = "yes"\n')
+        self.assert_refused('"claude_access" must be true or false, without quotes')
 
     def test_spec_relative_or_absolute(self):
         self.write("cortex.local.toml", 'spec = "cortex"\n')
@@ -163,6 +175,16 @@ class WriteSpecTests(ConfigTestCase):
         config.write_spec(str(self.root), 'C:\\Users\\dev "q"\\.cortex')
         self.write("cortex.toml", 'version = "1.0.0"\ntheme = "h2g2"\n')
         self.assertEqual(config.load(str(self.root)).spec, 'C:\\Users\\dev "q"\\.cortex')
+
+    def test_a_boolean_is_written_without_quotes_and_rewritten_in_place(self):
+        self.write("cortex.local.toml", 'theme = "none"\nclaude_access = false  # mine\n')
+        config.write_local(str(self.root), {"claude_access": True})
+        self.assertEqual(self.read(), 'theme = "none"\nclaude_access = true  # mine\n')
+
+    def test_a_key_set_to_none_is_removed(self):
+        self.write("cortex.local.toml", 'theme = "none"\nclaude_entry = "/x"  # sync\nspec = "cortex"\n')
+        config.write_local(str(self.root), {"claude_entry": None})
+        self.assertEqual(self.read(), 'theme = "none"\nspec = "cortex"\n')
 
     def test_a_spec_it_cannot_rewrite_is_refused_and_the_file_kept(self):
         before = 'spec = """\n/old\n"""\n'

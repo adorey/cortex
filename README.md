@@ -59,6 +59,8 @@ Every layer (`roles/`, `capabilities/`, `personalities/`, `workflows/`) supports
 cortex/agents/{layer}/...                       ← priority 3 (default, ships with cortex)
 ```
 
+`cortex/` names the spec: the directory that `spec` names in the project's `cortex.local.toml`, written by `cortex sync` (see [Installation](#-installation)). It is a name, not necessarily a directory of the project.
+
 Overlays are **additive** by default (rules are appended to the base), except for `workflows/` which use **replacement** (sequence-level override). See [docs/extending-layers.md](docs/extending-layers.md) for the practical guide and [ADR-001](docs/adr/ADR-001-layered-overrides.md) for the formal contract.
 
 ## ⚙️ The Runtime
@@ -95,9 +97,11 @@ Full engine docs live in [runtime/README.md](runtime/README.md); deployment & se
 ```
 cortex/
 ├── README.md                          # This file
-├── setup.sh                           # Installation script (design-time spec)
+├── install.sh                         # One-line install of the `cortex` command (Linux, macOS)
+├── install.ps1                        # One-line install of the `cortex` command (Windows)
 ├── bin/
-│   └── validate-overlays.sh           # Overlay integrity checker (CI-friendly)
+│   ├── check-english.sh               # English-only check (CI)
+│   └── setup-labels.sh                # GitHub labels for multi-phase ADRs
 │
 ├── templates/
 │   ├── bootstrap-instructions.md            # Bootstrap — single project mode (any AI tool)
@@ -137,6 +141,10 @@ cortex/
 │   │                                  #   prompt assembly — standard library only
 │   └── tests/                         # runs on Python 3.9+ with nothing installed
 │
+├── cli/                               # ── the `cortex` command (ADR-008) ──
+│   ├── cortex_cli/                    # init, sync, validate — built into a native binary
+│   └── tests/
+│
 ├── runtime/                           # ── ⚙️ cortex-runtime — the deployable engine ──
 │   ├── cortex_runtime/                # agnostic API, agentic loop, StateStore,
 │   │                                  #   security gate, job queue, model backends
@@ -148,9 +156,10 @@ cortex/
 │
 ├── docs/
 │   ├── getting-started.md             # Step-by-step install (design-time spec)
+│   ├── migrating-to-the-binary.md     # From a git submodule or clone to the `cortex` command
 │   ├── extending-layers.md            # Practical guide for overlays (the cascade)
 │   ├── creating-a-theme.md            # Guide for creating a personality theme
-│   ├── adr/                           # Architecture Decision Records (ADR-001 … ADR-005)
+│   ├── adr/                           # Architecture Decision Records (ADR-001 … ADR-008)
 │   └── api/                           # OpenAPI spec + Postman collection
 │
 └── changelog/                         # Per-version release notes (index: CHANGELOG.md)
@@ -162,76 +171,78 @@ cortex/
 
 > This section covers the **design-time spec**. To run the engine, jump to [The Runtime](#-the-runtime).
 
-Cortex can be consumed in **two ways**, depending on how your project is structured. Both are first-class — pick the one that fits your repo layout.
+Cortex is one command, `cortex`, installed once per machine. It needs no Python and no Bash, and no copy of Cortex inside your projects: the spec lives once on the machine, and each project pins the version it uses ([ADR-008](docs/adr/ADR-008-cortex-binary.md)).
 
-| Mode | When to use | Workspace must be a git repo? |
-|---|---|---|
-| **Submodule** | Single project (one git repo) or monorepo containing multiple services | ✅ Yes |
-| **Standalone clone** | Multi-repo workspace where each service is its own git repo (cortex sits as a peer) | ❌ No |
-
-### Option 1A: Submodule (single project or monorepo)
+### 1. Install the `cortex` command (once per machine)
 
 ```bash
-# From inside your project's git repo
-git submodule add <cortex-url> cortex
-./cortex/setup.sh                       # single project
-./cortex/setup.sh --workspace           # monorepo with multiple services
+curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh              # Linux, macOS
+curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- 1.0.0  # a given version
 ```
 
-Update cortex later: `git submodule update --remote cortex`.
+```powershell
+irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1 | iex                    # Windows PowerShell
+```
 
-### Option 1B: Standalone clone (multi-repo workspace)
+The binary goes into `~/.cortex/bin` (`%USERPROFILE%\.cortex\bin` on Windows): `install.ps1` adds that directory to your user `PATH`, `install.sh` prints the line to add to your shell profile. When another `cortex` command comes first on `PATH`, the scripts install it as `cortex-ai` instead; `--name cortex` (`-Name cortex` for `install.ps1`) forces the name. Running a script again upgrades the binary. Built for Linux x86_64 and aarch64 (glibc 2.28 or later), macOS on Apple silicon and Windows x86_64.
 
-When your workspace is just a folder containing several independent git repos (e.g. `backend/`, `frontend/`, `infra/`), cortex doesn't need to be a submodule of anything — it lives next to them as a sibling clone.
+The spec lives in the store, `~/.cortex/versions/X.Y.Z`: one read-only directory per version, filled on demand — the binary's own version from itself, any other downloaded and checked against its release's `SHA256SUMS`. `$CORTEX_HOME` moves `~/.cortex` elsewhere.
+
+### 2. Make a project a Cortex project
 
 ```bash
-# In your workspace folder (not necessarily a git repo)
-# workspace/
-# ├── cortex/         ← cloned here (not a submodule)
-# ├── service-a/      ← independent repo
-# └── service-b/      ← independent repo
-
-git clone <cortex-url> cortex
-./cortex/setup.sh --workspace
-# The script interactively asks for the names of services to initialize.
-# It creates project-overview.md and project-context.md in each service
-# with the correct @alias pre-filled.
+cd my-project/
+cortex init                         # H2G2 theme, GitHub Copilot's .github/copilot-instructions.md
+cortex init --tool claude           # CLAUDE.md — or cursor, agents, custom --instructions-file PATH
+cortex init --no-personality        # neutral professional agents (no theme)
 ```
 
-Update cortex later: `cd cortex && git pull`.
+`cortex init` writes `cortex.toml` — committed: the Cortex `version` the project uses and the team's `theme` — adds `cortex.local.toml` to `.gitignore` and runs `cortex sync`. It then writes the AI tool's instructions file, `project-overview.md` and `project-context.md` when they are missing; an existing instructions file is kept unless `--force`, which keeps the old one as `FILE.bak`. [Getting Started](docs/getting-started.md) goes through every option.
 
-### Common options (both modes)
+### 3. After a clone: `cortex sync`
+
+Each developer runs `cortex sync` in a fresh clone, as they would `npm install`. It writes `spec` in `cortex.local.toml`, which git ignores: where the spec is on this machine. By default nothing of the spec enters the project — the AI tool reads it in place, and `cortex/` in the instructions, the docs and every overlay's `Base:` header names that directory.
+
+A tool that needs the spec inside the project gets it with `cortex sync --link` (`cortex/` links to the store; a junction on Windows) or `--copy` (a read-only copy in `cortex/`). `sync = "link"` or `sync = "copy"` in `cortex.toml` makes it the team's default. Which mode a tool needs is measured, not assumed: so far Claude Code only, which asks once per session for permission to read the store, and needs nothing in `copy` mode. `claude_access = true` in `cortex.toml` — offered by `cortex init --tool claude` — has `cortex sync` let it read the store without asking; `cortex sync --claude-access` does it for you alone. The table is in [Moving to the `cortex` binary](docs/migrating-to-the-binary.md).
+
+### Workspace mode (several services)
+
+In a monorepo, or a folder holding several repositories, run `cortex init --workspace` at the workspace root. Nothing of Cortex sits next to the services any more:
 
 ```bash
-./cortex/setup.sh --tool claude          # generate CLAUDE.md (vs Copilot's .github/copilot-instructions.md by default)
-./cortex/setup.sh --no-personality       # neutral professional agents (no theme)
-./cortex/setup.sh --theme star-wars      # use a specific theme
+cd workspace/
+cortex init --workspace --service backend --service apps/frontend
 ```
 
-Each service declares its `@alias` in its `project-overview.md`. To target a service in a prompt:
+Each `--service` is a folder of the workspace and gets its own `project-overview.md` and `project-context.md`, with the folder's name as its `@alias` (`apps/frontend` → `@frontend`). On a terminal with no `--service`, the command asks for the services. When `agents/` is its own git repository, the team's `agents/project-overview.md` and `agents/project-context.md` are scaffolded too ([ADR-006](docs/adr/ADR-006-workspace-shareable-repo.md)).
+
+To target a service in a prompt, use its alias:
 ```
 @backend Add a pagination endpoint on /users
 @frontend Create a sortable table component
 ```
 If no alias is mentioned, Cortex infers the service from the active file context.
 
-### Option 2: Manual
+### Validate and upgrade
 
-1. Copy the appropriate bootstrap template for your AI tool into the right location:
-   - **GitHub Copilot**: `cortex/templates/bootstrap-instructions.md` → `.github/copilot-instructions.md`
-   - **Cursor**: `cortex/templates/bootstrap-instructions.md` → `.cursor/rules/cortex.mdc`
-   - **Claude Code**: `cortex/templates/bootstrap-instructions.md` → `CLAUDE.md`
-   - **Codex / other**: `cortex/templates/bootstrap-instructions.md` → `AGENTS.md`
+```bash
+cortex validate              # overlay checks: 0 clean, 1 errors, 2 cannot run
+cortex validate --strict     # warnings fail too — what CI runs
+```
 
-   For workspace mode, use `bootstrap-instructions-workspace.md` instead.
-2. Copy `cortex/templates/project-overview.md.template` → `project-overview.md` and fill in the vision
-3. Copy `cortex/templates/project-context.md.template` → `project-context.md` and fill in the stack
-4. Invoke an agent by mentioning the desired role or character name in your prompt
+In CI: install the binary of the version `cortex.toml` pins, then `cortex sync` and `cortex validate --strict` — [the migration guide](docs/migrating-to-the-binary.md#5-ci) has the lines.
+
+To move a project to another Cortex version, change `version` in `cortex.toml`, then run `cortex sync`. To upgrade the binary, run the install script again. A binary serves every version from 1.0.0 up to its own, and refuses a project pinned to a newer one with the command that upgrades it.
+
+### Coming from a git submodule or clone
+
+`cortex init` refuses while `cortex/` is a git submodule or a clone of Cortex, and prints the commands that remove it. [Moving to the `cortex` binary](docs/migrating-to-the-binary.md) covers the switch.
 
 ## 📚 Documentation
 
 **The spec (design-time)**
 - [**Getting Started**](docs/getting-started.md) — step-by-step installation guide (single project & workspace)
+- [**Moving to the `cortex` binary**](docs/migrating-to-the-binary.md) — from a git submodule or clone of Cortex, and which sync mode each AI tool needs
 - [**Extending layers**](docs/extending-layers.md) — overlay your project's rules onto roles, capabilities, personalities, and workflows
 - [**Creating a theme**](docs/creating-a-theme.md) — customize the tone and style of agents
 
@@ -242,7 +253,7 @@ If no alias is mentioned, Cortex infers the service from the active file context
 - [**Claude CLI setup**](runtime/docs/claude-cli-setup.md) — run the runtime against a Pro/Max subscription
 
 **Design & contribution**
-- [**Architecture Decision Records**](docs/adr/) — the *why* behind the framework and the runtime (ADR-001 … ADR-005)
+- [**Architecture Decision Records**](docs/adr/) — the *why* behind the framework and the runtime (ADR-001 … ADR-008)
 - [**Contributing**](CONTRIBUTING.md) — how to add roles, capabilities, themes, workflows, or fix bugs
 
 ## 📋 Changelog
@@ -253,7 +264,7 @@ The full, versioned history lives in **[`CHANGELOG.md`](CHANGELOG.md)** (Keep a 
 
 **The spec**
 - **Zero project dependency**: roles are stack-agnostic, the stack lives in `project-context.md`
-- **Plug & Play**: `setup.sh` and you're ready — single project mode or multi-project workspace
+- **Plug & Play**: one install per machine, `cortex init` per project — single project mode or multi-project workspace
 - **Composable**: role + capabilities + personality + context + workflow = complete agent
 - **Two context files**: `project-overview.md` (vision & business) + `project-context.md` (stack & conventions) — separated to never mix the WHAT and the HOW
 - **Loadable capabilities**: `capabilities/` cards are reusable across projects, automatically loaded by the PM based on the active role and project stack

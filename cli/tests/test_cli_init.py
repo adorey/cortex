@@ -1,8 +1,8 @@
-"""``cortex init`` — ``setup.sh``, at parity (ADR-008 §3.7, phase 4).
+"""``cortex init`` — the setup script of Cortex 0.x, at parity (ADR-008 §3.7, phase 4).
 
-The matrix (``init_matrix``) is what ``setup.sh`` writes, captured. ``cortex init`` must write the
-same files, byte for byte, plus its own three. The script replays the matrix too, until phase 5
-deletes it.
+The matrix (``init_matrix``) is what the script wrote, captured, and — since the script is gone —
+what the command writes. ``cortex init`` must write the same files, byte for byte, plus its own
+three.
 """
 
 import json
@@ -76,7 +76,7 @@ class InitTestCase(unittest.TestCase):
 
 
 class MatrixTests(InitTestCase):
-    def test_cortex_init_writes_what_setup_sh_wrote(self):
+    def test_cortex_init_writes_the_matrix(self):
         for case in matrix.CASES:
             if "git" in matrix.CASES[case][2].values() and not HAS_GIT:
                 continue
@@ -102,19 +102,6 @@ class MatrixTests(InitTestCase):
 
     def test_the_matrix_was_captured_for_every_case(self):
         self.assertEqual(sorted(EXPECTED), sorted(matrix.CASES))
-
-
-@unittest.skipIf(os.name == "nt" or shutil.which("bash") is None or not HAS_GIT, "setup.sh is a Bash script")
-@unittest.skipUnless((matrix.REPO / "setup.sh").is_file(), "setup.sh is gone")
-class SetupShTests(unittest.TestCase):
-    def test_setup_sh_still_writes_the_matrix(self):
-        for case in matrix.CASES:
-            with self.subTest(case=case):
-                tmp = Path(tempfile.mkdtemp(prefix="cortex-init-"))
-                try:
-                    self.assertEqual(matrix.run_setup(case, tmp, matrix.build_spec(tmp)), EXPECTED[case])
-                finally:
-                    shutil.rmtree(tmp, ignore_errors=True)
 
 
 class OptionTests(InitTestCase):
@@ -231,10 +218,10 @@ class OptionTests(InitTestCase):
                 self.assertIn("fix it, or remove it to start over", proc.err)
                 self.assertEqual(sorted(p.name for p in self.project.iterdir()), ["cortex.toml"])
 
-    def test_a_theme_the_spec_does_not_have(self):
+    def test_a_theme_found_nowhere(self):
         proc = self.init("--theme", "no-such-theme")
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("theme 'no-such-theme' is not in", proc.err)
+        self.assertIn("theme 'no-such-theme' is neither in", proc.err)
         self.assertIn("acme, h2g2", proc.err)
         self.assertEqual(list(self.project.iterdir()), [])
 
@@ -280,6 +267,20 @@ class OptionTests(InitTestCase):
         self.assertEqual(self.read("CLAUDE.md"), "# Our own notes\n")
         self.assertIn("CLAUDE.md is there and was kept: it holds no Cortex bootstrap — "
                       "cortex init --tool claude --force replaces it", proc.err)
+
+    def test_an_older_bootstrap_is_said(self):
+        # Written before cortex.toml, it reads cortex/ as the submodule it was: there is no spec there.
+        older = "# Cortex AI Team\n\nRead `cortex/agents/roles/prompt-manager.md` first.\n"
+        (self.project / "CLAUDE.md").write_text(older, encoding="utf-8")
+        proc = self.init()
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertTrue((self.project / ".github" / "copilot-instructions.md").is_file())
+        self.assertEqual(self.read("CLAUDE.md"), older)
+        self.assertIn("CLAUDE.md is there and was kept: an older Cortex bootstrap, which does not read "
+                      "cortex.local.toml — cortex init --tool claude --force replaces it", proc.err)
+        proc = self.init("--tool", "claude")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn("CLAUDE.md is an older Cortex bootstrap: it does not read cortex.local.toml", proc.err)
 
     def test_a_kept_file_without_the_bootstrap_is_said(self):
         (self.project / "CLAUDE.md").write_text("# Our own notes\n", encoding="utf-8")
@@ -374,6 +375,26 @@ class OptionTests(InitTestCase):
         written = (self.project / "cortex.toml").read_bytes().decode("utf-8")
         self.assertTrue(written.startswith("\ufeff"))
         self.assertIn('theme = "h2g2"  # the team\'s choice', written)
+
+    def test_a_theme_of_the_projects_own(self):
+        # docs/creating-a-theme.md: a custom theme lives in the project, with no base in Cortex.
+        (self.project / "agents" / "personalities" / "ours").mkdir(parents=True)
+        proc = self.init("--theme", "ours")
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertIn('theme = "ours"', self.read("cortex.toml"))
+        self.assertNotIn("warning: theme", proc.err)
+
+    def test_from_a_checkout_its_templates_and_its_spec(self):
+        # CONTRIBUTING's loop: a template edited in a checkout reaches the project at once.
+        checkout = self.tmp / "checkout"
+        shutil.copytree(self.spec, checkout)
+        template = checkout / "templates" / "bootstrap-instructions.md"
+        template.write_bytes(template.read_bytes().replace(b"# Cortex AI Team", b"# Cortex AI Team, edited", 1))
+        proc = self.init("--tool", "claude", "--from", str(checkout))
+        self.assertEqual(proc.returncode, 0, proc.err)
+        self.assertTrue(self.read("CLAUDE.md").startswith("# Cortex AI Team, edited\n"))
+        self.assertIn(str(checkout).replace(os.sep, "/"), self.read("cortex.local.toml"))
+        self.assertIn("no version is checked (--from)", proc.err)
 
     def test_a_directory_given(self):
         proc = self.init("sub/app", cwd=self.project)
@@ -491,7 +512,7 @@ class OptionTests(InitTestCase):
         self.assertNotIn("submodule deinit", proc.err)
 
     def test_the_team_tier_is_its_own_repository_not_the_projects(self):
-        # setup.sh asked git whether agents/ was in a working tree — true inside the project's own
+        # The setup script asked git whether agents/ was in a working tree — true inside the project's own
         # repository too. The team tier is for an agents/ that is a repository of its own.
         if not HAS_GIT:
             self.skipTest("needs git")

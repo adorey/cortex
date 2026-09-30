@@ -1,7 +1,10 @@
-# Files generated locally by setup.sh — never tracked by cortex itself
-# (they are per-project / per-developer choices, not framework-level state)
+# A developer's own — never tracked by cortex itself (per-developer choices, not
+# framework-level state): a local context, and a theme of their own for CLAUDE.md
 agents/project-context.md
-agents/personalities/.active-theme
+cortex.local.toml
+# The theme marker of the scripts before 1.0.0: nothing reads it now, and a checkout that still
+# holds one must not track it. Kept for one version.
+agents/personalities/.active-*
 
 # AI-assisted design log — a local working journal, not product documentation:
 # verbatim prompts and session chronology. The decisions that matter live in docs/adr/.

@@ -5,10 +5,10 @@ The one implementation of the Cortex cascade in code — [ADR-007](../docs/adr/A
 Everything Cortex computes from the spec lives here: resolving a layer file through the
 cascade, applying its merge semantic, finding a role, a workflow or a character, listing the
 capabilities the cascade offers, assembling an agent's system prompt, and validating overlays.
-The [runtime](../runtime/README.md) and `bin/validate-overlays.sh` consume it.
+The [runtime](../runtime/README.md) and the [`cortex` command](../cli/README.md) consume it.
 
 - **Standard library only, Python 3.9 or later.** It runs from source with nothing installed —
-  which is what lets a host project validate its overlays from the Cortex checkout.
+  the runtime and the tests use it so — and the `cortex` binary embeds nothing else.
 - **It never imports the runtime.** A test fails if it does.
 
 ```bash
