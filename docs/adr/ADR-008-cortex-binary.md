@@ -80,7 +80,7 @@ Both scripts detect the platform, download the matching asset of the release (th
 
 ### 3.4 `cortex.toml` and `cortex.local.toml`
 
-`cortex.toml` is committed at the project root — where the bootstrap file's paths start from, the workspace root in workspace mode:
+`cortex.toml` is committed at the project root — where the bootstrap file's paths start from, the workspace root in workspace mode (a workspace root that is no repository: see §9, phase 4):
 
 ```toml
 # Written by `cortex init`. Committed.
@@ -96,7 +96,7 @@ theme = "star-wars"                               # optional — overrides corte
 spec = "/home/dev/.cortex/versions/1.0.0"         # written by `cortex sync` — where the spec is
 ```
 
-`version` and `theme` are required in `cortex.toml`; `cortex.local.toml` accepts only `theme` and `spec`. **An unknown key is an error**, not a warning: these files are the ones a later ADR extends, and a typo that silently does nothing is the failure they must not start with.
+`version` and `theme` are required in `cortex.toml`; `cortex.local.toml` accepts only `theme` and `spec` — and, since, `claude_access` in both files and `claude_entry` in the local one (§9, after the delivery and phase 5). **An unknown key is an error**, not a warning: these files are the ones a later ADR extends, and a typo that silently does nothing is the failure they must not start with.
 
 The active-theme marker **leaves the spec**: it lived inside `cortex/agents/personalities/`, which is now a shared, read-only store. The bootstrap templates read the theme from `cortex.local.toml`, then `cortex.toml` — the same per-developer choice as today, with a team default a fresh clone did not have.
 
@@ -192,7 +192,7 @@ Acceptance criteria:
 - sync refuses, and deletes nothing, when `cortex/` is a submodule, a clone or any directory it did not write; switching a project from `link` or `copy` back to `store` removes only what sync made
 - a project pinned to a version newer than the binary is refused with the upgrade command
 - on Windows, the junction is created by a user without administrator rights or developer mode
-- `cortex.toml` with an unknown key, or without `version` or `theme`, is refused and the key named; so is any key but `theme` and `spec` in `cortex.local.toml`
+- `cortex.toml` with an unknown key, or without `version` or `theme`, is refused and the key named; so is any key but `theme` and `spec` in `cortex.local.toml` — `claude_access` and `claude_entry` joined them since (§9, after the delivery and phase 5)
 - for Copilot, Cursor, Claude Code and Codex, which mode works — the spec read in place, through the link, or only copied — is measured on a real conversation that must reach a role card, and written in the migration guide, with whether the tool asked for permission
 
 ### Phase 3 — The runtime finds the base through `cortex.toml`
@@ -434,3 +434,44 @@ Across it, `cortex init` writes what `setup.sh` wrote, byte for byte. The `.acti
 - **`--instructions-file` names nothing of git's own**, `.git/config` among them, and the names init writes for itself are compared as a file system that ignores case compares them — `CORTEX.TOML` is `cortex.toml` on macOS and Windows. A link that leads nowhere, where a directory is to be made, is refused before anything is written, as a file is.
 - **`/.cortex-sync-*` is ignored too**, in `link` and `copy` modes: what a sync killed half-way leaves, a link to this machine's store among it, until the next sync removes it. Outside a repository, an existing `.gitignore` is said to keep nothing out of a commit; a backup `--force` writes is said to be left to git.
 
+### Phase 5 — the switch
+
+- **The bootstrap templates carry the rule phase 2 measured**, word for word: *`cortex/` is the directory `spec` names in `cortex.local.toml`*, read before anything else. With no `cortex.local.toml`, or no `spec` in it, the LLM tells the user to run `cortex sync` and goes no further. The theme is read from `cortex.local.toml`, then `cortex.toml`. A project initialised by the built binary reached the Prompt Manager's card in a real Claude Code conversation, with no permission prompt, in `copy` mode, and in `store` mode with the store in `permissions.additionalDirectories`.
+- **`cortex init --from PATH`**, beyond parity (§3.7): it writes the bootstrap file from a checkout's templates and syncs `--from` that checkout. It is how CONTRIBUTING's test loop picks up an edited template. `cortex sync --from` alone would leave the instructions file written from the pinned version.
+- **`cortex init --theme` takes a theme of the project's own**, one in its `agents/personalities/`, as well as one Cortex ships. `setup.sh` accepted only the latter. The template's advice — choose the theme at `cortex init --theme` — would otherwise have led a custom theme into a refusal.
+- **`cortex validate` has no fallback to `./cortex` any more.** A project without `cortex.toml` is refused (exit `2`), and when a `cortex/` submodule or clone is there, the message sends to `cortex init`, which says how to leave it. This repository validates itself as the base, in CI (`repo-checks`, job *cortex validate takes this repository for the base*) and in the CLI's tests: both roots are the checkout, and no scope of it is scanned — the base holds no overlay to check.
+- **The core's validator lost its script entry points** — `cli()` and `python -m cortex_core.validate` — along with the script. `main()` takes its two roots from its caller, the `cortex` command. The golden outputs changed in one line, deliberately: the help names `cortex validate`. The parity matrix of `cortex init`, re-captured from the command once the templates changed, came out identical to the one captured from the script: there was no drift to record.
+
+### After the delivery — the maintainer's arbitration (2026-09-27)
+
+- **Claude Code reads the store without asking, on request** (#136). Phase 2 measured a permission prompt in `store` mode, and in `link` mode too. The maintainer chose an option over a default:
+  - **Who decides.** `claude_access = true` in `cortex.toml`, for the team, or in `cortex.local.toml`, for one developer — whose value wins.
+  - **Where it is set.** `cortex init --tool claude` offers it on a terminal, and `--claude-access` sets it unattended. `cortex sync --claude-access` and `--no-claude-access` write a developer's own.
+  - **What sync does.** It keeps the store's path of the pinned version in `.claude/settings.local.json`, under `permissions.additionalDirectories`. That file is Claude Code's settings of this developer on this machine, which git ignores. It is the place for a path of this machine, where the committed `.claude/settings.json` is not.
+  - **Cortex owns the one entry it wrote**, which `cortex.local.toml` records as `claude_entry`. Sync replaces it when the spec moves, and removes it when access is off or the spec is copied into the project; every other setting is kept, and so is an entry the developer wrote, even one that names the store. The entry is the path the spec resolves to — in `link` mode, the store's. While neither file sets `claude_access`, sync leaves the file alone.
+  - **The result, measured.** A real conversation on a project made by `cortex init --tool claude --claude-access` reached the Prompt Manager's card with no prompt.
+- **The measurement of phase 2 is met for Claude Code** (#116). Copilot, Cursor and Codex, for which no account is available yet, move to #137, outside this ADR's release gate.
+- **The version stays 1.0.0**, as §5 decides: one version for the release and the binary.
+- **The Windows executable stays unsigned** for 1.0.0 (§3.1, §7). Measured on a throwaway pre-release, on Windows 11: installed by `install.ps1`, `cortex.exe` carries no Mark of the Web, so SmartScreen does not step in, and Defender let it run. A zip downloaded with a browser would carry it.
+- **The release path ran on that pre-release.** It found one bug: the publish job gathered the assets in the repository's own `assets/`, so the README's logo shipped with the release. It now works in `$RUNNER_TEMP`.
+
+### Phase 5 — found in review
+
+- **Phase 2's last criterion is met for Claude Code only, before 1.0.0** (§4). §4 has all five phases gate the release; the measurement of Copilot, Cursor and Codex moves to #137, outside that gate, because no account for them is at hand. This amends §4 for that one criterion: 1.0.0 ships with the three tools marked *not measured yet* in the migration guide, which tells their users to start in `store` and move to `link`, then `copy`.
+- **The junction needs no privilege — measured, not assumed** (§3.5). The GitHub runner is an administrator, so CI proved nothing of it. On Windows 11 (build 26200), in a session that is no administrator's — medium integrity, developer mode off — the `cortex.exe` of the throwaway pre-release made the junction with `cortex sync --link`, read the spec through it, and `cortex sync --store` removed it and left the store whole.
+- **`claude_access` has three states, and Cortex owns one entry** (the arbitration above). While neither file sets `claude_access`, sync leaves `.claude/settings.local.json` alone: read as *off*, it removed every entry under the store — including one the developer had added by answering Claude Code's own prompt, as the migration guide advised — and deleted the file when that was all it held. The entry sync writes is recorded as `claude_entry` in `cortex.local.toml` — a key it adds to that file (§3.4) — and it is the only one sync replaces or removes: an entry for a `--from` checkout no longer stays behind, nor piles up. The entry is the path the spec resolves to. The file keeps its format — its indent, its line endings, its byte order mark — a link to it is written through, and one sync cannot read or write is a warning, never a traceback. The file is never deleted.
+- **The question grants a permission, so no is its default**: `[y/N]`. `cortex init --copy` neither asks it nor gives the tip about it: a copy is inside the project.
+- **The templates were edited after phase 2 measured them**, where the review found them wrong: *run `cortex sync`* also names `cortex-ai sync`, the command's other name; *when that file sets none* — confusable with the theme `none` — says *has no `theme` key*; and the LLM is told to compare the version `spec` ends in with `cortex.toml`'s, and to ask for a sync when they differ. The init matrix, re-captured, changed in those lines only. Measured again with Claude Code 2.1.273 on projects made by `cortex init`: the Prompt Manager's card is reached with no permission denial, in `copy` mode and in `store` mode with `claude_access` — once Claude Code's local settings, where `cortex sync` writes the entry, are among the sources it reads.
+- **A later binary may check more** (§3.3, §3.8). A binary validates with its own rules, whatever version the project pins. Within a major version a later binary accepts what an earlier one accepted: a check it adds reports a warning, never an error, until the next major version. `--strict` fails on warnings, so a CI that runs it installs the binary of the version `cortex.toml` pins — the migration guide says how — and a bump of `version` is the change that brings the new checks.
+- **The self-check is named for what it proves.** The base holds no overlay of itself, so *Cortex validates itself* checked nothing: it is *cortex validate takes this repository for the base*, and it checks the two roots it prints and that no scope was scanned.
+- **Kept for one version:** `.gitignore` ignores `agents/personalities/.active-*`, the theme marker a checkout may still hold, and `--copy --from` leaves it out of the copy.
+- **Pointers the removal broke**: ADR-002 §7 links the removed validator at `0.10.1`, and ADR-007 records, in its own amendments, that §3.5's entry point went with the scripts. CONTRIBUTING's release steps are the tag push of phase 1. The changelog names `init --from`, a theme of the project's own, `--no-claude-access`, and marks two more changes as breaking: `cortex validate` needs a `cortex.toml`, and `python3 -m cortex_core.validate` is gone.
+- **Not verified**, for want of the machines or accounts: macOS beyond CI, NTFS attributes and antivirus software on Windows beyond one machine, and every tool but Claude Code.
+
+### Phase 5 — found in the second review
+
+- **Claude Code's settings keep their layout, not their every character.** The indent, the line endings and the byte order mark stay, a link to the file is written through; the values are written back as JSON writes them — `1.10` becomes `1.1`, a letter escaped as `\u00e9` the letter itself, an array kept on one line is spread over several. The JSON means the same.
+- **`claude_entry` is what sync knows of its own entry.** Removed with `cortex.local.toml` — a `git clean -X` — the entry stays in the settings as the developer's; edited by hand, sync takes the path written for its own. The migration guide says both. Turned off, sync says when an entry of the developer's still lets Claude Code read the spec, rather than that it no longer does.
+- **The templates compare the version of a copy too**: `cortex/.synced` names it. A link names none, and there is nothing to compare. Measured again with Claude Code 2.1.273 in `copy` mode: it read `.synced`, and reached the Prompt Manager's card with no denial.
+- **The CI lines read the pinned version whatever its quotes**, or an indented line, and stop when there is none: read empty, `install.sh` installed the latest release, in silence. A PowerShell equivalent is given for a Windows runner. Both are run by the CLI's tests, as written.
+- **The promise of *Phase 5 — found in review* — a later binary only warns within a major version (§3.3) — is in CONTRIBUTING's versioning section**, where the release process reads it.

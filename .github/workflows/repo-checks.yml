@@ -38,114 +38,165 @@ jobs:
           fi
           echo "✓ every tracked shell script is executable"
 
+      # ADR-008, phase 5: the scripts are gone, and so is every pointer to them but the history's —
+      # the changelog, the ADRs, the migration guide. A rebase once brought one back.
+      - name: Nothing points at the removed scripts
+        run: |
+          # [.] matches a dot, and not this line's own text: the pattern cannot find itself.
+          if git grep -n 'setup[.]sh\|validate-overlays[.]sh\|[.]active-theme' -- \
+               ':!CHANGELOG.md' ':!changelog' ':!docs/adr' ':!docs/migrating-to-the-binary.md'; then
+            echo "::error::the lines above point at the scripts ADR-008 removed"
+            exit 1
+          fi
+          echo "✓ only the history names the removed scripts"
+
   shell:
     name: Shell lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      # setup.sh writes files into someone else's project. A quoting mistake there is not a
-      # style issue.
       - name: shellcheck
-        run: shellcheck --severity=warning setup.sh bin/*.sh
+        run: shellcheck --severity=warning bin/*.sh
 
       # install.sh runs piped from curl, under whatever sh the machine has — dash on Debian and
-      # Ubuntu: POSIX sh, linted as such.
+      # Ubuntu: POSIX sh, linted as such. It writes into someone else's home: a quoting mistake
+      # there is not a style issue.
       - name: shellcheck (install.sh, POSIX sh)
         run: shellcheck --shell=sh --severity=style install.sh
 
   scaffold:
-    name: Scaffold a host project (${{ matrix.mode }})
-    runs-on: ubuntu-latest
+    name: Scaffold a host project (${{ matrix.os }}, ${{ matrix.mode }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - mode: submodule
-            workspace_flag: ''
-          - mode: workspace
-            workspace_flag: '--workspace'
+        os: [ubuntu-latest, windows-latest]
+        mode: [single, workspace]
 
-    # This is the test loop CONTRIBUTING.md asks contributors to run by hand, automated.
-    # The two modes exercise different code paths in setup.sh — submodule + single project
-    # versus standalone clone + workspace — and a change that works in one has already
-    # broken the other.
+    # This is the test loop CONTRIBUTING.md asks contributors to run by hand, automated — as a
+    # user runs it: the install script, `cortex init`, `cortex validate --strict`, nothing else.
+    # The binary is built from this commit and installed from a release served on the runner.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
         with:
-          path: cortex-src
+          python-version: "3.12"
+
+      - name: A release of this commit, served on the runner
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet -r cli/requirements-build.txt
+          python cli/build.py --version "0.0.0-dev.$GITHUB_RUN_NUMBER" > /dev/null
+          release="$RUNNER_TEMP/release/latest/download"
+          mkdir -p "$release"
+          cp cli/build/dist/cortex-*.tar.gz cli/build/dist/cortex-*.zip "$release/" 2>/dev/null || true
+          python cli/build.py --checksums "$release"
+          python -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/release" > /dev/null 2>&1 &
+          for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fs http://127.0.0.1:8765/ > /dev/null && break; sleep 1; done
+          echo "CORTEX_HOME=$RUNNER_TEMP/cortex-home" >> "$GITHUB_ENV"
+          echo "CORTEX_RELEASES_URL=http://127.0.0.1:8765" >> "$GITHUB_ENV"
+
+      - name: Install (install.sh)
+        if: runner.os != 'Windows'
+        run: |
+          sh install.sh --name cortex
+          echo "$CORTEX_HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Install (install.ps1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & .\install.ps1 -Name cortex -NoModifyPath
+          "$env:CORTEX_HOME\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
       - name: Scaffold a throwaway host project
         run: |
           set -euo pipefail
-          git config --global user.email ci@example.com
-          git config --global user.name "CI"
-          git config --global protocol.file.allow always
-
-          mkdir -p /tmp/host && cd /tmp/host
-
-          if [ "${{ matrix.mode }}" = "submodule" ]; then
-            git init -q .
-            git submodule add -q "$GITHUB_WORKSPACE/cortex-src" cortex
+          mkdir -p "$RUNNER_TEMP/host" && cd "$RUNNER_TEMP/host"
+          cortex --version
+          # No stdin on purpose: cortex init must run unattended, and this is the guard for it.
+          # core/api: a service in a subfolder, as a monorepo lays them out.
+          if [ "${{ matrix.mode }}" = workspace ]; then
+            cortex init --tool claude --workspace --service svc-a --service core/api < /dev/null
           else
-            git clone -q "$GITHUB_WORKSPACE/cortex-src" cortex
+            cortex init --tool claude < /dev/null
           fi
 
-          # No stdin on purpose: setup.sh must be runnable unattended, and this is the
-          # regression guard for it.
-          ./cortex/setup.sh --tool claude ${{ matrix.workspace_flag }} < /dev/null
-
       # The alias is how the Prompt Manager — and the runtime's service index — name a service.
-      - name: A service setup.sh scaffolds carries its own alias
+      - name: A service cortex init scaffolds carries its own alias
         if: matrix.mode == 'workspace'
         run: |
           set -euo pipefail
-          mkdir -p /tmp/host-svc && cd /tmp/host-svc
-          git clone -q "$GITHUB_WORKSPACE/cortex-src" cortex
-          # core/api: a service in a subfolder, as a monorepo lays them out — named by its last segment.
-          printf 'svc-a\ncore/api\n' | ./cortex/setup.sh --tool claude --workspace > /dev/null
+          cd "$RUNNER_TEMP/host"
           grep -q '<!-- @alias: svc-a -->' svc-a/project-overview.md
           grep -q '<!-- @alias: svc-a -->' svc-a/project-context.md
           grep -q '<!-- @alias: api -->' core/api/project-overview.md
           grep -q '<!-- @alias: api -->' core/api/project-context.md
           echo "✓ svc-a is named @svc-a, core/api @api"
 
-      - name: The bootstrap file must exist and point at cortex
+      - name: The bootstrap file must exist and send the LLM to the spec
         run: |
           set -euo pipefail
-          cd /tmp/host
+          cd "$RUNNER_TEMP/host"
           test -f CLAUDE.md || { echo "CLAUDE.md was not generated"; exit 1; }
-          grep -q "cortex/agents" CLAUDE.md || {
-            echo "CLAUDE.md does not reference cortex/agents — the cascade would resolve nowhere:"
+          if ! { grep -q "cortex/agents" CLAUDE.md && grep -q "cortex.local.toml" CLAUDE.md; }; then
+            echo "CLAUDE.md does not send the LLM to the spec — the cascade would resolve nowhere:"
             cat CLAUDE.md
             exit 1
-          }
-          echo "✓ bootstrap generated"
+          fi
+          grep -q '^spec = ' cortex.local.toml
+          echo "✓ bootstrap generated, spec synced"
 
       - name: Overlay integrity in the scaffolded project
         run: |
           set -euo pipefail
-          cd /tmp/host
-          ./cortex/bin/validate-overlays.sh --strict
+          cd "$RUNNER_TEMP/host"
+          cortex validate --strict
 
-      # With no agents/ directory, the step above only proves that the shim finds Python and
-      # the core. This one proves the checks run: a valid overlay passes, the same one broken fails.
+      # With no agents/ directory, the step above only proves that the command finds the spec.
+      # This one proves the checks run: a valid overlay passes, the same one broken fails.
       - name: The checks run on an overlay
         run: |
           set -euo pipefail
-          cd /tmp/host
+          cd "$RUNNER_TEMP/host"
           mkdir -p agents/roles/engineering
           printf '%s\n' '<!-- OVERLAY' \
             '     Base: cortex/agents/roles/engineering/lead-backend.md' \
             '     Scope: workspace' '     Semantic: additive' '-->' '' \
             '## Naming (additive)' '- a project rule' > agents/roles/engineering/lead-backend.md
-          ./cortex/bin/validate-overlays.sh --strict | tee report.txt
+          cortex validate --strict | tee report.txt
           grep -q '✓ agents/roles/engineering/lead-backend.md' report.txt
 
           sed -i 's#engineering/lead-backend.md$#engineering/no-such-role.md#' agents/roles/engineering/lead-backend.md
-          if ./cortex/bin/validate-overlays.sh --strict > broken.txt; then
+          if cortex validate --strict > broken.txt; then
             echo "a Base: pointing nowhere passed the checks"
             exit 1
           fi
           grep -q 'BASE_NOT_FOUND' broken.txt || { echo "failed, but not on the broken Base:"; cat broken.txt; exit 1; }
           echo "✓ the checks ran"
+
+  self:
+    name: cortex validate takes this repository for the base
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # The base as its own project (ADR-007 §3.1): its files are the base, never overlays of it, so
+      # there is no overlay to check. What this proves: validate finds the checkout as both roots,
+      # scans no scope of it, and exits 0 — the overlay checks run in the scaffold job.
+      - name: cortex validate --strict at the root of this repository
+        run: |
+          out="$(PYTHONPATH=core:cli python -m cortex_cli validate --strict)"
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -qxF "  Project root:  $PWD"
+          printf '%s\n' "$out" | grep -qxF "  Cortex dir:    $PWD"
+          if printf '%s\n' "$out" | grep -q '── Scope:'; then echo "::error::the base was scanned as overlays"; exit 1; fi

@@ -1,7 +1,7 @@
-"""``cortex init`` — ``setup.sh``, at parity (ADR-008 §3.7).
+"""``cortex init`` — the setup script of Cortex 0.x, at parity (ADR-008 §3.7).
 
 Same options, the same defaults for a new project (``--theme h2g2``, ``--tool copilot``), same files at the same paths
-as ``setup.sh``: the tool's instructions file, the root ``project-overview.md`` and
+as the script: the tool's instructions file, the root ``project-overview.md`` and
 ``project-context.md`` when missing, and in workspace mode a pair per service carrying its
 ``@alias`` — the basename of its folder — plus the team tier when ``agents/`` is its own git
 working tree. The files are written byte for byte as the script wrote them, from the templates of
@@ -30,11 +30,11 @@ import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Dict, List, Optional, TextIO
+from typing import List, Optional, TextIO
 
 from cortex_core.project import is_theme
 
-from . import config, store, sync
+from . import config, console, store, sync
 from .paths import display, working_directory
 
 TOOLS = {
@@ -53,7 +53,7 @@ class InitError(Exception):
 
 
 # --------------------------------------------------------------------------- #
-# The files, byte for byte as setup.sh wrote them
+# The files, byte for byte as the setup script wrote them
 # --------------------------------------------------------------------------- #
 
 def instructions(template: bytes, personality: bool) -> bytes:
@@ -80,7 +80,7 @@ def with_alias(template: bytes, alias: str) -> bytes:
 
 def is_git_working_tree(directory: Path) -> bool:
     """``agents/`` is its own git working tree: it holds a ``.git`` — a directory, or the file a
-    worktree or a submodule has. ``setup.sh`` asked ``git -C agents rev-parse``, which is also true
+    worktree or a submodule has. The setup script asked ``git -C agents rev-parse``, which is also true
     of any ``agents/`` inside the project's own repository (ADR-008 §9)."""
     return (directory / ".git").exists()
 
@@ -92,6 +92,16 @@ def service_path(name: str) -> str:
     if not name or path.is_absolute() or ".." in path.parts or (len(name) > 1 and name[1] == ":"):
         raise InitError(f"--service {name}: a service is a folder inside the workspace")
     return str(path)
+
+
+def ask(out: TextIO, question: str) -> bool:
+    """A yes-or-no on the terminal, no by default: Enter, and a stdin that ends before any answer,
+    say no — the question grants a permission."""
+    out.write(question)
+    out.flush()
+    line = sys.stdin.readline()
+    out.write("\n" if not line.endswith("\n") else "")
+    return line.strip().lower() in ("y", "yes")
 
 
 def prompt_services(out: TextIO) -> List[str]:
@@ -110,32 +120,6 @@ def prompt_services(out: TextIO) -> List[str]:
 # --------------------------------------------------------------------------- #
 # The command
 # --------------------------------------------------------------------------- #
-
-def add_to_gitignore(root: Path, entries: Dict[str, str]) -> List[str]:
-    """Add to ``.gitignore`` each line of ``entries`` whose path — its value — git does not ignore
-    yet, and return them. The file keeps its bytes: its encoding, its byte order mark, its line
-    endings. Without a repository to ask, a line is added unless it, or one that means the same,
-    is there — and no .gitignore is created: it would keep nothing out of any commit."""
-    path = root / ".gitignore"
-    if not path.is_file() and sync.ignored(root, config.LOCAL_FILE) is None:
-        return []
-    data = path.read_bytes() if path.is_file() else b""
-    present = {line.strip().lstrip("\ufeff") for line in data.decode("utf-8", errors="replace").splitlines()}
-    missing = []
-    for line, probe in entries.items():
-        state = sync.ignored(root, probe)
-        if state is None:                       # no repository to ask
-            name = probe.rstrip("/")
-            state = bool(present & ({name, f"/{name}"} | ({f"{name}/", f"/{name}/"} if probe.endswith("/") else set())))
-        if not state and line not in present:
-            missing.append(line)
-    if missing:
-        newline = b"\r\n" if b"\r\n" in data else b"\n"
-        if data and not data.endswith(b"\n"):
-            data += newline
-        path.write_bytes(data + b"".join(line.encode("utf-8") + newline for line in missing))
-    return missing
-
 
 def _same_name(path: str) -> str:
     """A path compared as a file system that ignores case compares it — macOS's and Windows'."""
@@ -163,6 +147,12 @@ def _refuse_instructions_file(root: Path, path: Path) -> None:
 def bootstrap_of_cortex(content: bytes) -> bool:
     """A file the templates wrote: their heading, or their personality block."""
     return content.startswith(b"# Cortex AI Team") or PERSONALITY_BEGIN in content
+
+
+def reads_the_local_file(content: bytes) -> bool:
+    """A bootstrap of this cortex's templates, which read ``spec`` in ``cortex.local.toml``. An
+    older one reads ``cortex/`` as the submodule it was, and finds no spec once it is gone."""
+    return config.LOCAL_FILE.encode() in content
 
 
 def _refuse_a_file_on_the_way(path: Path, what: str) -> None:
@@ -209,7 +199,7 @@ def _services(options: argparse.Namespace, root: Path, out: TextIO, err: TextIO)
     """The workspace's services, checked: each a folder inside it, none an existing file."""
     names = list(options.service)
     if options.workspace and not names:
-        if sys.stdin is not None and sys.stdin.isatty():
+        if console.stdin_is_terminal():
             names = prompt_services(out)
         else:
             err.write("note: no service created — --service NAME adds one; names are asked for on a terminal only\n")
@@ -258,19 +248,47 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
     # A project keeps the version it pins — never another, older or newer; a new one takes this
     # binary's. A version newer than this binary is refused here.
     version = project.version if project else the_store.own
-    the_store.ensure(version)
-    spec = the_store.path(version)
+    if options.source:
+        # A contributor's checkout (§3.5, --from): its templates and its spec, no version checked.
+        spec = Path(os.path.abspath(options.source))
+        if not sync.is_checkout(spec):
+            raise InitError(f"--from {display(options.source)}: no Cortex checkout there — it holds no agents/, "
+                            "templates/ and docs/")
+        described = f"the checkout at {display(str(spec))}"
+    else:
+        the_store.ensure(version)
+        spec = the_store.path(version)
+        described = f"Cortex {version}"
     if project is None and theme is None:
         theme = "h2g2"
-    if theme not in (None, "none") and not (spec / "agents" / "personalities" / theme).is_dir():
-        themes = sorted(p.name for p in (spec / "agents" / "personalities").iterdir() if p.is_dir())
-        raise InitError(f"theme '{theme}' is not in Cortex {version} — the themes are: {', '.join(themes)}")
+    # A theme Cortex ships, or one of the project's own, in its agents/personalities/.
+    own_themes = root / "agents" / "personalities"
+    if theme not in (None, "none") and not any((base / theme).is_dir()
+                                               for base in (spec / "agents" / "personalities", own_themes)):
+        themes = sorted({p.name for base in (spec / "agents" / "personalities", own_themes) if base.is_dir()
+                         for p in base.iterdir() if p.is_dir()})
+        raise InitError(f"theme '{theme}' is neither in {described} nor in agents/personalities/ — "
+                        f"the themes are: {', '.join(themes)}")
+
+    # Claude Code asks before it reads the store (ADR-008 §9): on a terminal, offer the team setting
+    # to a new project.
+    # A copy is inside the project: Claude Code reads it without asking, and there is nothing to offer.
+    spec_mode = mode or (project.sync if project else None)
+    claude_access = options.claude_access
+    if claude_access is None and options.tool == "claude" and project is None and spec_mode != "copy" \
+            and console.stdin_is_terminal():
+        claude_access = ask(out, "Let Claude Code read the Cortex spec without asking for permission — "
+                                 "claude_access = true in cortex.toml? [y/N] ")
+
     # cortex.toml: a new one, or only the keys the options name.
     if project is None:
-        values = {"version": str(version), "theme": theme, **({"sync": mode} if mode else {})}
+        values = {"version": str(version), "theme": theme, **({"sync": mode} if mode else {}),
+                  **({"claude_access": True} if claude_access else {})}
     else:
         values = {**({"theme": theme} if theme is not None and theme != project.theme else {}),
-                  **({"sync": mode} if mode and mode != project.sync else {})}
+                  **({"sync": mode} if mode and mode != project.sync else {}),
+                  **({"claude_access": claude_access}
+                     if claude_access is not None and claude_access != project.claude_access else {})}
     project_text = config.render_project(str(root), values) if values else None
     personality = (theme if theme is not None else project.theme) != "none"
 
@@ -288,15 +306,15 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
 
     # The spec, where the project finds it — then what git must ignore, asked of git once
     # cortex/ has its final form: a copy turned into a link is a file to git.
-    sync.sync(str(root), mode, None, out, err, notes=False)
-    spec_mode = mode or (project.sync if project else None) or "store"
+    sync.sync(str(root), mode, options.source, out, err, notes=False)
+    spec_mode = spec_mode or "store"
     entries = {config.LOCAL_FILE: config.LOCAL_FILE}
     if spec_mode in ("link", "copy"):
         # A link is a file to git: `cortex/` would not match it. `/cortex` matches the link and the copy;
         # `/.cortex-sync-*`, what a sync killed half-way leaves beside it — a link to this machine's store.
         entries[f"/{sync.LINK}"] = sync.LINK
         entries[f"/{sync.STAGING}*"] = f"{sync.STAGING}x"
-    ignored = add_to_gitignore(root, entries)
+    ignored = sync.add_to_gitignore(root, entries)
     if ignored:
         out.write(f"✓ .gitignore: {', '.join(ignored)}\n")
     if sync.ignored(root, config.LOCAL_FILE) is None:
@@ -320,6 +338,9 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         if not bootstrap_of_cortex(kept):
             err.write(f"note: {display(str(instructions_file))} holds no Cortex bootstrap: the tool will not find "
                       f"Cortex — {again}\n")
+        elif not reads_the_local_file(kept):
+            err.write(f"note: {display(str(instructions_file))} is an older Cortex bootstrap: it does not read "
+                      f"{config.LOCAL_FILE}, which names the spec now — {again}\n")
         elif kept.split(b"\n", 1)[0] != bootstrap.read_bytes().split(b"\n", 1)[0]:
             err.write(f"note: {display(str(instructions_file))} was written for "
                       f"{'a single project' if workspace else 'a workspace'} — {again}\n")
@@ -348,9 +369,17 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
         # Found, not written: a file of another tool's, which a new project's default leaves alone.
         for name, rel in TOOLS.items():
             other = root / rel
-            if other != instructions_file and other.is_file() and not bootstrap_of_cortex(other.read_bytes()):
-                err.write(f"note: {rel} is there and was kept: it holds no Cortex bootstrap — "
-                          f"cortex init --tool {name} --force replaces it, and keeps it as .bak\n")
+            if other == instructions_file or not other.is_file():
+                continue
+            content = other.read_bytes()
+            if not bootstrap_of_cortex(content):
+                found = "it holds no Cortex bootstrap"
+            elif not reads_the_local_file(content):
+                found = f"an older Cortex bootstrap, which does not read {config.LOCAL_FILE}"
+            else:
+                continue
+            err.write(f"note: {rel} is there and was kept: {found} — "
+                      f"cortex init --tool {name} --force replaces it, and keeps it as .bak\n")
         if project is not None and not known_before and instructions_file is not None:
             err.write(f"note: no instructions file of a known tool was here, and {TOOLS['copilot']} is written: "
                       "a project of --tool custom names it again, with --instructions-file\n")
@@ -377,6 +406,10 @@ def init(options: argparse.Namespace, cwd: str, out: TextIO, err: TextIO) -> Non
                 if not (agents / file).exists():
                     (agents / file).write_bytes(content)
                     out.write(f"✓ agents/{file} — the team's, agents/ is its own git repository (ADR-006)\n")
+    if options.tool == "claude" and claude_access is None and spec_mode != "copy" \
+            and not config.load(str(root)).active_claude_access:
+        out.write("\ntip: Claude Code asks before it reads the spec in the store. `claude_access = true` in "
+                  "cortex.toml lets it read without asking — for the team; `cortex sync --claude-access`, for you.\n")
     out.write(f"\nCortex {version} is ready in {display(str(root))}.\n")
 
 
@@ -390,7 +423,7 @@ def run(args: List[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="cortex init",
         description="Make a directory a Cortex project: its cortex.toml, the AI tool's instructions file, "
-                    "project-overview.md and project-context.md — setup.sh, at parity (ADR-008 §3.7).")
+                    "project-overview.md and project-context.md (ADR-008 §3.7).")
     parser.add_argument("dir", nargs="?", metavar="DIR", help="the project's root (default: the current directory)")
     parser.add_argument("--theme", help="the team's personality theme (default: h2g2, or the one cortex.toml names)")
     parser.add_argument("--no-personality", action="store_true", help="no personality layer — wins over --theme")
@@ -408,6 +441,14 @@ def run(args: List[str]) -> int:
                         help="replace an existing instructions file, kept as FILE.bak (FILE.bak.N when a .bak is "
                              "there) — cortex.toml changes only "
                              "for the options given")
+    parser.add_argument("--from", dest="source", metavar="PATH",
+                        help="take the templates and the spec from a checkout of Cortex, as `cortex sync --from` does")
+    access = parser.add_mutually_exclusive_group()
+    access.add_argument("--claude-access", dest="claude_access", action="store_const", const=True,
+                        help="let Claude Code read the spec without asking: claude_access = true in cortex.toml — "
+                             "asked on a terminal with --tool claude")
+    access.add_argument("--no-claude-access", dest="claude_access", action="store_const", const=False,
+                        help="do not ask, and leave it off")
     options = parser.parse_args(args)
     if options.service and not options.workspace:
         parser.error("--service goes with --workspace")

@@ -2,8 +2,9 @@
 
 Cortex is two things with very different exposure, and this policy covers both:
 
-- the **framework layer** (`agents/`, `templates/`, `setup.sh`) — Markdown and shell that a
-  host project mounts and that an LLM reads;
+- the **framework layer** (`agents/`, `templates/`) and the **`cortex` command** that installs
+  it — Markdown that an LLM reads, and a binary, with its install scripts, that writes into a
+  host project and into the machine's store (`~/.cortex`);
 - **`cortex-runtime`** — an HTTP service that drives an agentic loop, persists state and
   optionally enforces an API trust model
   ([ADR-004](docs/adr/ADR-004-api-security.md)).
@@ -19,7 +20,7 @@ published together.
 
 Useful things to include, if you have them:
 
-- which layer is affected (framework files, `setup.sh`, or the runtime);
+- which layer is affected (framework files, the `cortex` command or its install scripts, or the runtime);
 - the version or commit (`git describe --tags`);
 - how the runtime is exposed, if it is involved — behind an authenticating proxy, or
   reachable directly;
@@ -51,8 +52,9 @@ Pre-1.0: fixes land on `main` and in the next release. There are no backports.
 
 **In scope** — anything shipped by this repository: the runtime's HTTP surface,
 authentication and rate limiting, persistence, the job queue, HMAC webhooks, the
-deployment definitions under `deploy/`, and `setup.sh` (it writes files into a host
-project, so path handling matters).
+deployment definitions under `deploy/`, and the `cortex` command with `install.sh` and
+`install.ps1` — they download and verify releases, extract archives, and write files into a host
+project and into `~/.cortex`, so checksums and path handling matter.
 
 **Out of scope** — how *you* deploy it: your reverse proxy, TLS termination, secret
 storage, cluster policies, and any modification you made. Also out of scope: findings that

@@ -37,7 +37,7 @@ from typing import Dict, List, Optional, TextIO
 
 from cortex_core.validate import shown
 
-from . import config, store
+from . import claude, config, store
 from .paths import display, working_directory
 
 LINK = "cortex"
@@ -453,7 +453,8 @@ def unswap(target: Path, aside: Optional[Path]) -> None:
 # The command
 # --------------------------------------------------------------------------- #
 
-def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO, notes: bool = True) -> None:
+def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO,
+         claude_access: Optional[bool] = None, notes: bool = True) -> None:
     """Sync the project at or above ``cwd``. ``notes`` off, what git ignores is left to the
     caller — ``cortex init`` writes .gitignore once ``cortex/`` has its final form."""
     root = config.find_project(cwd)
@@ -461,12 +462,17 @@ def sync(cwd: str, mode: Optional[str], source: Optional[str], out: TextIO, err:
         raise SyncError(f"no {config.PROJECT_FILE} in {display(cwd)} or above it — `cortex init` makes a directory "
                         "a Cortex project")
     with project_lock(Path(root), err):
-        _sync(root, mode, source, out, err, notes)
+        _sync(root, mode, source, out, err, claude_access, notes)
 
 
-def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO, notes: bool) -> None:
+def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, err: TextIO,
+          claude_access: Optional[bool], notes: bool) -> None:
     project = config.load(root)
     out.write(f"Project: {display(root)}\n")
+    if claude_access is not None:
+        # This developer's choice, written with spec and kept for the next syncs: cortex.local.toml's
+        # wins over the team's.
+        project.local_claude_access = claude_access
     mode = mode or project.sync or "store"
     the_store = store.Store()
     target = Path(root) / LINK
@@ -490,7 +496,9 @@ def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, er
     # Everything is prepared and checked before anything of the project moves: the new
     # cortex.local.toml, the new link or copy beside cortex/. Then one rename puts it in place.
     spec = display(str(spec_source)) if mode == "store" else LINK
-    local_text = config.render_spec(root, spec)
+    local_text = config.render_local(root, {"spec": spec, **({"claude_access": claude_access}
+                                                             if claude_access is not None else {})},
+                                     {"spec": "written by `cortex sync`"})
     keep, new = False, None
     if mode == "link":
         keep = existing == "link" and os.path.normcase(link_target(target)) == os.path.normcase(str(spec_source))
@@ -532,11 +540,68 @@ def _sync(root: str, mode: Optional[str], source: Optional[str], out: TextIO, er
     out.write(f'{config.LOCAL_FILE}: spec = "{spec}"\n')
     if notes:
         _notes(Path(root), mode, err)
+    _claude(Path(root), project, None if mode == "copy" else spec_source, out, err)
     theme = project.active_theme
     if theme != "none" and not any((base / "agents" / "personalities" / theme).is_dir()
                                    for base in (spec_source, Path(root))):
         err.write(f'warning: theme "{theme}" is neither in the spec nor in agents/personalities/ — '
                   "the Prompt Manager would not find it\n")
+
+
+def _claude(root: Path, project: config.Project, spec: Optional[Path], out: TextIO, err: TextIO) -> None:
+    """Keep Claude Code's permission to read the spec without asking, when the project or the
+    developer asks for it (``claude_access``) — and only the entry Cortex wrote, recorded as
+    ``claude_entry``. A copy is inside the project: nothing to allow. While neither file sets
+    ``claude_access``, and Cortex wrote no entry, Claude Code's settings are left alone."""
+    access = project.active_claude_access
+    if access is None and project.claude_entry is None:
+        return
+    allow = claude.entry_for(spec) if access and spec is not None else None
+    try:
+        said, owned = claude.update(root, allow, project.claude_entry,
+                                    claude.entry_for(spec) if spec is not None else None)
+    except claude.ClaudeSettingsError as error:
+        err.write(f"warning: {error}\n")
+        return
+    if owned != project.claude_entry:
+        config.write_local(str(root), {"claude_entry": owned},
+                           {"claude_entry": f"written by `cortex sync` — the entry it keeps in {claude.SETTINGS}"})
+    if said:
+        out.write(f"{said}\n")
+    elif access is False and spec is not None and claude.allows(root, claude.entry_for(spec)):
+        # Off, with nothing of Cortex's to remove: an entry of the developer's still grants it.
+        err.write(f"note: {claude.SETTINGS} has an entry of your own that lets Claude Code read "
+                  f"{claude.entry_for(spec)} without asking — remove it there for Claude Code to ask again\n")
+    if allow is not None:
+        added = add_to_gitignore(root, {claude.SETTINGS: claude.SETTINGS})
+        if added:
+            out.write(f".gitignore: {', '.join(added)}\n")
+
+
+def add_to_gitignore(root: Path, entries: Dict[str, str]) -> List[str]:
+    """Add to ``.gitignore`` each line of ``entries`` whose path — its value — git does not ignore
+    yet, and return them. The file keeps its bytes: its encoding, its byte order mark, its line
+    endings. Without a repository to ask, a line is added unless it, or one that means the same,
+    is there — and no .gitignore is created: it would keep nothing out of any commit."""
+    path = root / ".gitignore"
+    if not path.is_file() and ignored(root, config.LOCAL_FILE) is None:
+        return []
+    data = path.read_bytes() if path.is_file() else b""
+    present = {line.strip().lstrip("\ufeff") for line in data.decode("utf-8", errors="replace").splitlines()}
+    missing = []
+    for line, probe in entries.items():
+        state = ignored(root, probe)
+        if state is None:                       # no repository to ask
+            name = probe.rstrip("/")
+            state = bool(present & ({name, f"/{name}"} | ({f"{name}/", f"/{name}/"} if probe.endswith("/") else set())))
+        if not state and line not in present:
+            missing.append(line)
+    if missing:
+        newline = b"\r\n" if b"\r\n" in data else b"\n"
+        if data and not data.endswith(b"\n"):
+            data += newline
+        path.write_bytes(data + b"".join(line.encode("utf-8") + newline for line in missing))
+    return missing
 
 
 def ignored(root: Path, name: str) -> Optional[bool]:
@@ -588,9 +653,15 @@ def run(args: List[str]) -> int:
                        help="copy it into cortex/, read-only")
     parser.add_argument("--from", dest="source", metavar="PATH",
                         help="use a checkout of Cortex instead of the store: no version is checked")
+    access = parser.add_mutually_exclusive_group()
+    access.add_argument("--claude-access", dest="claude_access", action="store_const", const=True,
+                        help="let Claude Code read the spec without asking, from now on, for you: "
+                             "claude_access = true in cortex.local.toml")
+    access.add_argument("--no-claude-access", dest="claude_access", action="store_const", const=False,
+                        help="stop it: claude_access = false in cortex.local.toml")
     options = parser.parse_args(args)
     try:
-        sync(working_directory(), options.mode, options.source, sys.stdout, sys.stderr)
+        sync(working_directory(), options.mode, options.source, sys.stdout, sys.stderr, options.claude_access)
     except (config.ConfigError, store.StoreError, SyncError) as error:
         return failed("cortex sync", str(error))
     except OSError as error:

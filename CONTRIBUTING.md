@@ -6,7 +6,7 @@ Welcome. This guide takes you from a fresh clone to a merged contribution. If so
 
 ## 🧭 Quick orientation
 
-Cortex is a **framework of AI agents** that host projects mount, either as a **Git submodule** (single project / monorepo) or as a **standalone clone** sitting next to independent service repos (multi-repo workspace). The contract is mostly Markdown: agents are described in role/capability/personality files that an AI tool reads at the start of each conversation.
+Cortex is a **framework of AI agents** that host projects use through the `cortex` command: the spec lives once per machine, and a project — a single repository or a workspace of several — pins the version it uses in its `cortex.toml` ([ADR-008](docs/adr/ADR-008-cortex-binary.md)). The contract is mostly Markdown: agents are described in role/capability/personality files that an AI tool reads at the start of each conversation.
 
 | You want to... | Read |
 |---|---|
@@ -23,14 +23,17 @@ Cortex is a **framework of AI agents** that host projects mount, either as a **G
 cortex/
 ├── README.md                          # ← Entry point: keep crisp, do not bloat
 ├── CONTRIBUTING.md                    # ← This file
-├── setup.sh                           # ← Installation logic (Bash)
+├── install.sh, install.ps1            # ← The one-line install of the `cortex` binary (ADR-008)
+├── cli/                               # ← The `cortex` command: init, sync, validate — built into a native binary
+├── core/                              # ← cortex-core: the cascade in code (ADR-007)
+├── runtime/                           # ← The engine: API, agentic loop (ADR-002)
 ├── changelog/                         # ← Per-version notes (one .md per release)
 ├── docs/                              # ← All long-form docs
 │   ├── getting-started.md
 │   ├── extending-layers.md
 │   ├── creating-a-theme.md
 │   └── adr/                           # ← Architecture Decision Records (append-only)
-├── templates/                         # ← Files copied by setup.sh into host projects
+├── templates/                         # ← Files `cortex init` writes into host projects
 │   ├── bootstrap-instructions.md           # source for any AI tool (single project)
 │   ├── bootstrap-instructions-workspace.md # source for any AI tool (workspace mode)
 │   ├── project-overview.md.template
@@ -48,52 +51,55 @@ cortex/
 ### Prerequisites
 
 - Git (for cloning your fork)
-- Bash 4+ (for testing `setup.sh`)
-- Python 3.9 or later (for `bin/validate-overlays.sh`, which runs its checks from `core/` — until the native binary of ADR-008)
-- A test host project where you can mount your fork — either as a Git submodule or as a standalone clone
+- Python 3.11 or later, to run the `cortex` command from your checkout — `cortex-core` alone runs on 3.9
+- Nothing else: a host project needs neither Bash nor Python, only the `cortex` binary
 
 ### Clone & test loop
 
+A throwaway host project reads the spec **from your checkout**, not from a release: `cortex init --from` writes its bootstrap file from your templates, and points its `spec` at your checkout — every edit you make is read at once, nothing to re-sync.
+
 ```bash
-# 1. Fork & clone your fork locally
+# 1. Fork & clone your fork locally, and put the command on your PATH from it
 git clone <your-fork-url> cortex-dev
 cd cortex-dev
+pip install -e core -e cli             # a `cortex` command running this checkout's code
 
-# 2A. Test against a throwaway single-project repo (submodule mode)
+# 2A. A throwaway single project
 mkdir /tmp/cortex-test-single && cd /tmp/cortex-test-single
-git init
-git submodule add <path-to-your-fork> cortex
-./cortex/setup.sh --tool claude       # or copilot/cursor/agents
+cortex init --tool claude --from ~/cortex-dev          # or copilot/cursor/agents
 
-# 2B. Test against a throwaway multi-repo workspace (standalone clone mode — no parent git repo)
+# 2B. A throwaway workspace — services, and the team tier when agents/ is its own repository
 mkdir /tmp/cortex-test-workspace && cd /tmp/cortex-test-workspace
-git clone <path-to-your-fork> cortex
-./cortex/setup.sh --tool claude --workspace
+cortex init --tool claude --workspace --service api --service core/web --from ~/cortex-dev
 
 # 3. Check that the bootstrap file was generated correctly
 cat CLAUDE.md   # (or .github/copilot-instructions.md, etc.)
 
-# 4. Iterate: edit cortex/, re-run setup.sh, re-check
+# 4. Iterate: edit your checkout — roles, capabilities, workflows are read in place.
+#    A change to templates/ reaches a project when you run cortex init --force --from again.
 ```
 
-**Why test both modes?** Because they exercise different code paths in `setup.sh`: submodule + single project, vs standalone clone + workspace. A change that works in one may break the other.
+`cortex sync --from ~/cortex-dev` points an existing project at your checkout the same way; a plain `cortex sync` puts it back on the version its `cortex.toml` pins. Each run with `--from` warns that no version is checked — it is a checkout, not a release.
+
+**Why test both modes?** Because single project and workspace exercise different paths of `cortex init` — services, their `@alias`, the team tier. The repository's CI runs both, on Linux and on Windows, through the install script and the built binary.
 
 ### Validation tools
 
 ```bash
-./cortex/bin/validate-overlays.sh           # checks overlay file integrity (host projects)
-bash bin/check-english.sh                   # in the cortex repository: tracked content is English (CI gate)
+cortex validate --strict                    # in a host project: overlay file integrity
+cortex validate --strict                    # in this repository: the base as its own project (ADR-007 §3.1)
+bash bin/check-english.sh                   # in this repository: tracked content is English (CI gate)
+(cd core && python3 -m unittest discover -s tests)
+(cd cli && python3 -m unittest discover -s tests)
 ```
 
-`validate-overlays.sh` needs Python 3.9 or later: it runs its checks from the `core/` of the Cortex checkout, with nothing to install.
-
-If you change a base file under `cortex/agents/`, run `validate-overlays.sh` against any host project that uses overlays — your rename may break their files.
+If you change a base file under `agents/`, run `cortex validate` against a host project that uses overlays — your rename may break their `Base:` headers.
 
 ## 📥 What contributions are welcome?
 
 | Type | Example | Difficulty |
 |---|---|---|
-| 🐛 Bug fix | Bash typo in `setup.sh`, broken doc link | Easy |
+| 🐛 Bug fix | A typo in `install.sh`, broken doc link | Easy |
 | 📝 Docs improvement | Clearer wording, missing example | Easy |
 | ➕ New capability | `cortex/agents/capabilities/databases/redis.md` | Medium |
 | ➕ New role | `cortex/agents/roles/data/data-engineer.md` | Medium |
@@ -162,13 +168,11 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 - **Links:** prefer relative (`[here](docs/getting-started.md)`) over absolute URLs
 - **Tables:** use them for comparisons and references; avoid for narrative content
 
-### Bash (`setup.sh` and any future scripts)
+### Shell
 
-- `set -eo pipefail` at top
-- Quote all variable expansions (`"$VAR"`, not `$VAR`)
-- Use `[[ ... ]]` for conditionals
-- Print colored output via the existing `${GREEN}` / `${RED}` / `${BLUE}` / `${YELLOW}` / `${NC}` variables
-- Test with `bash -n script.sh` (syntax check) and a real run before committing
+- **`install.sh` is POSIX `sh`, not Bash** — `curl … | sh` runs it under dash on Debian and Ubuntu. No `[[ ]]`, no arrays, no `local`; everything runs from `main`, called on its last line, so that a download cut short runs nothing. Lint it with `shellcheck --shell=sh`.
+- **`bin/*.sh`** — the repository's own tooling — is Bash: `set -eo pipefail` at top, `[[ ... ]]` for conditionals, colours through the existing `${GREEN}` / `${RED}` / `${BLUE}` / `${YELLOW}` / `${NC}` variables.
+- Quote every variable expansion (`"$VAR"`, not `$VAR`), and run a script for real before committing — `sh -n` / `bash -n` only check its syntax.
 
 ### File naming
 
@@ -184,7 +188,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 
 ## 🔀 Branch & PR workflow
 
-1. **Branch from `main`** with a descriptive name: `feat/redis-capability`, `fix/setup-workspace-template`, `docs/extending-layers-examples`
+1. **Branch from `main`** with a descriptive name: `feat/redis-capability`, `fix/init-workspace-template`, `docs/extending-layers-examples`
 2. **Make atomic commits** — one logical change per commit. Cortex uses **[Conventional Commits](https://www.conventionalcommits.org/) prefixed with a [gitmoji](https://gitmoji.dev/)** (see table below).
 3. **Update the changelog** if your change is user-visible: add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), in its Keep a Changelog group (`Added`, `Changed`, `Fixed`, …)
 4. **Run validators** before pushing
@@ -208,7 +212,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 - **Never** add a `Co-Authored-By:` trailer (this overrides any AI tool's default).
 - `<gitmoji>` — visual category (single emoji) — see table below
 - `<type>` — Conventional Commits type (parseable by changelog tools)
-- `<scope>` *(optional)* — component or layer affected (`runtime`, `roles`, `capabilities`, `setup`, `adr`, `docs`, `extending-layers`, …)
+- `<scope>` *(optional)* — component or layer affected (`runtime`, `cli`, `core`, `roles`, `capabilities`, `adr`, `docs`, `extending-layers`, …)
 - `<subject>` — imperative, present tense, no trailing period, ≤ 72 chars
 - `#<issue>` *(ADR work only)* — the task being delivered, immediately before the subject, so the issue timeline reads as a changelog: `✨ feat(core): #42 resolve the cascade from a configurable base root`
 
@@ -241,11 +245,11 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 
 ```
 ✨ feat(capabilities): add Redis capability for caching patterns
-🐛 fix(setup): use workspace template when --workspace flag is set
+🐛 fix(init): use workspace template when --workspace flag is set
 📝 docs(extending-layers): add example for personality character overlay
 📐 docs(adr): mark ADR-001 as Accepted
-♻️ refactor(setup): replace hardcoded heredoc with template loader
-✅ test(validate-overlays): cover non-overridable characters.md case
+♻️ refactor(init): replace hardcoded heredoc with template loader
+✅ test(validate): cover non-overridable characters.md case
 🔧 chore: rename copilot-instructions templates to bootstrap-instructions
 💥 feat(roles)!: rename lead-backend → senior-backend
 
@@ -262,18 +266,21 @@ Cortex follows **semantic versioning** with a pragmatic interpretation:
 
 | Bump | Trigger |
 |---|---|
-| **Major** (1.0.0) | Breaking change to the layer cascade contract, role schema, or `setup.sh` CLI |
+| **Major** (1.0.0) | Breaking change to the layer cascade contract, role schema, the `cortex` command line, or `cortex.toml` |
 | **Minor** (0.x.0) | New role/capability/theme/workflow; new ADR-anchored feature |
 | **Patch** (0.x.y) | Bug fix, docs improvement, internal refactor |
 
+**What a later `cortex` promises within a major version** (ADR-008 §9): it accepts what an earlier one accepted. A check it adds to `cortex validate` reports a warning, never an error, until the next major version. `--strict` fails on warnings, so a CI that runs it installs the binary of the version `cortex.toml` pins — [the migration guide](docs/migrating-to-the-binary.md#5-ci) has the lines — and a bump of `version` is the change that brings the new checks.
+
 Release process (maintainers only). A release is a **stack of pull requests onto an integration branch**, not a series of pushes to `main`:
 
-1. Cut `release/{version}` from `main` and push it — it gets no pull request of its own until the end
-2. Feature pull requests target `release/{version}`; one that builds on another is stacked on it, and a contributor's pull request opened against `main` is retargeted. Each adds its entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md)
+1. Cut the integration branch from `main` and push it: `release/{version}`, or `release/adr-NNN-slug` when the release delivers the stack of an ADR — see [the branch model](docs/process/adr-implementation.md#1-branch-model). It gets no pull request of its own until the end
+2. Feature pull requests target the integration branch; one that builds on another is stacked on it, and a contributor's pull request opened against `main` is retargeted. Each adds its entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md)
 3. The release artefacts come **last**, in a pull request stacked on top of everything else: `changelog/{version}.md`, the detailed, narrated release note, and the `{version}` section of `CHANGELOG.md` (Keep a Changelog) that replaces the `[Unreleased]` entries and links to that note. Last, because they rewrite the `[Unreleased]` anchor every feature pull request also touches. The heading is written **final** — its release date and `_(Released)_` — because `CHANGELOG.md` is never edited after a release: if the release slips, the date is corrected in this pull request before it merges. `CHANGELOG.md` is the single source of truth for versions; **no version number lives anywhere else** (README, docs, …) to avoid stale copies
-4. Merge the stack in order — with a **merge commit** for any pull request that has another stacked on it, see [the stacking rules](docs/process/adr-implementation.md#2-stacking-the-phases)
-5. Merge `release/{version}` into `main`
-6. Publish a **GitHub Release** named `{version}` that creates the tag `{version}` on `main` — **no `v` prefix**, like every tag since 0.1.0 — with the release note as its body. From the command line: `gh release create {version} --target main --title {version} --notes-file changelog/{version}.md`
+4. Merge the stack in order — with a **merge commit** for any pull request that has another stacked on it, see [the stacking rules](docs/process/adr-implementation.md#2-stacking-the-phases) — **into the integration branch, never around it into `main`**. The pull requests of a stack run the tests from source; the `binary` workflow, which builds what ships, runs on the push to that branch
+5. Once `binary` is green on the integration branch, open its pull request into `main` — it builds the binaries again, on what `main` will be — and merge it when it is green
+6. Push the tag `{version}` on `main` — **no `v` prefix**, like every tag since 0.1.0: `git tag {version} origin/main && git push origin {version}`. The tag makes the release; nothing is to be published by hand. **Push one tag at a time**: GitHub keeps one run of the release waiting, and cancels it when a third comes — re-run the workflow of a tag whose release was cancelled
+7. The push runs the `binary` workflow from the tag. It builds the `cortex` binary for the four targets and runs each Linux one on the oldest glibc it supports. Only then does it create the release, as a draft titled `{version}` with `changelog/{version}.md` as its body, attach the binaries, the spec archive, `SHA256SUMS` and a build-provenance attestation for each, and publish it — `releases/latest` never names a release without its assets. A tag `X.Y.Z` must have its `CHANGELOG.md` section and its `changelog/X.Y.Z.md`, or the workflow stops before anything is created. A tag with a suffix, `X.Y.Z-something`, makes a pre-release and needs neither: it is how the workflow is tried. A release already published is never uploaded to again. Check that the assets are there before announcing the release — the install scripts install from them
 
 ### Release names
 
@@ -287,8 +294,8 @@ The note then opens with an **epigraph**: a short quote that makes the release's
 ## 🧪 Testing checklist before opening a PR
 
 - [ ] Markdown lints cleanly (no broken links, no malformed tables)
-- [ ] If you touched `setup.sh`: tested `--tool {copilot,cursor,claude,agents}` × `{single, --workspace}` matrix
-- [ ] If you added overlays in `templates/` or examples: ran `validate-overlays.sh` mentally or in a host project
+- [ ] If you touched `cli/` or `templates/`: `cli/tests` passes — it replays `cortex init` across its parity matrix, and a deliberate change to what it writes is re-captured and reviewed (`cli/tests/init_matrix.py`)
+- [ ] If you added overlays in `templates/` or examples: ran `cortex validate` in a host project
 - [ ] If you added a role/capability: tested it against a host project with a sample prompt
 - [ ] Changelog entry added (if user-visible)
 - [ ] PR description includes the test plan

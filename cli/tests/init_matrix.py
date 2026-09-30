@@ -1,17 +1,17 @@
-"""The parity matrix of ``cortex init`` — what ``setup.sh`` writes, captured (ADR-008 phase 4).
+"""The parity matrix of ``cortex init`` (ADR-008 phase 4).
 
-Each case is a throwaway project, set up once by ``setup.sh`` and once by ``cortex init`` with the
-same options — services on the script's stdin, named by ``--service`` for the command. Both read
-the same spec: this repository's, plus a second theme, ``acme``, for the case of a non-default
-``--theme``. ``setup.sh`` finds it in the project's ``cortex/``; ``cortex init`` in its store.
+Each case is a throwaway project that ``cortex init`` sets up — services named by ``--service`` —
+from a spec: this repository's, plus a second theme, ``acme``, for the case of a non-default
+``--theme``. The spec is put in the command's store beforehand, at its own version.
 
-``fixtures/init/expected.json`` holds, for each case, every file ``setup.sh`` wrote in the project
-and the theme it wrote in its marker, ``cortex/agents/personalities/.active-theme``. ``cortex init``
-writes no marker — the theme goes to ``cortex.toml`` — and three files the script did not:
-``cortex.toml``, ``cortex.local.toml`` and ``.gitignore``. That is the one difference the matrix
-records; any other byte is a failure.
+``fixtures/init/expected.json`` holds, for each case, every file written in the project but the
+command's own three — ``cortex.toml``, ``cortex.local.toml`` and ``.gitignore`` — and the theme.
+Until phase 5 it was captured from the setup script of Cortex 0.x, and ``cortex init`` matched it
+byte for byte across every case; the script is gone, and the matrix now holds what the command
+writes. Any other byte is a failure.
 
-Re-capture — only for a deliberate change of what ``setup.sh`` writes, and review the diff:
+Re-capture — only for a deliberate change of what ``cortex init`` writes, the bootstrap templates
+included, and review the diff:
 
     cd cli && python3 -m tests.init_matrix --capture
 """
@@ -29,6 +29,7 @@ REPO = HERE.parents[1]
 EXPECTED = HERE / "fixtures" / "init" / "expected.json"
 SPEC_TREES = ("agents", "templates", "docs")
 OWN_FILES = ("cortex.toml", "cortex.local.toml", ".gitignore")
+CAPTURE_VERSION = "9.9.9"
 
 # name -> options, services, what the project holds before
 CASES = {
@@ -56,7 +57,7 @@ def build_spec(tmp):
     """This repository's spec, and a second theme."""
     spec = tmp / "spec"
     for tree in SPEC_TREES:
-        shutil.copytree(REPO / tree, spec / tree, ignore=shutil.ignore_patterns(".active-theme"))
+        shutil.copytree(REPO / tree, spec / tree)
     acme = spec / "agents" / "personalities" / "acme"
     acme.mkdir()
     (acme / "theme.md").write_text("# Acme\n", encoding="utf-8")
@@ -85,18 +86,27 @@ def snapshot(project, skip=("cortex",)):
     return files
 
 
-def run_setup(case, tmp, spec):
-    """``setup.sh`` in a project that carries the spec at ``cortex/``, as a submodule would."""
+def run_init(case, tmp, spec, run):
+    """``cortex init`` in the project of ``case``, with ``spec`` in its store — ``run`` runs the
+    command: ``run(args, cwd, env)``."""
     options, services, before = CASES[case]
-    project = tmp / "setup" / "project"
+    project = tmp / "init" / "project"
     prepare(project, before)
-    shutil.copytree(spec, project / "cortex")
-    shutil.copy(REPO / "setup.sh", project / "cortex" / "setup.sh")
-    stdin = "".join(f"{name}\n" for name in services)
-    subprocess.run(["bash", str(project / "cortex" / "setup.sh"), *options], cwd=project, input=stdin.encode(),
-                   capture_output=True, check=True)
-    marker = project / "cortex" / "agents" / "personalities" / ".active-theme"
-    return {"files": snapshot(project), "active_theme": marker.read_text(encoding="utf-8").strip()}
+    home = tmp / "cortex-home"
+    if not (home / "versions" / CAPTURE_VERSION).exists():
+        shutil.copytree(spec, home / "versions" / CAPTURE_VERSION)
+    env = dict(os.environ, CORTEX_HOME=str(home), CORTEX_SOURCE_VERSION=CAPTURE_VERSION)
+    run([*options, *[arg for name in services for arg in ("--service", name)]], project, env)
+    theme = next(line.split('"')[1] for line in (project / "cortex.toml").read_text(encoding="utf-8").splitlines()
+                 if line.startswith("theme = "))
+    return {"files": snapshot(project, skip=("cortex", *OWN_FILES)), "active_theme": theme}
+
+
+def _source(args, cwd, env):
+    call = ("import sys; sys.path[:0] = [sys.argv.pop(1), sys.argv.pop(1)]; "
+            "from cortex_cli.main import main; sys.exit(main())")
+    subprocess.run([sys.executable, "-I", "-S", "-c", call, str(REPO / "core"), str(REPO / "cli"), "init", *args],
+                   cwd=cwd, env=env, capture_output=True, check=True, stdin=subprocess.DEVNULL)
 
 
 def capture():
@@ -104,8 +114,11 @@ def capture():
     for case in CASES:
         tmp = Path(tempfile.mkdtemp(prefix="cortex-init-"))
         try:
-            expected[case] = run_setup(case, tmp, build_spec(tmp))
+            expected[case] = run_init(case, tmp, build_spec(tmp), _source)
         finally:
+            for directory, subdirs, files in os.walk(tmp):
+                for name in subdirs + files:
+                    os.chmod(os.path.join(directory, name), 0o700)
             shutil.rmtree(tmp, ignore_errors=True)
     EXPECTED.parent.mkdir(parents=True, exist_ok=True)
     EXPECTED.write_text(json.dumps(expected, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")

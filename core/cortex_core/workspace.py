@@ -1,7 +1,7 @@
 """The workspace's layout on disk — what the validator walks and the prompt shows (ADR-007, #88).
 
 ``find`` walks a tree the way the validator's script ran ``find``, in name order; ``services`` is the one
-discovery of a workspace's services — a folder with a ``project-overview.md``, as setup.sh
+discovery of a workspace's services — a folder with a ``project-overview.md``, as cortex init
 scaffolds one — for the validator's overlay roots and for the index an agent is shown.
 """
 
