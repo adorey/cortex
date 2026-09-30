@@ -146,6 +146,9 @@ def is_submodule(path: Path) -> bool:
     return False
 
 
+MARKER_OF_SETUP = "agents/personalities/.active-theme"     # the theme setup.sh chose, before 1.0.0
+
+
 def only_submodule(path: Path) -> bool:
     """``.gitmodules`` holds this submodule and no other: once it is removed, the file is left
     empty, and still tracked."""
@@ -217,23 +220,26 @@ def leaving(path: Path) -> str:
         # A teammate who pulled the removal: git dropped the entry, and kept the directory, the
         # submodule's repository and its settings — deinit and rm have nothing left to act on.
         gitdir = _gitdir(path)
-        kept = gitdir is not None and os.path.isdir(gitdir)
+        modules = gitdir is not None and os.path.isdir(gitdir)
+        kept = modules or (path / ".git").is_dir()          # older git kept the repository in cortex/.git
         commands = []
         section = _git(root, "config", "--local", "--get-regexp", rf"^submodule\.{LINK}\.")
         if section is not None and section.returncode == 0 and section.stdout.strip():
             commands.append(f"git -C {quote(root)} config --remove-section submodule.{LINK}")
         commands.append(_remove_command(display(str(path))))
-        if kept:
+        if modules:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
         target = quote(display(str(path)))
         if kept:
+            # setup.sh's theme marker is ignored in every Cortex before 1.0.0, and nothing reads it now.
+            marker = quote(f":(exclude){MARKER_OF_SETUP}")
             check = (f"here, with the submodule's repository. Check first that it holds nothing of yours: the first "
-                     f"command lists the files changed, added or ignored in it, the second the commits nobody "
-                     f"pushed.\n\n    git -C {target} status --short --ignored\n"
-                     f"    git -C {target} log --oneline HEAD --not --remotes\n\n")
+                     f"command lists the files changed, added or ignored in it, the second the commits no remote "
+                     f"branch holds.\n\n    git -C {target} status --short --ignored -- . {marker}\n"
+                     f"    git -C {target} log --oneline HEAD --branches --not --remotes\n\n")
         else:
-            # The third command 1.0.0 printed — the one that ran — removed the repository.
+            # The third command 1.0.0 and 1.1.0 printed — the one that ran — removed the repository.
             check = (f"here. Its repository is already gone, so git cannot show what changed in it: look through "
                      f"{LINK}/ yourself first.\n\n")
         return (f"The submodule was removed by a commit you pulled: git no longer tracks {LINK}/, and left it {check}"
