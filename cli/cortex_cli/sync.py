@@ -146,6 +146,38 @@ def is_submodule(path: Path) -> bool:
     return False
 
 
+def only_submodule(path: Path) -> bool:
+    """``.gitmodules`` holds this submodule and no other: once it is removed, the file is left
+    empty, and still tracked."""
+    try:
+        lines = (path.parent / ".gitmodules").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return False
+    paths = {value.strip().strip('"').rstrip("/") for key, _, value in (line.partition("=") for line in lines)
+             if key.strip() == "path"}
+    return paths == {path.name}
+
+
+def _git(root: str, *args: str) -> Optional[subprocess.CompletedProcess]:
+    git = shutil.which("git")
+    if git is None:
+        return None
+    try:
+        return subprocess.run([git, "-C", root, *args], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def in_index(path: Path) -> Optional[bool]:
+    """Whether the project's index still holds ``cortex`` as a submodule — mode 160000 — as the
+    migrator's does until the removal is committed. ``False`` once a pull brought the removal:
+    git dropped the entry and left the rest. ``None`` without a repository, or git, to ask."""
+    proc = _git(str(path.parent), "ls-files", "--stage", "--", path.name)
+    if proc is None or proc.returncode != 0:
+        return None
+    return proc.stdout.startswith("160000 ")
+
+
 def kind_of(path: Path) -> str:
     """What is at ``cortex/`` when sync did not make it."""
     gitdir = _gitdir(path) if (path / ".git").is_file() else None
@@ -180,8 +212,29 @@ def leaving(path: Path) -> str:
     see them first. Every path in them is absolute: they run from any directory."""
     root = display(str(path.parent))
     kind = kind_of(path)
+    if kind == "submodule" and in_index(path) is False:
+        # A teammate who pulled the removal: git dropped the entry, and kept the directory, the
+        # submodule's repository and its settings — deinit and rm have nothing left to act on.
+        gitdir = _gitdir(path)
+        commands = []
+        section = _git(root, "config", "--get-regexp", rf"^submodule\.{LINK}\.")
+        if section is not None and section.returncode == 0 and section.stdout.strip():
+            commands.append(f"git -C {quote(root)} config --remove-section submodule.{LINK}")
+        commands.append(_remove_command(display(str(path))))
+        if gitdir is not None and os.path.isdir(gitdir):
+            commands.append(_remove_command(display(gitdir)))
+        shown = "".join(f"    {command}\n" for command in commands)
+        return (f"The submodule was removed by a commit you pulled: git no longer tracks {LINK}/, and left it "
+                f"here, with the submodule's repository. Check first that it holds nothing of yours — this "
+                f"prints nothing then:\n\n    git -C {quote(display(str(path)))} status --short\n\n"
+                f"These commands change the project at {root}, so they are shown here, not run:\n\n{shown}\n"
+                "Then run the command again. The migration guide covers it: "
+                "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
     if kind == "submodule":
         commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {LINK}"]
+        if only_submodule(path):
+            # git rm empties .gitmodules of its last section, and leaves the file, tracked.
+            commands.append(f"git -C {quote(root)} rm -f .gitmodules")
         # A submodule's repository stays under the superproject's .git/modules/ once it is gone.
         gitdir = _gitdir(path)
         if gitdir is not None:
@@ -226,8 +279,8 @@ def existing_entry(target: Path, the_store: store.Store, project: config.Project
                             "Overlays belong in agents/, not in the copy. Move those files out, or remove cortex/ "
                             "yourself, then run cortex sync again.")
         return "copy"
-    raise SyncError(f"{LINK}/ is {describe(target)}, which cortex sync did not write. It would shadow the spec "
-                    f"{config.LOCAL_FILE} names, and sync never deletes what it did not write.\n{leaving(target)}")
+    raise SyncError(f"{LINK}/ is {describe(target)}, which Cortex did not write. It would shadow the spec "
+                    f"{config.LOCAL_FILE} names, and Cortex never deletes what it did not write.\n{leaving(target)}")
 
 
 # --------------------------------------------------------------------------- #
