@@ -511,24 +511,41 @@ class OptionTests(InitTestCase):
         status = subprocess.run(["git", "-C", str(self.project), "status", "--short"], capture_output=True, text=True)
         self.assertEqual(sorted(status.stdout.splitlines()), ["D  .gitmodules", "D  cortex"])
 
-    @unittest.skipUnless(HAS_GIT, "needs git")
-    def test_a_teammate_who_pulled_the_removal_is_given_commands_that_work(self):
-        # After the pull, git has dropped cortex from the index and kept the directory, the
-        # submodule's repository and its settings: deinit and rm have nothing to act on.
+    def _teammate_after_the_pull(self):
+        """The teammate's clone once they pulled the commit that removes the submodule."""
         git, origin, teammate = self._submodule_stack()
         for command in (["submodule", "deinit", "-q", "-f", "cortex"], ["rm", "-q", "cortex"], ["rm", "-q", "-f", ".gitmodules"]):
             subprocess.run([*git, "-C", str(self.project), *command], check=True)
-        # git's objects are read-only, and Windows removes no read-only file.
-        writable = {"onexc" if sys.version_info >= (3, 12) else "onerror":
-                    lambda remove, path, _: (os.chmod(path, 0o700), remove(path))}
-        shutil.rmtree(self.project / ".git" / "modules" / "cortex", **writable)
+        self._rmtree(self.project / ".git" / "modules" / "cortex")
         (self.project / "cortex.toml").write_text(f'version = "{OWN}"\ntheme = "h2g2"\n', encoding="utf-8")
         subprocess.run([*git, "-C", str(self.project), "add", "cortex.toml"], check=True)
         subprocess.run([*git, "-C", str(self.project), "commit", "-q", "-m", "the store"], check=True)
         subprocess.run([*git, "-C", str(self.project), "push", "-q", str(origin), "HEAD:refs/heads/main"], check=True)
         subprocess.run([*git, "-C", str(teammate), "pull", "-q"], capture_output=True)       # warns: cortex/ is not empty
         self.assertTrue((teammate / "cortex" / ".git").is_file())
+        return teammate
 
+    @staticmethod
+    def _rmtree(path):
+        # git's objects are read-only, and Windows removes no read-only file.
+        writable = {"onexc" if sys.version_info >= (3, 12) else "onerror":
+                    lambda remove, name, _: (os.chmod(name, 0o700), remove(name))}
+        shutil.rmtree(path, **writable)
+
+    def _sync_after_running(self, teammate, err):
+        """Run what a refusal printed, then sync again: it must pass."""
+        if os.name == "nt":
+            return
+        for command in self._shown(err):
+            subprocess.run(command, shell=True, check=True, capture_output=True)
+        proc = harness.run("sync", cwd=teammate, env=self._with_git())
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode())
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_teammate_who_pulled_the_removal_is_given_commands_that_work(self):
+        # After the pull, git has dropped cortex from the index and kept the directory, the
+        # submodule's repository and its settings: deinit and rm have nothing to act on.
+        teammate = self._teammate_after_the_pull()
         without_git = harness.run("sync", cwd=teammate, env=self.env)
         self.assertIn("submodule deinit", without_git.stderr.decode())      # no git to ask: the migrator's commands
 
@@ -536,18 +553,59 @@ class OptionTests(InitTestCase):
         err = proc.stderr.decode()
         self.assertEqual(proc.returncode, 1)
         self.assertIn("was removed by a commit you pulled", err)
-        self.assertIn(f"    git -C {quote(display(teammate / 'cortex'))} status --short\n", err)
+        target = quote(display(teammate / "cortex"))
+        # What changed in it, ignored files included, and the commits nobody pushed.
+        self.assertIn(f"    git -C {target} status --short --ignored\n    git -C {target} log --oneline HEAD --not --remotes\n", err)
+        for check in (["status", "--short", "--ignored"], ["log", "--oneline", "HEAD", "--not", "--remotes"]):
+            listed = subprocess.run(["git", "-C", str(teammate / "cortex"), *check], capture_output=True, text=True)
+            self.assertEqual((listed.returncode, listed.stdout), (0, ""), check)      # a clean clone: nothing listed
         self.assertNotIn("submodule deinit", err)
         root = quote(display(teammate))
         self.assertEqual(self._shown(err), [f"git -C {root} config --remove-section submodule.cortex",
                                             remove(display(teammate / "cortex")),
                                             remove(display(teammate / ".git" / "modules" / "cortex"))])
-        if os.name == "nt":
-            return
-        for command in self._shown(err):
-            subprocess.run(command, shell=True, check=True, capture_output=True)
+        self._sync_after_running(teammate, err)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_teammate_who_ran_the_commands_1_0_0_printed(self):
+        # Of the three, only the removal of .git/modules/cortex ran: cortex/.git names a repository
+        # that is gone, and git cannot show what changed in cortex/.
+        teammate = self._teammate_after_the_pull()
+        self._rmtree(teammate / ".git" / "modules" / "cortex")
         proc = harness.run("sync", cwd=teammate, env=self._with_git())
-        self.assertEqual(proc.returncode, 0, proc.stderr.decode())
+        err = proc.stderr.decode()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("Its repository is already gone, so git cannot show what changed in it", err)
+        self.assertNotIn("status --short", err)
+        self.assertNotIn("with the submodule's repository", err)
+        self.assertEqual(self._shown(err), [f"git -C {quote(display(teammate))} config --remove-section submodule.cortex",
+                                            remove(display(teammate / "cortex"))])
+        self._sync_after_running(teammate, err)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_teammate_whose_settings_hold_no_submodule_section(self):
+        teammate = self._teammate_after_the_pull()
+        subprocess.run(["git", "-C", str(teammate), "config", "--remove-section", "submodule.cortex"], check=True)
+        proc = harness.run("sync", cwd=teammate, env=self._with_git())
+        err = proc.stderr.decode()
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(self._shown(err), [remove(display(teammate / "cortex")),
+                                            remove(display(teammate / ".git" / "modules" / "cortex"))])
+        self._sync_after_running(teammate, err)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_second_submodule_keeps_gitmodules(self):
+        # .gitmodules is removed only when cortex was its last section.
+        git, _, _ = self._submodule_stack()
+        other = self.tmp / "other"
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        subprocess.run([*git, "-C", str(other), "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        subprocess.run([*git, "-C", str(self.project), "submodule", "add", "-q", str(other), "libs/other"], check=True)
+        proc = harness.run("init", cwd=self.project, env=self._with_git())
+        self.assertEqual(proc.returncode, 1)
+        commands = self._shown(proc.stderr.decode())
+        self.assertIn(f"git -C {quote(display(self.project))} rm cortex", commands)
+        self.assertFalse(any(".gitmodules" in command for command in commands), commands)
 
     def test_a_clone_is_refused_and_its_removal_printed(self):
         (self.project / "cortex" / ".git").mkdir(parents=True)

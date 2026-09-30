@@ -163,7 +163,8 @@ def _git(root: str, *args: str) -> Optional[subprocess.CompletedProcess]:
     if git is None:
         return None
     try:
-        return subprocess.run([git, "-C", root, *args], capture_output=True, text=True, timeout=30)
+        return subprocess.run([git, "-C", root, *args], capture_output=True, encoding="utf-8", errors="replace",
+                              timeout=30)
     except (OSError, subprocess.SubprocessError):
         return None
 
@@ -216,17 +217,26 @@ def leaving(path: Path) -> str:
         # A teammate who pulled the removal: git dropped the entry, and kept the directory, the
         # submodule's repository and its settings — deinit and rm have nothing left to act on.
         gitdir = _gitdir(path)
+        kept = gitdir is not None and os.path.isdir(gitdir)
         commands = []
-        section = _git(root, "config", "--get-regexp", rf"^submodule\.{LINK}\.")
+        section = _git(root, "config", "--local", "--get-regexp", rf"^submodule\.{LINK}\.")
         if section is not None and section.returncode == 0 and section.stdout.strip():
             commands.append(f"git -C {quote(root)} config --remove-section submodule.{LINK}")
         commands.append(_remove_command(display(str(path))))
-        if gitdir is not None and os.path.isdir(gitdir):
+        if kept:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
-        return (f"The submodule was removed by a commit you pulled: git no longer tracks {LINK}/, and left it "
-                f"here, with the submodule's repository. Check first that it holds nothing of yours — this "
-                f"prints nothing then:\n\n    git -C {quote(display(str(path)))} status --short\n\n"
+        target = quote(display(str(path)))
+        if kept:
+            check = (f"here, with the submodule's repository. Check first that it holds nothing of yours: the first "
+                     f"command lists the files changed, added or ignored in it, the second the commits nobody "
+                     f"pushed.\n\n    git -C {target} status --short --ignored\n"
+                     f"    git -C {target} log --oneline HEAD --not --remotes\n\n")
+        else:
+            # The third command 1.0.0 printed — the one that ran — removed the repository.
+            check = (f"here. Its repository is already gone, so git cannot show what changed in it: look through "
+                     f"{LINK}/ yourself first.\n\n")
+        return (f"The submodule was removed by a commit you pulled: git no longer tracks {LINK}/, and left it {check}"
                 f"These commands change the project at {root}, so they are shown here, not run:\n\n{shown}\n"
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
