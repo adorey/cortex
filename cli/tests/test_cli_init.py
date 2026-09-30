@@ -518,7 +518,10 @@ class OptionTests(InitTestCase):
         git, origin, teammate = self._submodule_stack()
         for command in (["submodule", "deinit", "-q", "-f", "cortex"], ["rm", "-q", "cortex"], ["rm", "-q", "-f", ".gitmodules"]):
             subprocess.run([*git, "-C", str(self.project), *command], check=True)
-        shutil.rmtree(self.project / ".git" / "modules" / "cortex")
+        # git's objects are read-only, and Windows removes no read-only file.
+        writable = {"onexc" if sys.version_info >= (3, 12) else "onerror":
+                    lambda remove, path, _: (os.chmod(path, 0o700), remove(path))}
+        shutil.rmtree(self.project / ".git" / "modules" / "cortex", **writable)
         (self.project / "cortex.toml").write_text(f'version = "{OWN}"\ntheme = "h2g2"\n', encoding="utf-8")
         subprocess.run([*git, "-C", str(self.project), "add", "cortex.toml"], check=True)
         subprocess.run([*git, "-C", str(self.project), "commit", "-q", "-m", "the store"], check=True)
