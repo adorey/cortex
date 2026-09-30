@@ -146,7 +146,7 @@ def is_submodule(path: Path) -> bool:
     return False
 
 
-MARKER_OF_SETUP = "agents/personalities/.active-theme"     # the theme setup.sh chose, before 1.0.0
+OLD_THEME_MARKER = "agents/personalities/.active-*"     # the theme the scripts chose, before 1.0.0
 
 
 def only_submodule(path: Path) -> bool:
@@ -221,7 +221,7 @@ def leaving(path: Path) -> str:
         # submodule's repository and its settings — deinit and rm have nothing left to act on.
         gitdir = _gitdir(path)
         modules = gitdir is not None and os.path.isdir(gitdir)
-        kept = modules or (path / ".git").is_dir()          # older git kept the repository in cortex/.git
+        kept = modules or (path / ".git").is_dir()          # a clone made a submodule in place keeps its .git
         commands = []
         section = _git(root, "config", "--local", "--get-regexp", rf"^submodule\.{LINK}\.")
         if section is not None and section.returncode == 0 and section.stdout.strip():
@@ -232,8 +232,8 @@ def leaving(path: Path) -> str:
         shown = "".join(f"    {command}\n" for command in commands)
         target = quote(display(str(path)))
         if kept:
-            # setup.sh's theme marker is ignored in every Cortex before 1.0.0, and nothing reads it now.
-            marker = quote(f":(exclude){MARKER_OF_SETUP}")
+            # The scripts' theme marker is ignored in every Cortex before 1.0.0, and nothing reads it now.
+            marker = quote(f":(exclude){OLD_THEME_MARKER}")
             check = (f"here, with the submodule's repository. Check first that it holds nothing of yours: the first "
                      f"command lists the files changed, added or ignored in it, the second the commits no remote "
                      f"branch holds.\n\n    git -C {target} status --short --ignored -- . {marker}\n"

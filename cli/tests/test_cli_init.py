@@ -475,7 +475,7 @@ class OptionTests(InitTestCase):
         upstream, origin, teammate = self.tmp / "upstream", self.tmp / "origin.git", self.tmp / "teammate"
         subprocess.run(["git", "init", "-q", str(upstream)], check=True)
         (upstream / "README.md").write_text("cortex\n", encoding="utf-8")
-        (upstream / ".gitignore").write_text("agents/personalities/.active-theme\n", encoding="utf-8")
+        (upstream / ".gitignore").write_text("agents/personalities/.active-*\n", encoding="utf-8")
         subprocess.run([*git, "-C", str(upstream), "add", "."], check=True)
         subprocess.run([*git, "-C", str(upstream), "commit", "-q", "-m", "x"], check=True)
         subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
@@ -524,18 +524,19 @@ class OptionTests(InitTestCase):
         subprocess.run([*git, "-C", str(self.project), "push", "-q", str(origin), "HEAD:refs/heads/main"], check=True)
         subprocess.run([*git, "-C", str(teammate), "pull", "-q"], capture_output=True)       # warns: cortex/ is not empty
         self.assertTrue((teammate / "cortex" / ".git").is_file())
-        # The theme setup.sh chose, written inside cortex/ and ignored there, before 1.0.0.
+        # The theme the scripts chose, written inside cortex/ and ignored there, before 1.0.0.
         (teammate / "cortex" / "agents" / "personalities").mkdir(parents=True)
-        (teammate / "cortex" / "agents" / "personalities" / ".active-theme").write_text("h2g2\n", encoding="utf-8")
+        (teammate / "cortex" / "agents" / "personalities" / ".active-marker").write_text("h2g2\n", encoding="utf-8")
         return teammate
 
-    CHECKS = (["status", "--short", "--ignored", "--", ".", ":(exclude)agents/personalities/.active-theme"],
+    CHECKS = (["status", "--short", "--ignored", "--", ".", ":(exclude)agents/personalities/.active-*"],
               ["log", "--oneline", "HEAD", "--branches", "--not", "--remotes"])
 
     def _checks_printed(self, err, cortex):
-        target = quote(display(cortex))
-        self.assertIn(f"    git -C {target} status --short --ignored -- . {quote(':(exclude)agents/personalities/.active-theme')}\n"
-                      f"    git -C {target} log --oneline HEAD --branches --not --remotes\n", err)
+        # The very checks the tests run, as the refusal prints them: quoted where the shell needs it.
+        lines = "".join(f"    git -C {quote(display(cortex))} {' '.join(quote(a) if ':' in a else a for a in check)}\n"
+                        for check in self.CHECKS)
+        self.assertIn(lines, err)
 
     def _listed(self, cortex, check):
         proc = subprocess.run(["git", "-C", str(cortex), *check], capture_output=True, text=True)
@@ -570,7 +571,7 @@ class OptionTests(InitTestCase):
         err = proc.stderr.decode()
         self.assertEqual(proc.returncode, 1)
         self.assertIn("was removed by a commit you pulled", err)
-        # What changed in it, ignored files included but setup.sh's marker, and the commits no remote holds.
+        # What changed in it, ignored files included but the scripts' marker, and the commits no remote holds.
         self._checks_printed(err, teammate / "cortex")
         for check in self.CHECKS:
             self.assertEqual(self._listed(teammate / "cortex", check), "", check)      # a clean clone: nothing listed
