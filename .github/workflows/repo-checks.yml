@@ -21,7 +21,7 @@ jobs:
     name: English-only
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Invoked through `bash` on purpose: a lost executable bit is silent on a filesystem
       # where core.fileMode is false, and would only fail here.
@@ -42,7 +42,7 @@ jobs:
     name: Shell lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # setup.sh writes files into someone else's project. A quoting mistake there is not a
       # style issue.
@@ -71,7 +71,7 @@ jobs:
     # versus standalone clone + workspace — and a change that works in one has already
     # broken the other.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: cortex-src
 
