@@ -274,7 +274,7 @@ Dependent on this ADR, tracked separately:
 - [ADR-005 — Execution model & resilience](ADR-005-execution-model-resilience.md) — makes the runtime's side of §3.7 concrete (async accept-then-process, timeouts, concurrency cap, readiness)
 - [cortex/agents/roles/prompt-manager.md](../../agents/roles/prompt-manager.md) — dispatch protocol
 - [cortex/agents/workflows/README.md](../../agents/workflows/README.md) — workflow cascade
-- [cortex/bin/validate-overlays.sh](../../bin/validate-overlays.sh) — existing partial resolver (validation)
+- [cortex/bin/validate-overlays.sh](https://github.com/adorey/cortex/blob/0.10.1/bin/validate-overlays.sh) — existing partial resolver (validation); replaced by `cortex validate` ([ADR-008](ADR-008-cortex-binary.md))
 - [cortex/docs/extending-layers.md](../extending-layers.md) — cascade user reference
 
 ---
@@ -341,4 +341,19 @@ Each tier is labelled as soon as two or more exist. The view closes the system p
 **What leaves the machine.** The view is sent to the model provider on every run. That includes the developer tier — the untracked `project-overview.md` and `project-context.md` at the workspace root, personal notes by design (ADR-006) — and the service's. Write nothing there that should not reach the provider.
 
 Tracked as #87 and #88. Making the view an option — per deployment, workspace or run, whole or in parts — so that a run that does not need it spends a lighter prompt, is #89.
+
+### 2026-09 — the binding also names where the project's base is (§3.4)
+
+§3.4 binds a run to one project root; the base of the cascade was always `{root}/cortex`, the project's submodule. With the `cortex` binary ([ADR-008](ADR-008-cortex-binary.md) §3.6) a project holds no spec: its committed `cortex.toml` pins a version, and the spec of that version is in the machine's store. The binding still names one project root, and now also where that project's base is:
+
+- **with a `cortex.toml`**, the base is `{CORTEX_HOME}/versions/{version}`, `CORTEX_HOME` defaulting to `~/.cortex`. `deploy/compose.yaml` mounts the `versions/` of the host's store read-only at `/cortex-home/versions` — `CORTEX_STORE_PATH` in `deploy/.env` — and sets `CORTEX_HOME` to `/cortex-home`. Nothing else of the store reaches the container: not the binary, not the machine's own settings;
+- **without one**, the base stays `{root}/cortex`, exactly as before.
+
+The runtime reads the store itself. It never reads `spec` in `cortex.local.toml`, a path of the developer's machine that its container does not see. What an IDE tool agrees to read changes nothing here, whichever model the runtime calls — local ones included, once ADR-011 lands.
+
+**The runtime does not fill the store.** The host does, with `cortex sync` in each mirror — whoever keeps the mirrors current (§3.4.3) also syncs them, and §8.2's submodule update becomes that sync. A mirror pulled to a new `version` is served once the host has synced it.
+
+`cortex.toml` is read once, when the run is accepted, with the grammar `cortex sync` reads it with. A version the store does not hold is refused there, `422`, with the version named, in the asynchronous mode as in the synchronous one. A queued run then resolves on the version read at acceptance, whatever `cortex.toml` says by the time a worker takes it — a pull of the mirror in between changes nothing for it — and the accepted run and its result name that version, `cortex_version`. If the store no longer holds it by then, the run is recorded as failed, never left queued. Without a theme of the deployment's (`CORTEX_THEME`), the run takes the one `cortex.toml` names. Only the version and the theme are frozen at acceptance: the mirror stays live, and the project's overlays and its own files are read when the run executes.
+
+Tracked as #118, #119 and #120.
 

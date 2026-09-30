@@ -2,13 +2,14 @@
 
 Each case under ``fixtures/validator/cases/`` becomes a throwaway host project: the shared
 base goes to ``{project}/cortex/agents/``, the case's own files on top. ``expected.json`` was
-captured from the Bash implementation of ``bin/validate-overlays.sh`` (Cortex 0.9.0), before it
-became a shim, then re-captured deliberately for each behaviour change of ADR-007 phase 4 —
+captured from the Bash validator of Cortex 0.9.0, before the port replaced it, then re-captured
+deliberately for each behaviour change of ADR-007 phase 4 —
 ``missing-header`` and ``header-after-line-10`` (#76), the ``absent-*`` cases (#81), the projects
 inside a directory named ``agents`` or ``cortex`` and ``scope-workspace-in-service-shallow`` (#84),
 the workspace's ``── Scope: . ──`` header, ``escape-in-field`` and ``control-char-in-field`` (#85),
 then the review's fixes to #76 — ``non-overridable-without-header``, ``custom-theme``,
-``readme-in-layer``, ``missing-header-in-service`` and the wording of ``MISSING_HEADER``.
+``readme-in-layer``, ``missing-header-in-service`` and the wording of ``MISSING_HEADER`` — and once
+for ADR-008, whose ``cortex validate`` the help now names.
 The core must reproduce it byte for byte, the temporary directory aside.
 
 A case may carry a ``case.json``:
@@ -18,13 +19,17 @@ A case may carry a ``case.json``:
   in an argument stands for the project root, for an absolute path;
 - ``crlf`` — files to rewrite with CRLF line endings at layout time (git keeps them LF).
 
+``layout(..., crlf=True)`` rewrites every file of the project with CRLF line endings — the base's
+too — as git checks a project out on Windows with ``core.autocrlf``: the report must not change
+(ADR-008 §3.1).
+
 Every run happens under ``LC_ALL=C``. The port reads bytes and ASCII character classes the way
 the script's grep and sed did in the C locale; under a UTF-8 locale they also took Unicode
 spaces for spaces (``unicode-space-in-field``). Pinning the locale measures the script in the
 one the port reproduces, whatever the machine running the tests (ADR-007 §9).
 
-Re-capturing now records what the core prints, through the shim. Do it only for a deliberate
-change of the validator's behaviour, and review the diff of ``expected.json`` line by line:
+Re-capturing records what the core prints. Do it only for a deliberate change of the
+validator's behaviour, and review the diff of ``expected.json`` line by line:
 
     cd core && python3 -m tests.validator_harness --capture
 """
@@ -41,11 +46,12 @@ HERE = Path(__file__).resolve().parent
 FIXTURES = HERE / "fixtures" / "validator"
 CORE = HERE.parent
 REPO = CORE.parent
-SCRIPT = REPO / "bin" / "validate-overlays.sh"
 EXPECTED = FIXTURES / "expected.json"
 DEFAULT_RUNS = [[], ["--strict"]]
-# How bin/validate-overlays.sh runs the core — kept in step with the script.
-SHIM_CALL = "import sys; sys.path.insert(0, sys.argv.pop(1)); from cortex_core.validate import cli; sys.exit(cli())"
+# The core from source, isolated — no working directory, no PYTHONPATH on sys.path — given the
+# two roots as the cortex command gives them.
+CORE_CALL = ("import sys; sys.path.insert(0, sys.argv.pop(1)); from cortex_core.validate import main; "
+             "sys.exit(main(sys.argv[3:], project_root=sys.argv[1], base_root=sys.argv[2]))")
 
 
 def cases():
@@ -65,8 +71,13 @@ def run_key(args):
     return " ".join(args) or "default"
 
 
-def layout(case, tmp):
-    """Build the host project of ``case`` under ``tmp`` and return its root."""
+def to_crlf(data):
+    return data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+
+
+def layout(case, tmp, crlf=False):
+    """Build the host project of ``case`` under ``tmp`` and return its root — every file with CRLF
+    line endings when ``crlf``."""
     cfg = config(case)
     project = tmp / cfg.get("project", "host")
     shutil.copytree(FIXTURES / "base", project / "cortex")
@@ -78,49 +89,57 @@ def layout(case, tmp):
             shutil.copy(src, dst)
     for rel in cfg.get("crlf", []):
         path = project / rel
-        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+        path.write_bytes(to_crlf(path.read_bytes()))
+    if crlf:
+        for path in project.rglob("*"):
+            if path.is_file():
+                path.write_bytes(to_crlf(path.read_bytes()))
     return project
 
 
-def _run(cmd, env=None):
+def _run(cmd, env=None, cwd=None):
     env = dict(os.environ if env is None else env, LC_ALL="C")
-    proc = subprocess.run(cmd, capture_output=True, env=env)
+    proc = subprocess.run(cmd, capture_output=True, env=env, cwd=cwd)
     return proc.returncode, proc.stdout, proc.stderr
 
 
-def run_script(project, args):
-    """The validator as host projects run it: ``{project}/cortex/bin/validate-overlays.sh``, with
-    the core it runs from at ``{project}/cortex/core`` — where a Cortex checkout has it."""
-    bin_dir = project / "cortex" / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy(SCRIPT, bin_dir / SCRIPT.name)
-    shutil.copytree(CORE / "cortex_core", project / "cortex" / "core" / "cortex_core",
-                    ignore=shutil.ignore_patterns("__pycache__"), dirs_exist_ok=True)
-    return _run(["bash", str(bin_dir / SCRIPT.name), *args])
-
-
 def run_core(project, args):
-    """The Python port, from the core's source, given the two roots the script derives — called
-    the way the script calls it."""
-    return _run([sys.executable, "-I", "-c", SHIM_CALL, str(CORE), str(project), str(project / "cortex"), *args])
+    """The validator from the core's source, given the project and its base at ``cortex/``."""
+    return _run([sys.executable, "-I", "-c", CORE_CALL, str(CORE), str(project), str(project / "cortex"), *args])
 
 
-def execute(case, args, runner):
+def spellings(tmp):
+    """Every way a run may print ``tmp``: as given, resolved — macOS's ``/var`` is a link to
+    ``/private/var``, and a working directory is reported resolved — and on Windows with ``/``,
+    as the report prints paths. The longest first, so that none is left half replaced."""
+    forms = {str(tmp), os.path.realpath(tmp)}
+    forms |= {form.replace(os.sep, "/") for form in forms}
+    return sorted(forms, key=len, reverse=True)
+
+
+def execute(case, args, runner, crlf=False):
     tmp = Path(tempfile.mkdtemp(prefix="cortex-validator-"))
     # A case that puts its project inside a directory named "agents" or "cortex" says so with
     # "project": the temporary directory itself must contain neither, so that no other case does.
     assert "/agents/" not in f"{tmp}/" and "/cortex/" not in f"{tmp}/", tmp
     try:
-        project = layout(case, tmp)
+        project = layout(case, tmp, crlf)
         code, out, err = runner(project, [arg.replace("{project}", str(project)) for arg in args])
-        norm = lambda b: b.decode("utf-8", "surrogateescape").replace(str(tmp), "<TMP>").split("\n")
+        forms = spellings(tmp)
+
+        def norm(data):
+            text = data.decode("utf-8", "surrogateescape")
+            for form in forms:
+                text = text.replace(form, "<TMP>")
+            return text.split("\n")
+
         return {"code": code, "stdout": norm(out), "stderr": norm(err)}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
 def capture():
-    expected = {case: {run_key(a): execute(case, a, run_script) for a in runs(case)} for case in cases()}
+    expected = {case: {run_key(a): execute(case, a, run_core) for a in runs(case)} for case in cases()}
     EXPECTED.write_text(json.dumps(expected, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     return expected
 

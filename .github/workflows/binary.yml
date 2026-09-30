@@ -1,0 +1,312 @@
+name: binary
+
+# The `cortex` command as it ships (ADR-008 §3.1): a native binary for each of the four targets,
+# built with PyInstaller, then checked through itself — the CLI's suite replayed through the
+# built binary, with no Python on its PATH.
+#
+# Pushing a version's tag builds the same binaries from it and releases them: the release is made
+# a draft, from changelog/X.Y.Z.md, gets its assets — one archive per target, the spec archive, SHA256SUMS over them,
+# and a build-provenance attestation for each (`gh attestation verify`) — and is published only
+# then. Released the other way round, `releases/latest/download/…` would name a release without
+# assets for as long as the build ran, and for good when a target failed.
+#
+# The actions are pinned by commit, not by tag: this workflow publishes what users install.
+#
+# The binaries are built where code integrates, not on every pull request: the phases of a stack
+# get the tests from source, fast, and the build runs when the stack lands on its release branch,
+# on the pull request from it to main — every one, whatever it changes: it is the gate — and on
+# main, on a tag, or by hand (workflow_dispatch) on any branch.
+on:
+  push:
+    branches: [main, "release/**"]
+    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
+    paths:
+      - "cli/**"
+      - "core/**"
+      - "install.sh"
+      - "install.ps1"
+      - ".github/workflows/binary.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
+# branch or a tag, a run in progress is never cut short.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    # Linux builds in AlmaLinux 8, for its glibc 2.28: the oldest the binary runs on is the one it
+    # was built against. Not a manylinux image: their Python has no shared libpython, which
+    # PyInstaller needs (ADR-008 §9).
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x86_64, runner: ubuntu-latest, container: "almalinux:8" }
+          - { target: linux-aarch64, runner: ubuntu-24.04-arm, container: "almalinux:8" }
+          - { target: macos-arm64, runner: macos-14, container: "" }
+          - { target: windows-x86_64, runner: windows-latest, container: "" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Python and the build's tools (AlmaLinux 8)
+        if: matrix.container != ''
+        run: |
+          dnf -y -q install python3.12 python3.12-pip binutils git tar gzip
+          ln -sf /usr/bin/python3.12 /usr/local/bin/python
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
+
+      # The container runs as root and the checkout belongs to the runner's user: git refuses it
+      # as "dubious ownership" — and the build takes the spec from git (cli/build.py).
+      - name: Trust the checkout (AlmaLinux 8)
+        if: matrix.container != ''
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: matrix.container == ''
+        with:
+          python-version: "3.12"
+
+      # A release is built at the version of its tag, which CHANGELOG.md and changelog/ must
+      # already carry — they stay the one source of versions. A pre-release — X.Y.Z-something,
+      # the throwaway kind that tests this workflow — is in neither. Anything else is a build of
+      # no release.
+      - name: The version to stamp
+        id: version
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/*)
+              version="$GITHUB_REF_NAME"
+              if printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+'; then
+                :
+              elif printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'; then
+                grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
+                test -f "changelog/$version.md" || { echo "::error::changelog/$version.md is missing"; exit 1; }
+              else
+                echo "::error::tag $version is no X.Y.Z version"; exit 1
+              fi
+              ;;
+            *) version="0.0.0-dev.$GITHUB_RUN_NUMBER" ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # The checksum of every spec archive released so far, which the binary embeds: a release
+      # changed after this build — its archive replaced — is then refused (ADR-008 §9).
+      - name: The spec archives released before
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python cli/build.py --fetch-known-specs "$GITHUB_REPOSITORY" "$RUNNER_TEMP/known-specs.json"
+
+      # The build's tools, every one pinned by hash; the archives dated by the commit.
+      - name: Build
+        run: |
+          python -m pip install --quiet --require-hashes -r cli/requirements-build.txt
+          SOURCE_DATE_EPOCH="$(git -c safe.directory="$GITHUB_WORKSPACE" log -1 --format=%ct)"
+          export SOURCE_DATE_EPOCH
+          python cli/build.py --version "${{ steps.version.outputs.version }}" --known-specs "$RUNNER_TEMP/known-specs.json"
+
+      # The table the build was given is the one the binary carries: a table left out — the module
+      # missing from the bundle — would check nothing, in silence.
+      - name: The binary knows the spec archives released before
+        run: |
+          binary="$GITHUB_WORKSPACE/cli/build/dist/cortex"
+          [ "$RUNNER_OS" = Windows ] && binary="$binary.exe"
+          "$binary" --version --verbose | tr -d '\r' > "$RUNNER_TEMP/known-by-binary.txt"
+          cat "$RUNNER_TEMP/known-by-binary.txt"
+          # Every entry, version and checksum, as the binary prints them — not their number only.
+          # Compared by Python, which every runner has: no diff in the AlmaLinux image, CRLF on Windows.
+          python - "$RUNNER_TEMP/known-specs.json" "$RUNNER_TEMP/known-by-binary.txt" <<'EOF'
+          import json, sys
+          given = [f"  {version}  {digest}" for version, digest in sorted(json.load(open(sys.argv[1])).items())]
+          carried = [line.rstrip("\r\n") for line in open(sys.argv[2], encoding="utf-8") if line.startswith("  ")]
+          if carried != given:
+              print("::error::the binary does not carry the table the build was given")
+              print("given:", given)
+              print("carried:", carried)
+              sys.exit(1)
+          EOF
+
+      # The suite the source runs in cli-tests, now through the binary: --version, the golden
+      # outputs of the validator byte for byte, from a CRLF checkout too.
+      - name: The binary replays the CLI's suite, with no Python on its PATH
+        working-directory: cli
+        env:
+          CORTEX_TEST_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          binary="$GITHUB_WORKSPACE/cli/build/dist/cortex"
+          [ "$RUNNER_OS" = Windows ] && binary="$binary.exe"
+          CORTEX_TEST_BINARY="$binary" python -m unittest discover -s tests -v
+
+      # The asset just built, installed the way a user installs a release: through the install
+      # script, from a release served here — its SHA256SUMS checked, the binary run once.
+      - name: The install script installs this binary
+        if: runner.os != 'Windows'
+        run: |
+          release="$RUNNER_TEMP/release"
+          mkdir -p "$release/latest/download"
+          cp "cli/build/dist/cortex-${{ matrix.target }}.tar.gz" "$release/latest/download/"
+          python cli/build.py --checksums "$release/latest/download"
+          python -m http.server 8765 --bind 127.0.0.1 --directory "$release" > /dev/null 2>&1 &
+          for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fs http://127.0.0.1:8765/ > /dev/null && break; sleep 1; done
+          CORTEX_HOME="$RUNNER_TEMP/cortex-home" CORTEX_RELEASES_URL=http://127.0.0.1:8765 sh install.sh --name cortex
+          test "$("$RUNNER_TEMP/cortex-home/bin/cortex" --version)" = "cortex ${{ steps.version.outputs.version }}"
+
+      # The same on Windows, through install.ps1 under Windows PowerShell 5.1 — the shell
+      # `irm … | iex` meets on a machine nobody set up.
+      - name: The install script installs this binary (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $release = Join-Path $env:RUNNER_TEMP "release"
+          $download = Join-Path $release "latest\download"
+          New-Item -ItemType Directory -Force $download | Out-Null
+          Copy-Item "cli\build\dist\cortex-windows-x86_64.zip" $download
+          python cli\build.py --checksums $download
+          Start-Process python -ArgumentList "-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", $release -WindowStyle Hidden
+          foreach ($i in 1..10) { try { Invoke-WebRequest http://127.0.0.1:8765/ -UseBasicParsing | Out-Null; break } catch { Start-Sleep 1 } }
+          $env:CORTEX_HOME = Join-Path $env:RUNNER_TEMP "cortex-home"
+          $env:CORTEX_RELEASES_URL = "http://127.0.0.1:8765"
+          & .\install.ps1 -Name cortex
+          $installed = & (Join-Path $env:CORTEX_HOME "bin\cortex.exe") --version
+          if ($installed -ne "cortex $env:VERSION") { throw "the installed binary says: $installed" }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cortex-${{ matrix.target }}
+          path: cli/build/dist/cortex-${{ matrix.target }}.*
+          if-no-files-found: error
+
+  # The glibc floor, measured: the Linux binary runs on Debian 10, whose glibc is 2.28 and which
+  # has no Python (ADR-008 §3.1).
+  floor:
+    name: glibc 2.28 (${{ matrix.target }})
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x86_64, runner: ubuntu-latest }
+          - { target: linux-aarch64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cortex-${{ matrix.target }}
+
+      - name: The binary on Debian 10
+        run: |
+          mkdir bin && tar -xzf "cortex-${{ matrix.target }}.tar.gz" -C bin cortex
+          # Debian 10 by digest: a tag moves. `! command` would not stop `sh -e`, hence the if.
+          docker run --rm -v "$PWD/bin:/b:ro" \
+            debian:buster-slim@sha256:bb3dc79fddbca7e8903248ab916bb775c96ec61014b3d02b4f06043b604726dc sh -ec '
+              ldd --version | head -1
+              if command -v python3; then echo "a python3 on the floor image: the check would prove nothing" >&2; exit 1; fi
+              /b/cortex --version
+              /b/cortex validate --help > /dev/null'
+
+  publish:
+    name: release
+    # A tag's push releases; a run started by hand on a tag builds it and stops there.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [build, floor]
+    runs-on: ubuntu-latest
+    # One release at a time: two tags pushed together would race for "latest". GitHub keeps one
+    # run waiting per group, and cancels it when a third comes: push one tag at a time, and re-run
+    # the workflow of a tag whose publish was cancelled (CONTRIBUTING).
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write        # the release and its assets
+      id-token: write        # sign the attestations
+      attestations: write    # store them
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    # Assets and binaries are gathered outside the checkout, in $RUNNER_TEMP: its own assets/ — the
+    # README's logo — would otherwise ship with the release (found by the pre-release 0.0.0-test.1).
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/release-assets
+          pattern: cortex-*
+          merge-multiple: true
+
+      # The spec of the release, from the tag's tree — what `cortex sync` downloads for a project
+      # pinned to this version by a newer binary (ADR-008 §3.3).
+      - name: The spec archive
+        run: python3 cli/build.py --spec-archive "$RUNNER_TEMP/release-assets"
+
+      # Asset names carry no version, so that releases/latest/download/<asset> always names the
+      # latest release's: the release itself is the version.
+      - name: SHA256SUMS
+        run: python3 cli/build.py --checksums "$RUNNER_TEMP/release-assets"
+
+      # The archives, and the binaries inside them: `gh attestation verify ~/.cortex/bin/cortex
+      # --repo adorey/cortex` then checks the installed file itself.
+      - name: The binaries inside the archives
+        run: |
+          for archive in "$RUNNER_TEMP/release-assets"/cortex-linux-*.tar.gz "$RUNNER_TEMP/release-assets"/cortex-macos-*.tar.gz; do
+            target="$(basename "$archive" .tar.gz)"
+            mkdir -p "$RUNNER_TEMP/release-binaries/$target" && tar -xzf "$archive" -C "$RUNNER_TEMP/release-binaries/$target" cortex
+          done
+          for archive in "$RUNNER_TEMP/release-assets"/cortex-*.zip; do
+            target="$(basename "$archive" .zip)"
+            mkdir -p "$RUNNER_TEMP/release-binaries/$target" && unzip -q "$archive" cortex.exe -d "$RUNNER_TEMP/release-binaries/$target"
+          done
+          ls -l "$RUNNER_TEMP/release-assets" "$RUNNER_TEMP/release-binaries"/*
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/release-assets/*
+            ${{ runner.temp }}/release-binaries/*/cortex*
+
+      # A draft first, published once every asset is on it. A release already published is never
+      # touched again: its assets are what users have installed and verified.
+      - name: The release, drafted, filled, then published
+        run: |
+          tag="$GITHUB_REF_NAME"
+          case "$tag" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          if draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            [ "$draft" = true ] || { echo "::error::release $tag is already published: its assets are not replaced"; exit 1; }
+          elif [ "$prerelease" = true ]; then
+            gh release create "$tag" --draft --verify-tag --prerelease --title "$tag" \
+              --notes "A pre-release, built from $tag — not a version of Cortex."
+          else
+            gh release create "$tag" --draft --verify-tag --title "$tag" --notes-file "changelog/$tag.md"
+          fi
+          gh release upload "$tag" "$RUNNER_TEMP/release-assets"/* --clobber
+          # "latest" is the highest version released, not the last one: a patch of an older line,
+          # 1.0.3 after 1.1.0, is published without taking it.
+          # Unlisted, every release would look older than this one: stop rather than guess.
+          released="$(gh release list --exclude-drafts --exclude-pre-releases --limit 1000 --json tagName --jq '.[].tagName')" ||
+            { echo "::error::could not list the releases: $tag is left a draft"; exit 1; }
+          highest="$({ printf '%s\n' "$released"; echo "$tag"; } | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
+          if [ "$prerelease" = true ]; then
+            gh release edit "$tag" --draft=false --prerelease --latest=false
+          elif [ "$highest" = "$tag" ]; then
+            gh release edit "$tag" --draft=false --latest
+          else
+            echo "$highest is higher: $tag is published, not made the latest"
+            gh release edit "$tag" --draft=false --latest=false
+          fi
