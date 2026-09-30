@@ -7,6 +7,13 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+- **Market intelligence roles and workflows.** Two roles in `agents/roles/product/`:
+  - `market-analyst` — the buyer before the market, the trigger rather than the need, four rings of competition, adjacency scored rather than argued, every claim graded, and what we will not do stated;
+  - `innovation-funding-advisor` — the eligibility test before any scheme, and a two-column reading of R&D and innovation. The rates and windows of a jurisdiction stay in a capability of the project.
+
+  Two workflows in `agents/workflows/intelligence/` that orchestrate them: `market-study`, from scoping to a decision document, and `innovation-funding`, from eligibility triage to submission. One capability, `practices/competitive-intelligence` — sourcing, evidence grading, bias control. In `h2g2`, Zarniwoop plays the market analyst and Hotblack Desiato the funding advisor.
+
 ## [1.1.0] - 2026-09-30 — Vogon Poetry _(Released)_
 [Full notes](changelog/1.1.0.md)
 
