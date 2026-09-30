@@ -128,7 +128,7 @@ After a clone, a developer runs `cortex sync` — as they would `npm install`. T
 
 ### 3.6 The runtime finds the base through `cortex.toml`
 
-`spec` is a path of the host, and a project's link points at one: the runtime's container sees neither. So the runtime takes the base from `cortex.toml` when the project has one — `base_root = {CORTEX_HOME}/versions/{version}`, ADR-007's parameter — and falls back to `{root}/cortex` otherwise. `deploy/compose.yaml` mounts the store read-only next to the project and sets `CORTEX_HOME` inside the container. A run against a version missing from the store is refused (`422`) with the version named. Which model the runtime then calls — Claude, or a local one once ADR-011 lands — changes nothing here: the runtime reads the store itself, whatever an IDE tool may read. This amends ADR-002 §3.4: the binding still names one project root, and now also where that project's base is.
+`spec` is a path of the host, and a project's link points at one: the runtime's container sees neither. So the runtime takes the base from `cortex.toml` when the project has one — `base_root = {CORTEX_HOME}/versions/{version}`, ADR-007's parameter — and falls back to `{root}/cortex` otherwise. `deploy/compose.yaml` mounts the store's `versions/` read-only next to the project and sets `CORTEX_HOME` inside the container (§9, phase 3). A run against a version missing from the store is refused (`422`) with the version named. Which model the runtime then calls — Claude, or a local one once ADR-011 lands — changes nothing here: the runtime reads the store itself, whatever an IDE tool may read. This amends ADR-002 §3.4: the binding still names one project root, and now also where that project's base is.
 
 ### 3.7 `cortex init` — `setup.sh`, at parity
 
@@ -374,4 +374,19 @@ Acceptance criteria:
 ### Phase 2 — found in the fifth review
 
 - **One lock file on Windows, not one per project.** A file per project piled up in the user's temporary directory, and none was ever removed — removing a lock file is a race of its own. Every project now locks a byte of the same file, `cortex-sync.lock`, at an offset drawn from its path: two projects that draw the same byte only wait for each other.
+
+### Phase 3 — the store the runtime is given
+
+- **`CORTEX_STORE_PATH` names the host's store** in `deploy/.env` (§3.6). Compose mounts its `versions/` read-only at `/cortex-home/versions` — nothing else of the store, *found in review* below — and sets `CORTEX_HOME` to `/cortex-home`. Unset, it mounts an empty store of this repository, `deploy/no-store/versions/`. Docker creates a missing bind source, owned by root, and a root-owned `~/.cortex` would then refuse the developer's own `cortex sync` and install scripts. A project without `cortex.toml` needs no store, and a pinned version is refused with the variable named.
+- **The runtime checks the pinned version itself.** It must be `X.Y.Z` or a pre-release — never a path — before it names a directory of the store. The runtime does not import the command's package: ADR-016 will have the command drive the runtime over HTTP.
+
+### Phase 3 — found in review
+
+- **A queued run resolves on the version it was accepted on** (§3.6, ADR-002 §9). `cortex.toml` is read once, at acceptance, and the job carries what it said. A pull of the mirror between acceptance and execution left the run `queued` for good, or ran it on a version nobody had checked. The accepted run and its result name the version, `cortex_version`. A run whose version left the store in between, or whose backend refuses its configuration, is recorded as failed. The version is not a column of the run's record: the `202` answer and the result carry it.
+- **The runtime reads `cortex.toml` with the command's grammar** — the core's, `cortex_core.project` — not a pattern of its own: `01.0.0`, `1.0.0-01`, an unknown key, a missing `theme` or `sync = "bogus"` were accepted, and the `422` then advised `cortex sync`, which refuses the same file. The runtime still does not import the command's package.
+- **A `cortex.toml` that is not a readable file is refused**, `422`: a directory or a dangling link fell back to `{root}/cortex` in silence, and a file it could not read was a `500`. A version directory without `agents/` is not in the store.
+- **The theme is `cortex.toml`'s** unless the deployment names one, `CORTEX_THEME` (§3.6): the runtime read only its own setting, and `deploy/.env.example` no longer sets one.
+- **Only the store's `versions/` is mounted**, at `/cortex-home/versions` (§3.6): the whole of `~/.cortex` gave an agent of the container the binary and, from the machine tier (§7), the machine's own settings — a local model's endpoint, perhaps its credentials. The empty store is `deploy/no-store/versions/`. Compose asks Docker not to create a missing `versions/` (`create_host_path: false`), which it would own as root; Docker Desktop creates it all the same — measured on Docker Desktop 28 under WSL — so `cortex sync` runs once first.
+- **The host fills the store**, not the runtime: whoever keeps the mirrors current syncs them (ADR-002 §3.4.3, §8.2).
+- **Only the version and the theme are frozen at acceptance.** The mirror stays live: the project's overlays, its `project-overview.md` and `project-context.md` are read when the run executes, as before this ADR. A skipped run names its run and its version too — but one skipped by `Runtime.run`, the synchronous call in the process, which records no run: its `run_id` is `null`. Through the API, `?wait=true` included, every run is recorded when it is accepted.
 

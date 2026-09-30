@@ -184,7 +184,8 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
                                          "detail": "already accepted; poll the run"})
 
         prepared = _guard(lambda: runtime.prepare(payload, alias, run_id=run_id))   # queued record
-        job = {"run_id": run_id, "payload": dict(payload), "alias": dict(alias) if alias else None}
+        job = {"run_id": run_id, "payload": dict(payload), "alias": dict(alias) if alias else None,
+               "cortex": prepared["cortex"]}                   # what cortex.toml said: the run resolves on it
 
         if queue is not None and not wait:                      # async: accept-then-process
             try:
@@ -194,7 +195,7 @@ def create_app(runtime: Runtime, *, gate: Optional[SecurityGate] = None,
                                     headers={"Retry-After": "5"})
             return JSONResponse(status_code=202,
                                 content={"run_id": run_id, "subject": prepared["subject"],
-                                         "status": "queued"})
+                                         "status": "queued", "cortex_version": prepared["cortex_version"]})
 
         result = _guard(lambda: runtime.execute(job))           # sync (no queue, or ?wait=true)
         if gate is not None and idem_key:                       # cache the result for later duplicates
