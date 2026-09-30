@@ -8,9 +8,9 @@ release note under [`changelog/`](changelog/).
 ## [Unreleased]
 
 ### Fixed
-- **A teammate who pulled the submodule's removal is no longer sent to commands that cannot run** ([#147](https://github.com/adorey/cortex/issues/147)). After such a pull, git has dropped `cortex` from the index and kept the directory, the submodule's repository and its settings: `git submodule deinit` and `git rm` had nothing left to act on, and `cortex sync` refused again. It now tells the two states apart — asking git whether the index still holds the submodule — and prints, for the teammate, the commands that remove what the pull left. Before them, a `git status` inside `cortex/` checks it holds nothing of yours.
-- **The last submodule leaves no empty `.gitmodules`:** `git rm cortex` empties the file and keeps it tracked, so the commands `cortex init` prints end with `git rm -f .gitmodules` when `cortex` was the only submodule.
-- The refusal of a `cortex/` Cortex did not write says so, not *cortex sync* — `cortex init` prints it too.
+- **A teammate who pulled the submodule's removal is no longer sent to commands that cannot run** ([#147](https://github.com/adorey/cortex/issues/147)). After such a pull, git has dropped `cortex` from the index and kept the directory, the submodule's repository and its settings: `git submodule deinit` and `git rm` had nothing left to act on, and `cortex sync` refused again. It now tells the two states apart — asking git whether the index still holds the submodule — and prints, for the teammate, the commands that remove what the pull left. Before them come two checks: what changed in `cortex/`, ignored files included, and the commits nobody pushed. If a command 1.0.0 printed already removed the submodule's repository, it says instead that git can no longer show what changed.
+- **The last submodule leaves no empty `.gitmodules`:** `git rm cortex` empties the file and keeps it tracked, so the commands `cortex init` prints include `git rm -f .gitmodules` when `cortex` was the only submodule.
+- The refusal of a `cortex/` that is a submodule, a clone or another directory Cortex did not write names Cortex, not *cortex sync*: `cortex init` prints it too.
 
 ## [1.1.0] - 2026-09-30 — Vogon Poetry _(Released)_
 [Full notes](changelog/1.1.0.md)
