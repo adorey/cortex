@@ -120,7 +120,7 @@ Three modes, chosen by `--store`, `--link` or `--copy`, or by `cortex.toml`'s `s
 | `link` | `cortex/` → the store: a **symbolic link** on Linux and macOS, a **directory junction** on Windows, which needs no administrator right and no developer mode | `cortex` | a tool that reads only inside the workspace, or a model that follows a literal path better than an indirection |
 | `copy` | `cortex/`, a read-only copy with a `.synced` marker naming the version | `cortex` | a file system without links, or a tool that does not read through one |
 
-`sync` is a team setting because the tool is: the bootstrap file `cortex init` writes is committed. A flag overrides it for one run on one machine. In `link` and `copy` modes, `cortex init` adds `cortex/` to `.gitignore`. In every mode, sync **refuses when `cortex/` exists and is neither a link nor a copy it made** — a submodule, a clone, any other directory: it would contradict the rule the templates give, and sync never deletes something it did not write. Switching back to `store` removes the link or copy it made, and nothing else.
+`sync` is a team setting because the tool is: the bootstrap file `cortex init` writes is committed. A flag overrides it for one run on one machine. In `link` and `copy` modes, `cortex init` adds `/cortex` to `.gitignore` — no final slash: a link is a file to git (§9, phase 4). In every mode, sync **refuses when `cortex/` exists and is neither a link nor a copy it made** — a submodule, a clone, any other directory: it would contradict the rule the templates give, and sync never deletes something it did not write. Switching back to `store` removes the link or copy it made, and nothing else.
 
 `cortex sync --from PATH` points `spec` at a checkout of this repository instead of the store, with no version check and a warning saying so. It is how a contributor tests an unreleased spec in a throwaway host project — CONTRIBUTING's test loop.
 
@@ -138,7 +138,7 @@ cortex init [DIR] [--theme THEME | --no-personality] [--workspace] [--service NA
             [--link | --copy] [--force]
 ```
 
-Same options, same defaults (`--theme h2g2`, `--tool copilot`), same files at the same paths as `setup.sh`: the instructions file of the tool, the root `project-overview.md` and `project-context.md` when missing, and in workspace mode a pair per service with its `@alias` — the basename of the service's folder — plus the team tier when `agents/` is its own git working tree. It writes `cortex.toml` at the binary's own version, adds `cortex.local.toml` to `.gitignore`, then runs `cortex sync`. `--link` and `--copy` are accepted and written as `cortex.toml`'s `sync`.
+Same options, same defaults for a new project (`--theme h2g2`, `--tool copilot`; §9, phase 4), same files at the same paths as `setup.sh`: the instructions file of the tool, the root `project-overview.md` and `project-context.md` when missing, and in workspace mode a pair per service with its `@alias` — the basename of the service's folder — plus the team tier when `agents/` is its own git working tree. It writes `cortex.toml` at the binary's own version, adds `cortex.local.toml` to `.gitignore`, then runs `cortex sync`. `--link` and `--copy` are accepted and written as `cortex.toml`'s `sync`.
 
 Two deliberate differences:
 
@@ -389,4 +389,48 @@ Acceptance criteria:
 - **Only the store's `versions/` is mounted**, at `/cortex-home/versions` (§3.6): the whole of `~/.cortex` gave an agent of the container the binary and, from the machine tier (§7), the machine's own settings — a local model's endpoint, perhaps its credentials. The empty store is `deploy/no-store/versions/`. Compose asks Docker not to create a missing `versions/` (`create_host_path: false`), which it would own as root; Docker Desktop creates it all the same — measured on Docker Desktop 28 under WSL — so `cortex sync` runs once first.
 - **The host fills the store**, not the runtime: whoever keeps the mirrors current syncs them (ADR-002 §3.4.3, §8.2).
 - **Only the version and the theme are frozen at acceptance.** The mirror stays live: the project's overlays, its `project-overview.md` and `project-context.md` are read when the run executes, as before this ADR. A skipped run names its run and its version too — but one skipped by `Runtime.run`, the synchronous call in the process, which records no run: its `run_id` is `null`. Through the API, `?wait=true` included, every run is recorded when it is accepted.
+
+### Phase 4 — where `cortex init` parts from `setup.sh`
+
+The parity matrix has 13 cases:
+- single and workspace mode;
+- the five `--tool` values;
+- `--no-personality` and a non-default `--theme`;
+- services in a subfolder;
+- a git-backed `agents/`;
+- files already there.
+
+Across it, `cortex init` writes what `setup.sh` wrote, byte for byte. The `.active-theme` marker is the one exception: the theme goes to `cortex.toml` instead. Beyond the two differences §3.7 decides, the command parts from the script on purpose where the script had an edge wrong:
+
+- **The team tier is scaffolded when `agents/` is a repository of its own** — a `.git` entry in it, directory or file — as ADR-006 and the script's own comment say. The script asked `git -C agents rev-parse`, which also answers yes for an `agents/` inside the project's own repository. The command no longer calls git.
+- **A service is a folder inside the workspace**: `--service ../elsewhere` or an absolute path is refused, as the runtime refuses such a service. The script created the folder wherever the name led.
+- **A second `cortex init` keeps `cortex.toml`**, and reads the templates of the version it pins. What it changes of the file is below, *found in review*.
+- **`--instructions-file` without `--tool custom` is refused**; the script ignored it. As in the script, a relative path is taken from the current directory.
+- **Leaving a submodule** (§3.10): the path to remove under `.git/modules/` is read from the submodule's own `.git` file — it is not always `.git/modules/cortex`. A standalone clone gets its one command, to remove it once checked. On Windows the removal is printed as PowerShell's `Remove-Item -Recurse -Force`.
+
+### Phase 4 — found in review
+
+- **The `.gitignore` line is `/cortex`**, without the final slash (§3.5, §3.7), in `link` and `copy` modes: a link is a file to git, and `/cortex/` let it into the commit — with the absolute path of a developer's store, which a teammate's sync then refused as a link it had not made. A line is added only when git, asked, does not ignore the path yet, and `.gitignore` keeps its bytes: its encoding, its byte order mark, its line endings.
+- **In a project that has one, `cortex.toml` changes only for the options given** (§3.7): `--theme` or `--no-personality` set `theme`, `--link` or `--copy` set `sync`, and every other line stays, comments included. The version it pins stays too, older or newer than the binary: a newer one is refused, as `cortex sync` refuses it. `--force` replaced the whole file: the team's theme went back to `h2g2`, its `sync` and every other key were lost, the version went down to the binary's — past the refusal of a newer pin — and the next sync removed the copy. **`--force` now replaces the instructions file only, and keeps the one it replaces as `FILE.bak`**: the migration guide runs it on files a team may have edited by hand. A second `init` no longer ignores its options either: it wrote the instructions and the link from them, and `cortex.toml` without them.
+- **A theme is a name**, checked with the grammar of `cortex.toml` before anything is written, and written as a TOML string: `--theme ../../templates` wrote a `cortex.toml` every later command refused. A `cortex.toml` that cannot be read is refused, and kept: `cortex init` says to fix it or remove it, since `--force` no longer rewrites it.
+- **Everything is checked before anything is written** — the services, the instructions file, the theme, `cortex.toml`, what is at `cortex/` — and a failure is a message naming the path, never a traceback. `--service ../out` wrote the services before it and `cortex.toml` first. A service that names a file, and an `--instructions-file` that names a directory, `cortex.toml`, `cortex.local.toml`, `.gitignore`, the two project files or the spec, are refused. A backslash separates a service's folders on Windows only; a name typed at the prompt is stripped; names piped to a stdin that is no terminal are not read, and `init` says so.
+- **The commands that leave `cortex/` hold absolute paths**, quoted for the shell they are printed for — `git -C ROOT submodule deinit -f cortex`, `git -C ROOT rm cortex`, then the removal of the submodule's repository (§3.10). Printed relative to the project root, `cortex init projects/foo` run from the home directory showed `rm -rf cortex`, which removes `~/cortex`, and a path with a space split in two. A submodule is what `.gitmodules` says is one, including one whose repository is in its own `.git` directory, where there is nothing more to remove. A git worktree of another repository is not a submodule: `git worktree remove` is printed for it.
+- **Where the workspace root is no git repository** — flavor 2.B of ADR-006, the root a directory holding the services' repositories — `cortex.toml` is committed nowhere (§3.4). `cortex init` says so. **Pinning is then per developer**: each one runs `cortex init --workspace` in their own root, which pins the version of their own binary, and their own theme and sync mode. A team-wide pin for 2.B — a `cortex.toml` in the team's `agents/` repository, the team tier of ADR-006, that the root's overrides — belongs to the configuration cascade (#98), which decides the tiers.
+
+### Phase 4 — found in the second review
+
+- **What git must ignore is asked once `cortex/` has its final form** (§3.5, §3.7): after the sync, not before. Asked before, git saw a copy — a directory, which a `cortex/` line matches — that the sync then turned into a link, which it does not: the link went unignored.
+- **No file stands where a directory is to be made**: every directory on the way to the project root, to the instructions file and to each service is checked before anything is written — `.cursor` a file, `api` a file under `--service api/x`, wrote `cortex.toml` and more, then stopped.
+- **`--force` never overwrites a backup.** The file it replaces goes to `FILE.bak`, or to `FILE.bak.1` and on when a `.bak` of other content is there — where the workspace root is no repository, a backup is the only copy of what was written by hand. A file already what `--force` would write is left alone, and backed up nowhere.
+- **The tool is the one whose instructions file is there** (§3.7): `--tool` defaults to `copilot` for a new project only, and a second `cortex init` without it writes no other tool's file. With several there, `--force` asks for `--tool`. A file of `--tool custom` is not found this way: name its tool again.
+- **A kept instructions file that no longer fits the theme is said**: one written with the personality block, for a theme now `none`, or the other way round — `--force` writes it again.
+- **Outside a git repository, no `.gitignore` is written**: it would keep nothing out of a commit. An existing one still gets its lines.
+- **A line of `cortex.toml` rewritten keeps its comment**, and the file its byte order mark: `theme = "h2g2"  # the team's choice` loses neither. A `#` inside a string is no comment.
+- **`--instructions-file` names neither `cortex` nor a project file** — the project's or a service's `project-overview.md` and `project-context.md` — which init writes or sync needs.
+
+### Phase 4 — found in the third review
+
+- **A new project takes `copilot`, whatever file is there** (§3.7): the tool is taken from the file already there only in a project that has a `cortex.toml`. A `CLAUDE.md` written by hand made Claude the tool of a new project — kept without a bootstrap, then replaced by `--force` — where the script wrote Copilot's file and left it alone; the parity matrix has that case now. `cortex init` says when a file of a known tool holds no Cortex bootstrap, when a kept one was written for the other layout, and when a project of `--tool custom` gets Copilot's file for want of its tool.
+- **`--instructions-file` names nothing of git's own**, `.git/config` among them, and the names init writes for itself are compared as a file system that ignores case compares them — `CORTEX.TOML` is `cortex.toml` on macOS and Windows. A link that leads nowhere, where a directory is to be made, is refused before anything is written, as a file is.
+- **`/.cortex-sync-*` is ignored too**, in `link` and `copy` modes: what a sync killed half-way leaves, a link to this machine's store among it, until the next sync removes it. Outside a repository, an existing `.gitignore` is said to keep nothing out of a commit; a backup `--force` writes is said to be left to git.
 

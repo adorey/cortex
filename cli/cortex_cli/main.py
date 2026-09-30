@@ -20,6 +20,12 @@ def _validate(args: List[str]) -> int:
     return validate.run(args)
 
 
+def _init(args: List[str]) -> int:
+    from . import init
+
+    return init.run(args)
+
+
 def _sync(args: List[str]) -> int:
     from . import sync
 
@@ -27,6 +33,7 @@ def _sync(args: List[str]) -> int:
 
 
 COMMANDS: Dict[str, Tuple[str, Callable[[List[str]], int]]] = {
+    "init": ("Make a directory a Cortex project — setup.sh, at parity", _init),
     "sync": ("Put the pinned Cortex version in the store, and tell the project where it is", _sync),
     "validate": ("Check the project's overlays against the spec (ADR-001)", _validate),
 }
