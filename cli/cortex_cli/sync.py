@@ -232,7 +232,8 @@ def leaving(path: Path) -> str:
         shown = "".join(f"    {command}\n" for command in commands)
         target = quote(display(str(path)))
         if kept:
-            # The scripts' theme marker is ignored in every Cortex before 1.0.0, and nothing reads it now.
+            # The scripts' theme marker, ignored in every Cortex before 1.0.0 and read by nothing now: any
+            # agents/personalities/.active-*, as 1.0.0's own .gitignore treats them.
             marker = quote(f":(exclude){OLD_THEME_MARKER}")
             check = (f"here, with the submodule's repository. Check first that it holds nothing of yours: the first "
                      f"command lists the files changed, added or ignored in it, the second the commits no remote "

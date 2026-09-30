@@ -78,7 +78,7 @@ rm -rf cortex .git/modules/cortex
 cortex sync
 ```
 
-The first check leaves out `agents/personalities/.active-theme`, the theme `setup.sh` wrote there: nothing reads it now — set `theme` in `cortex.local.toml` to keep the one you chose. In a shallow submodule, the second may list commits of Cortex's own — the one it was pinned to, or the tip its `main` had.
+The first check leaves out `agents/personalities/.active-*` — `.active-theme`, the theme `setup.sh` wrote there: nothing reads it now — set `theme` in `cortex.local.toml` to keep the one you chose. In a shallow submodule, the second may list commits of Cortex's own — the one it was pinned to, or the tip its `main` had.
 
 If you already ran the commands 1.0.0 or 1.1.0 printed, their last one removed `.git/modules/cortex`: git can no longer show what changed in `cortex/`, and `cortex sync` says so. Look through it yourself before you remove it.
 
