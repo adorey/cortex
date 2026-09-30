@@ -70,7 +70,7 @@ theme = "star-wars"
 **A clone that had the submodule initialised.** The pull that removes the submodule leaves `cortex/` behind: git no longer tracks it, and keeps its files, the submodule's repository under `.git/modules/` and its settings in `.git/config` — the pull warns *unable to rmdir 'cortex'*. `cortex sync` then refuses, and prints what is left to remove. Check first that `cortex/` holds nothing of yours — what changed in it, ignored files included, and the commits no remote branch holds — then run what it printed:
 
 ```bash
-git -C cortex status --short --ignored -- . ':(exclude)agents/personalities/.active-theme'
+git -C cortex status --short --ignored -- . ':(exclude)agents/personalities/.active-*'
 git -C cortex log --oneline HEAD --branches --not --remotes
 # these two print nothing? Then:
 git config --remove-section submodule.cortex
@@ -78,7 +78,7 @@ rm -rf cortex .git/modules/cortex
 cortex sync
 ```
 
-The first check leaves out `agents/personalities/.active-theme`, the theme `setup.sh` wrote there: nothing reads it now, and your theme is `theme` in `cortex.local.toml`. In a shallow submodule, the second may list the commit it was pinned to, which is Cortex's, not yours.
+The first check leaves out `agents/personalities/.active-theme`, the theme `setup.sh` wrote there: nothing reads it now — set `theme` in `cortex.local.toml` to keep the one you chose. In a shallow submodule, the second may list commits of Cortex's own — the one it was pinned to, or the tip its `main` had.
 
 If you already ran the commands 1.0.0 or 1.1.0 printed, their last one removed `.git/modules/cortex`: git can no longer show what changed in `cortex/`, and `cortex sync` says so. Look through it yourself before you remove it.
 
