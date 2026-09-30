@@ -44,7 +44,8 @@ capabilities/
 │   ├── component-testing.md  # Component tests (middle rung)
 │   └── e2e-testing.md        # End-to-end tests (top rung)
 ├── practices/
-│   └── code-comments.md      # Comment discipline (stack-agnostic craft)
+│   ├── code-comments.md      # Comment discipline (stack-agnostic craft)
+│   └── competitive-intelligence.md  # Sourcing, evidence grading, bias control
 └── security/
     └── owasp.md              # OWASP Top 10 & best practices
 ```
