@@ -22,6 +22,7 @@ It is not a rigid script. It is a safety net to ensure nothing is forgotten.
 cortex/agents/workflows/                       ← priority 3 — Generic workflows (this folder)
     ├── engineering/                                 ← Development & technical
     │   ├── adr-implementation.md
+    │   ├── code-review.md
     │   ├── feature-development.md
     │   ├── frontend-testing.md
     │   └── support-triage.md
@@ -54,6 +55,7 @@ The Prompt Manager is the **single entry point**. For every request it:
 | Category | File | Activation context |
 |---|---|---|
 | `engineering/` | `adr-implementation.md` | Implementing one phase of an accepted, multi-phase ADR |
+| `engineering/` | `code-review.md` | Reviewing a pull request, or handling the review of ours |
 | `engineering/` | `feature-development.md` | Developing a new feature |
 | `engineering/` | `frontend-testing.md` | Adding or reviewing frontend tests |
 | `engineering/` | `support-triage.md` | Diagnosing a support ticket |
@@ -63,7 +65,7 @@ The Prompt Manager is the **single entry point**. For every request it:
 
 | Category | Purpose | Examples of future workflows |
 |---|---|---|
-| `engineering/` | Development & technical | `bug-fix`, `code-review`, `refactoring` |
+| `engineering/` | Development & technical | `bug-fix`, `refactoring` |
 | `intelligence/` | Research & analysis | `security-audit`, `competitive-watch` |
 | `ops/` | Deployment & incident | `deployment`, `incident-response` |
 | `product/` | Discovery & roadmap | `backlog-grooming`, `user-story-mapping` |
