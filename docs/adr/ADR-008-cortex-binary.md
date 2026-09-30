@@ -1,7 +1,7 @@
 # ADR-008 — The `cortex` binary: one-line install, one store per machine, `cortex.toml` per project
 
-- **Status:** Accepted
-- **Date:** 2026-09-27 (proposed) · 2026-09-27 (accepted)
+- **Status:** Implemented
+- **Date:** 2026-09-27 (proposed) · 2026-09-27 (accepted) · 2026-09-30 (implemented, 1.0.0)
 - **Authors:** Cortex maintainers (initiated by the maintainer, drafted by @Oolon)
 - **Affects:** a new `cli/` package (`cortex_cli`), the release pipeline, new `install.sh` and `install.ps1`, the runtime's base binding (`runtime/cortex_runtime`, `deploy/compose.yaml`), `setup.sh` and `bin/validate-overlays.sh` (removed in phase 5), `templates/bootstrap-instructions*.md`, `docs/`, `README.md`, `CONTRIBUTING.md`, CI
 - **Relates to:** [ADR-007](ADR-007-cortex-core.md) — the core this binary embeds, `base_root`, and the promises of its §7 · [ADR-001](ADR-001-layered-overrides.md) — the cascade, untouched · [ADR-002](ADR-002-cortex-runtime.md) §3.4 — the runtime's `root` binding, extended with the base's location · [ADR-006](ADR-006-workspace-shareable-repo.md) — the tiers `cortex init` scaffolds · roadmap epic [#37](https://github.com/adorey/cortex/issues/37)
