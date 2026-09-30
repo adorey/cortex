@@ -1,12 +1,15 @@
-"""A release as the install scripts see it, served over HTTP from this machine.
+"""A release as the install scripts and ``cortex sync`` see it, served over HTTP from this machine.
 
-``CORTEX_RELEASES_URL`` points the scripts at it: the layout of GitHub's releases,
+``CORTEX_RELEASES_URL`` points them at it: the layout of GitHub's releases,
 ``latest/download/ASSET`` and ``download/VERSION/ASSET``, with each release's ``SHA256SUMS``. The
 binaries in it are stand-ins: on POSIX a shell script printing ``cortex VERSION``, on Windows a
 file that is no program at all — what is checked is how the scripts download, verify and install.
+Each release also carries a spec archive, ``cortex-spec.tar.gz``: a spec of a few files whose
+role card names the version. The server records the paths it was asked for.
 """
 
 import functools
+import gzip
 import importlib.util
 import io
 import os
@@ -73,17 +76,38 @@ def _asset(directory, target, version):
     return path
 
 
-class _Quiet(SimpleHTTPRequestHandler):
+def spec_archive(directory, version, extra=None):
+    """A spec archive for ``version``: the three trees, one file each — and ``extra``, a
+    ``{name: bytes}`` of members to add, to build archives a store must refuse. The same bytes
+    at every call: gzip's header is not dated."""
+    path = directory / "cortex-spec.tar.gz"
+    files = {
+        "agents/roles/prompt-manager.md": f"# Prompt Manager — Cortex {version}\n".encode(),
+        "agents/personalities/h2g2/theme.md": b"# h2g2\n",
+        "templates/bootstrap-instructions.md": b"# Bootstrap\n",
+        "docs/extending-layers.md": b"# Extending\n",
+    }
+    files.update(extra or {})
+    with gzip.GzipFile(path, "wb", mtime=0) as compressed, tarfile.open(fileobj=compressed, mode="w") as archive:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size, info.mode = len(data), 0o644
+            archive.addfile(info, io.BytesIO(data))
+    return path
+
+
+class _Handler(SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
     def do_GET(self):
+        self.server.requested.append(self.path)
         location = self.server.redirects.get(self.path)
         if location is None:
             return super().do_GET()
         self.send_response(302)
         self.send_header("Location", location)
         self.end_headers()
-
-    def log_message(self, *args):
-        pass
 
 
 class FakeRelease:
@@ -94,9 +118,10 @@ class FakeRelease:
         for version in versions:
             self.publish(self.root / "download" / version, version)
         shutil.copytree(self.root / "download" / versions[-1], self.root / "latest" / "download")
-        handler = functools.partial(_Quiet, directory=str(self.root))
+        handler = functools.partial(_Handler, directory=str(self.root))
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.server.redirects = {}
+        self.server.requested = []
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
 
@@ -105,6 +130,17 @@ class FakeRelease:
         directory.mkdir(parents=True)
         for target in TARGETS:
             _asset(directory, target, version)
+        spec_archive(directory, version)
+        build.checksums(directory)
+
+    @property
+    def requested(self):
+        return list(self.server.requested)
+
+    def replace_spec(self, version, extra):
+        """Republish ``version``'s spec archive with ``extra`` members, its checksum rewritten."""
+        directory = self.root / "download" / version
+        spec_archive(directory, version, extra)
         build.checksums(directory)
 
     def asset(self, target, version=None):
@@ -133,9 +169,11 @@ class FakeRelease:
         """Answer ``path`` — ``/latest/download/SHA256SUMS`` — with a redirect to ``location``."""
         self.server.redirects[path] = location
 
-    def alter_one_byte(self, target):
-        """Change one byte of the latest release's asset, after its checksum was written."""
-        path = self.asset(target)
+    def alter_one_byte(self, target, version=None):
+        """Change one byte of an asset of the latest release — or of ``version`` — after its
+        checksum was written. ``target`` ``"spec"`` names the spec archive."""
+        path = self.asset(target, version) if target != "spec" else \
+            self.root / ("latest/download" if version is None else f"download/{version}") / "cortex-spec.tar.gz"
         data = bytearray(path.read_bytes())
         data[len(data) // 2] ^= 0x01
         path.write_bytes(bytes(data))

@@ -22,7 +22,11 @@ EXPECTED = json.loads(golden.EXPECTED.read_text(encoding="utf-8"))
 
 
 def run_command(project, args):
-    """The validator as a project runs it now: ``cortex validate`` in the project's root."""
+    """The validator as a project runs it now: ``cortex validate`` in the project's root, which
+    ``cortex.toml`` marks and whose ``cortex.local.toml`` names the spec — here the base the
+    fixture laid out at ``cortex/``, as ``cortex sync --copy`` would have."""
+    (project / "cortex.toml").write_text('version = "1.0.0"\ntheme = "h2g2"\n', encoding="utf-8")
+    (project / "cortex.local.toml").write_text('spec = "cortex"\n', encoding="utf-8")
     proc = harness.run("validate", *args, cwd=project, env=harness.environment(LC_ALL="C"))
     return proc.returncode, proc.stdout, proc.stderr
 
