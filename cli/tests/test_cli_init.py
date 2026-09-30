@@ -475,6 +475,7 @@ class OptionTests(InitTestCase):
         upstream, origin, teammate = self.tmp / "upstream", self.tmp / "origin.git", self.tmp / "teammate"
         subprocess.run(["git", "init", "-q", str(upstream)], check=True)
         (upstream / "README.md").write_text("cortex\n", encoding="utf-8")
+        (upstream / ".gitignore").write_text("agents/personalities/.active-theme\n", encoding="utf-8")
         subprocess.run([*git, "-C", str(upstream), "add", "."], check=True)
         subprocess.run([*git, "-C", str(upstream), "commit", "-q", "-m", "x"], check=True)
         subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
@@ -523,7 +524,23 @@ class OptionTests(InitTestCase):
         subprocess.run([*git, "-C", str(self.project), "push", "-q", str(origin), "HEAD:refs/heads/main"], check=True)
         subprocess.run([*git, "-C", str(teammate), "pull", "-q"], capture_output=True)       # warns: cortex/ is not empty
         self.assertTrue((teammate / "cortex" / ".git").is_file())
+        # The theme setup.sh chose, written inside cortex/ and ignored there, before 1.0.0.
+        (teammate / "cortex" / "agents" / "personalities").mkdir(parents=True)
+        (teammate / "cortex" / "agents" / "personalities" / ".active-theme").write_text("h2g2\n", encoding="utf-8")
         return teammate
+
+    CHECKS = (["status", "--short", "--ignored", "--", ".", ":(exclude)agents/personalities/.active-theme"],
+              ["log", "--oneline", "HEAD", "--branches", "--not", "--remotes"])
+
+    def _checks_printed(self, err, cortex):
+        target = quote(display(cortex))
+        self.assertIn(f"    git -C {target} status --short --ignored -- . {quote(':(exclude)agents/personalities/.active-theme')}\n"
+                      f"    git -C {target} log --oneline HEAD --branches --not --remotes\n", err)
+
+    def _listed(self, cortex, check):
+        proc = subprocess.run(["git", "-C", str(cortex), *check], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout
 
     @staticmethod
     def _rmtree(path):
@@ -553,12 +570,11 @@ class OptionTests(InitTestCase):
         err = proc.stderr.decode()
         self.assertEqual(proc.returncode, 1)
         self.assertIn("was removed by a commit you pulled", err)
-        target = quote(display(teammate / "cortex"))
-        # What changed in it, ignored files included, and the commits nobody pushed.
-        self.assertIn(f"    git -C {target} status --short --ignored\n    git -C {target} log --oneline HEAD --not --remotes\n", err)
-        for check in (["status", "--short", "--ignored"], ["log", "--oneline", "HEAD", "--not", "--remotes"]):
-            listed = subprocess.run(["git", "-C", str(teammate / "cortex"), *check], capture_output=True, text=True)
-            self.assertEqual((listed.returncode, listed.stdout), (0, ""), check)      # a clean clone: nothing listed
+        # What changed in it, ignored files included but setup.sh's marker, and the commits no remote holds.
+        self._checks_printed(err, teammate / "cortex")
+        for check in self.CHECKS:
+            self.assertEqual(self._listed(teammate / "cortex", check), "", check)      # a clean clone: nothing listed
+        self.assertTrue(self._listed(teammate / "cortex", ["status", "--short", "--ignored"]).startswith("!! agents/"))
         self.assertNotIn("submodule deinit", err)
         root = quote(display(teammate))
         self.assertEqual(self._shown(err), [f"git -C {root} config --remove-section submodule.cortex",
@@ -583,10 +599,46 @@ class OptionTests(InitTestCase):
         self._sync_after_running(teammate, err)
 
     @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_teammate_s_commits_on_another_branch_are_listed(self):
+        # Committed on a branch of the submodule, then put back on its pinned commit by an update.
+        teammate = self._teammate_after_the_pull()
+        cortex = teammate / "cortex"
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-C", str(cortex)]
+        subprocess.run([*git, "checkout", "-q", "-b", "my-overlay"], check=True)
+        (cortex / "mine.md").write_text("mine\n", encoding="utf-8")
+        subprocess.run([*git, "add", "mine.md"], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "my overlay"], check=True)
+        subprocess.run([*git, "checkout", "-q", "--detach", "HEAD~1"], check=True)
+        self.assertIn("my overlay", self._listed(cortex, self.CHECKS[1]))
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_submodule_whose_repository_is_its_own_git_directory(self):
+        # A clone made a submodule in place keeps its .git directory; `git rm --cached` then takes it
+        # out of the index. Its repository is there: the checks are printed, not "already gone".
+        git, _, _ = self._submodule_stack()
+        subprocess.run([*git, "-C", str(self.project), "submodule", "deinit", "-q", "-f", "cortex"], check=True)
+        subprocess.run([*git, "-C", str(self.project), "rm", "-q", "--cached", "cortex"], check=True)
+        self._rmtree(self.project / "cortex")
+        self._rmtree(self.project / ".git" / "modules" / "cortex")
+        subprocess.run([*git, "clone", "-q", str(self.tmp / "upstream"), str(self.project / "cortex")], check=True)
+        self.assertTrue((self.project / "cortex" / ".git").is_dir())
+        proc = harness.run("init", cwd=self.project, env=self._with_git())
+        err = proc.stderr.decode()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("with the submodule's repository", err)
+        self.assertNotIn("already gone", err)
+        self._checks_printed(err, self.project / "cortex")
+        commands = self._shown(err)
+        self.assertEqual(commands[-1], remove(display(self.project / "cortex")))
+        self.assertFalse(any(".git/modules" in command.replace("\\", "/") for command in commands), commands)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_teammate_whose_settings_hold_no_submodule_section(self):
         teammate = self._teammate_after_the_pull()
         subprocess.run(["git", "-C", str(teammate), "config", "--remove-section", "submodule.cortex"], check=True)
-        proc = harness.run("sync", cwd=teammate, env=self._with_git())
+        # A section in the user's own settings is none of this project's: --local.
+        (self.tmp / "gitconfig").write_text('[submodule "cortex"]\n\turl = elsewhere\n', encoding="utf-8")
+        proc = harness.run("sync", cwd=teammate, env=dict(self._with_git(), GIT_CONFIG_GLOBAL=str(self.tmp / "gitconfig")))
         err = proc.stderr.decode()
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(self._shown(err), [remove(display(teammate / "cortex")),
