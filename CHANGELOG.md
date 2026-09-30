@@ -7,6 +7,12 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-30 — Vogon Poetry _(Released)_
+[Full notes](changelog/1.1.0.md)
+
+### Added
+- **The `code-review` workflow** (`agents/workflows/engineering/code-review.md`) — reviewing someone's pull request (mode A), and handling the review of ours (mode B), with one grid for both sides: a shared legend (🔴 blocking, 🟠 major, ⚪ minor, ❓ doubt, 🎫 out of scope), rules that make a review converge — a 🔴 or a 🟠 is proven in the code, a defect older than the pull request becomes an issue, no new mechanism in answer to a review, a new point from round 2 only on the previous round's delta — the GitHub event each verdict takes, and the template of the published review. Mode A also checks that the base is current, runs the CI again when it ran older workflows, and replays what the description says was verified.
+
 ## [1.0.0] - 2026-09-30 — So Long, and Thanks for All the Fish _(Released)_
 [Full notes](changelog/1.0.0.md)
 
