@@ -1,0 +1,1 @@
+An empty store: its versions/ is mounted when CORTEX_STORE_PATH is unset (compose.yaml).
