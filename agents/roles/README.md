@@ -43,6 +43,8 @@ A role does **NOT** contain:
 |---------|------|---------|
 | `product-owner.md` | Product Owner | Product vision, backlog, prioritization |
 | `business-analyst.md` | Business Analyst | Functional specifications, business needs |
+| `market-analyst.md` | Market Analyst | Market sizing, competition, diversification, positioning |
+| `innovation-funding-advisor.md` | Innovation Funding Advisor | R&D/innovation eligibility, tax credits, grants |
 
 ### `security-compliance/` — Security & compliance
 
