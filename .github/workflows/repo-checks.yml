@@ -4,12 +4,14 @@ name: repo checks
 # LLM reads and the shell a host project runs — which had no automated check at all.
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
 
+# A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
+# branch or a tag, a run in progress is never cut short.
 concurrency:
-  group: repo-checks-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -19,7 +21,7 @@ jobs:
     name: English-only
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Invoked through `bash` on purpose: a lost executable bit is silent on a filesystem
       # where core.fileMode is false, and would only fail here.
@@ -40,12 +42,17 @@ jobs:
     name: Shell lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # setup.sh writes files into someone else's project. A quoting mistake there is not a
       # style issue.
       - name: shellcheck
         run: shellcheck --severity=warning setup.sh bin/*.sh
+
+      # install.sh runs piped from curl, under whatever sh the machine has — dash on Debian and
+      # Ubuntu: POSIX sh, linted as such.
+      - name: shellcheck (install.sh, POSIX sh)
+        run: shellcheck --shell=sh --severity=style install.sh
 
   scaffold:
     name: Scaffold a host project (${{ matrix.mode }})
@@ -64,7 +71,7 @@ jobs:
     # versus standalone clone + workspace — and a change that works in one has already
     # broken the other.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: cortex-src
 

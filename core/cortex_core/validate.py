@@ -30,7 +30,8 @@ from .workspace import find, same_directory, services  # noqa: F401 — find is 
 
 LAYERS = ("roles", "capabilities", "personalities", "workflows")
 
-USAGE = 'Usage: validate-overlays.sh [OPTIONS]\n\nOptions:\n  --service PATH     Validate overlays under a specific service folder only\n                     (path relative to project root or absolute)\n  --strict           Treat warnings as errors (CI-friendly)\n  -h, --help         Show this help\n\nExit codes:\n  0   No errors (and no warnings in --strict mode)\n  1   Errors detected (or warnings in --strict mode)\n  2   Bad arguments\n\nReference: ADR-001-layered-overrides.md\n'
+# {prog}: the command the caller runs — the script, or `cortex validate` (ADR-008 §3.8).
+USAGE = 'Usage: {prog} [OPTIONS]\n\nOptions:\n  --service PATH     Validate overlays under a specific service folder only\n                     (path relative to project root or absolute)\n  --strict           Treat warnings as errors (CI-friendly)\n  -h, --help         Show this help\n\nExit codes:\n  0   No errors (and no warnings in --strict mode)\n  1   Errors detected (or warnings in --strict mode)\n  2   Bad arguments\n\nReference: ADR-001-layered-overrides.md\n'
 SEPARATOR = '──────────────────────────────────────────'
 
 _SPACE = "[ \t\n\v\f\r]"          # POSIX [[:space:]]
@@ -55,6 +56,13 @@ def shown(value: str) -> str:
     """``value`` with its control characters written out — ``\\x1b`` for ESC — so that nothing
     read from a project reaches the terminal as a control sequence (#85)."""
     return _CONTROL.sub(lambda m: "\\x%02x" % (ord(m.group()) & 0xFF), value)
+
+
+def display(path: str) -> str:
+    """``path`` as the report prints it: with ``/`` on every platform (ADR-008 §3.1). Only where
+    the separator is another character — ``\\`` on Windows — is it rewritten: there, it cannot be
+    part of a name, and on POSIX a ``\\`` is one."""
+    return path.replace(os.sep, "/") if os.sep != "/" else path
 
 
 def strip_prefix(value: str, prefix: str) -> str:
@@ -104,7 +112,8 @@ def extract_field(text: str, name: str) -> Optional[str]:
 class Report:
     """Verdict lines and counters, as the script's ``report_*`` helpers print them.
 
-    Paths and messages go through ``shown``: they carry what was read from the project.
+    Paths and messages go through ``shown``: they carry what was read from the project. Paths
+    also go through ``display``: the same on every platform.
     """
 
     def __init__(self, out: TextIO, colors: Colors):
@@ -115,20 +124,20 @@ class Report:
         self.out.write(text + "\n")
 
     def error(self, rel_path: str, code: str, message: str) -> None:
-        self.echo(f"{self.c.RED}✗{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.RED}✗{self.c.NC} {shown(display(rel_path))}")
         self.echo(f"  {self.c.RED}{code}{self.c.NC} — {shown(message)}")
         self.errors += 1
 
     def warning(self, rel_path: str, code: str, message: str) -> None:
-        self.echo(f"{self.c.YELLOW}⚠{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.YELLOW}⚠{self.c.NC} {shown(display(rel_path))}")
         self.echo(f"  {self.c.YELLOW}{code}{self.c.NC} — {shown(message)}")
         self.warnings += 1
 
     def ok(self, rel_path: str) -> None:
-        self.echo(f"{self.c.GREEN}✓{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.GREEN}✓{self.c.NC} {shown(display(rel_path))}")
 
     def info(self, rel_path: str, note: str) -> None:
-        self.echo(f"{self.c.BLUE}ℹ{self.c.NC} {shown(rel_path)} ({note})")
+        self.echo(f"{self.c.BLUE}ℹ{self.c.NC} {shown(display(rel_path))} ({note})")
 
 
 def base_file(base: str, project_root: str, base_root: str) -> str:
@@ -160,7 +169,7 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
         text = read_text(file)
     except OSError as error:
         # The script's head failed, said so on stderr, and so found no header.
-        _stderr(f"head: cannot open '{file}' for reading: {error.strerror}\n")
+        _stderr(f"head: cannot open '{display(file)}' for reading: {error.strerror}\n")
         text = ""
 
     # Tier 1.1 — header presence, in the first ten lines. Without one, a file at the path of a
@@ -269,11 +278,11 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
     c = colors
     report = Report(out, c)
     report.echo(f"{c.BOLD}{c.BLUE}Cortex overlay validator{c.NC}")
-    report.echo(f"  Project root:  {shown(project_root)}")
-    report.echo(f"  Cortex dir:    {shown(base_root)}")
+    report.echo(f"  Project root:  {shown(display(project_root))}")
+    report.echo(f"  Cortex dir:    {shown(display(base_root))}")
     report.echo(f"  Strict mode:   {'true' if strict else 'false'}")
     if service:
-        report.echo(f"  Service only:  {shown(service)}")
+        report.echo(f"  Service only:  {shown(display(service))}")
     report.echo("")
 
     roots = overlay_roots(project_root, base_root, service)
@@ -285,7 +294,7 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
     for root in roots:
         in_workspace = os.path.normpath(root) == os.path.normpath(project_root)
         rel_root = "." if in_workspace else strip_prefix(root, f"{project_root}/")
-        report.echo(f"{c.BOLD}── Scope: {shown(rel_root)} ──{c.NC}")
+        report.echo(f"{c.BOLD}── Scope: {shown(display(rel_root))} ──{c.NC}")
         found = 0
         for layer in LAYERS:
             layer_dir = f"{root}/agents/{layer}"
@@ -316,12 +325,13 @@ def _stream(stream: TextIO) -> TextIO:
 
 
 def main(argv: Optional[List[str]] = None, *, project_root: Optional[str] = None,
-         base_root: Optional[str] = None) -> int:
+         base_root: Optional[str] = None, prog: str = "validate-overlays.sh") -> int:
     """``bin/validate-overlays.sh [--service PATH] [--strict] [-h|--help]``.
 
     The two roots are no options: ``cli`` receives them from the script, which derives them from
-    its own location. Left out, they are derived the same way from this file's location in a
-    Cortex checkout — ``{project}/cortex/core/cortex_core/validate.py``.
+    its own location, and the ``cortex`` command from the project (ADR-008 §3.8). Left out, they
+    are derived the same way from this file's location in a Cortex checkout —
+    ``{project}/cortex/core/cortex_core/validate.py``. ``prog`` names the command in the help.
     """
     args = sys.argv[1:] if argv is None else list(argv)
     # What the caller already wrote goes out first: the wrappers write under its buffers.
@@ -333,7 +343,7 @@ def main(argv: Optional[List[str]] = None, *, project_root: Optional[str] = None
         project_root = os.path.dirname(base_root)
     out, err = _stream(sys.stdout), _stream(sys.stderr)
     try:
-        return _main(args, project_root, base_root, out, err)
+        return _main(args, project_root, base_root, out, err, prog)
     finally:
         # The wrappers borrow the process's own streams: detached, returning leaves stdout and
         # stderr open for whatever runs next in this process.
@@ -341,7 +351,8 @@ def main(argv: Optional[List[str]] = None, *, project_root: Optional[str] = None
         err.detach()
 
 
-def _main(args: List[str], project_root: str, base_root: str, out: TextIO, err: TextIO) -> int:
+def _main(args: List[str], project_root: str, base_root: str, out: TextIO, err: TextIO,
+          prog: str) -> int:
     service, strict = "", False
     i = 0
     while i < len(args):
@@ -353,11 +364,11 @@ def _main(args: List[str], project_root: str, base_root: str, out: TextIO, err: 
         elif arg == "--strict":
             strict, i = True, i + 1
         elif arg in ("-h", "--help"):
-            out.write(USAGE)
+            out.write(USAGE.format(prog=prog))
             return 0
         else:
             err.write(f"Unknown argument: {arg}\n")
-            err.write(USAGE)
+            err.write(USAGE.format(prog=prog))
             return 2
     return validate(project_root, base_root, service, strict, out, Colors(out.isatty()))
 
