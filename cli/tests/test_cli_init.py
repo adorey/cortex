@@ -600,6 +600,17 @@ class OptionTests(InitTestCase):
         self._sync_after_running(teammate, err)
 
     @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_the_first_check_lists_what_is_the_developer_s(self):
+        # Only the scripts' marker is left out: a changed file, and a file of theirs beside the marker, show.
+        teammate = self._teammate_after_the_pull()
+        cortex = teammate / "cortex"
+        (cortex / "README.md").write_text("changed\n", encoding="utf-8")
+        (cortex / "agents" / "personalities" / "notes.md").write_text("mine\n", encoding="utf-8")
+        listed = self._listed(cortex, self.CHECKS[0])
+        self.assertIn(" M README.md", listed)
+        self.assertIn("?? agents/", listed)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_teammate_s_commits_on_another_branch_are_listed(self):
         # Committed on a branch of the submodule, then put back on its pinned commit by an update.
         teammate = self._teammate_after_the_pull()
