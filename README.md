@@ -130,7 +130,8 @@ cortex/
 │   │   └── security/                  # owasp
 │   │
 │   ├── personalities/                 # Layer 3: Personality themes
-│   │   └── h2g2/                      # H2G2 theme (The Hitchhiker's Guide)
+│   │   ├── h2g2/                      # H2G2 theme (The Hitchhiker's Guide)
+│   │   └── breaking-bad/              # Breaking Bad / Better Call Saul theme
 │   │
 │   └── workflows/                     # Layer 4: Multi-agent orchestration templates
 │       ├── engineering/               # feature-development
