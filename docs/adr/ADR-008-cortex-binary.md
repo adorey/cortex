@@ -108,6 +108,8 @@ The active-theme marker **leaves the spec**: it lived inside `cortex/agents/pers
 2. makes sure the pinned version is in the store (§3.3);
 3. writes `spec` in `cortex.local.toml`, creating the file if needed and keeping its `theme`.
 
+One sync of a project runs at a time on a machine: another waits for it, up to two minutes. Where the file system has no such lock, sync runs without it and says so (§9, phase 2).
+
 **`cortex/` becomes a name, not a directory.** The spec's own text says `cortex/agents/…`, `cortex/templates/…`, `cortex/docs/…`, and every overlay's `Base:` header says `cortex/agents/…` — already a logical identifier since ADR-007 §3.4. The bootstrap templates give the rule once: *`cortex/` is the directory `spec` names*. Nothing else in the spec or in the overlays is edited.
 
 Three modes, chosen by `--store`, `--link` or `--copy`, or by `cortex.toml`'s `sync`, `store` by default:
@@ -312,3 +314,64 @@ Acceptance criteria:
 
 - **The binaries are built where code integrates**, not on every pull request (§3.1). The binary workflow took about nine minutes a run, its Windows build most of it, on every pull request of a stack, where the tests from source run first anyway. It runs on a push to `main` or to a `release/**` branch, on a pull request into `main` — every one, whatever it changes — on a tag, and by hand. So a stack merges into its release branch, the binaries go green there, and only then does the release branch's pull request into `main` open: merged straight into `main`, a stack would skip the one build of what ships. A tag's push alone releases; a run started by hand on a tag builds and stops there.
 - **A pull request's run is cancelled when its branch is pushed again**, in every workflow; the tests' workflows run on a push only to `main` and `release/**`, since a pull request's branch already runs as a pull request.
+
+- **The glibc floor is measured in CI.** Each Linux binary runs on `debian:buster-slim`, whose glibc is 2.28 and which has no Python.
+
+### Phase 2 — the store, sync, and what a tool reads
+
+- **Measured: a link does not keep Claude Code inside the project** (§3.5). Claude Code 2.1.273, in its default permission mode:
+  - in `store` mode it reads the spec after asking once for permission, or with no prompt when the store is in its `permissions.additionalDirectories`;
+  - in `link` mode it asks too: it checks the path a link resolves to, and that path is outside the project;
+  - in `copy` mode it reads with no prompt.
+
+  The table of §3.5 said a link serves "a tool that reads only inside the workspace". For this tool it does not, and `copy` is the fallback. Copilot, Cursor and Codex are not measured yet. The table and how to measure are in [the migration guide](../migrating-to-the-binary.md).
+- **On Windows the store's directories take new files** (§3.3). The read-only attribute protects files, not directories. Modifying or deleting a file of the spec fails on every target. Creating a new file beside one succeeds on Windows, and only there. An access-control list that denies it would also stand in the way of removing a version, which #99 will do. None is set.
+- **`cortex validate` finds its roots itself** (§3.8):
+  - In a project, the roots are the project root and the spec `spec` names. It refuses a spec synced for another version than the pinned one — a teammate bumped `version` and this machine has not synced — rather than validating against a spec the project no longer uses.
+  - Without `cortex.toml`, it falls back to the `cortex/` of the current directory. That fallback lasts until phase 5 removes the submodule layout.
+  - In a checkout of Cortex, the checkout is the base (ADR-007 §3.1).
+  - When it cannot validate, it exits `2`, as the script did without a Python.
+- **The spec archive is `git archive` of the tag** — `agents/`, `templates/`, `docs/` as committed, never the working copy — and the binary embeds that same archive for its own version. Other versions are downloaded from `CORTEX_RELEASES_URL` when it is set, as for the install scripts. When the binary's built-in OpenSSL finds no certificates where the build machine kept them — AlmaLinux's `/etc/pki/tls` on a Debian — it loads the system's certificate bundle from where Linux distributions and macOS keep it.
+- **A source checkout stands for the version `CORTEX_SOURCE_VERSION` names**, for the tests that download. A build always carries its stamp and never reads it.
+- **`sync` also says** when `cortex/` in `link` or `copy` mode is missing from `.gitignore`, and when the active theme is neither in the spec nor in the project. Both are notes: it still syncs.
+
+### Phase 2 — found in review
+
+- **A binary knows the spec archives released before it** (§3.3). The build reads the `SHA256SUMS` of every earlier release and embeds each spec archive's checksum. A download is checked against that checksum as well as the release's `SHA256SUMS`, and refused when the two differ: the release was changed after this binary was built. A binary serves no version newer than itself (§3.3), so it knows every version it serves — except a patch of an older line released after it, which only its `SHA256SUMS` checks. Downloads are https only — plain http only to this machine, for tests — and so is every redirect.
+- **A version in the store is complete when its three trees are** (§3.3). A directory holding less is refused and named, not taken for a version. The rename that puts a version in place comes before the change of permissions; a sync interrupted between the two left a writable version, which the next sync makes read-only again. Stagings older than a day are removed.
+- **One grammar for `cortex.toml` and `cortex.local.toml`**, in the core (`cortex_core.project`), for the command and the runtime (§3.4). A version is `X.Y.Z` with an optional pre-release, matched whole and in ASCII: `"1.0.0\n"`, which wrote `versions/1.0.0\n`, is refused, and so are digits outside ASCII. The same holds for a theme.
+- **`.synced` is a manifest** (§3.5): the version copied — or the checkout, for `--from` — and the SHA-256 of every file written. A copy holding a file sync did not write, or a modified one, is refused, with those files listed: an LLM that writes `cortex/agents/…` instead of `agents/…` — possible on Windows, where the copy's directories take new files — no longer loses its file at the next sync. A `.synced` that is no manifest is refused. A directory with a `.git` is a submodule or a clone before anything else.
+- **A link at `cortex/` is sync's** only when it points into the store, or at a checkout while `spec` is `cortex` — a link a developer made is refused like a directory.
+- **Sync checks everything, then changes the project in one rename** (§3.5). The new `cortex.local.toml` is rendered, the new link or copy is written beside `cortex/`, then put in its place; only then is `cortex.local.toml` written and the old link or copy removed. A refusal on the way — a `--from` holding no `docs/`, a `spec` sync cannot write — leaves the project as it was. `--from` takes a checkout holding the three trees.
+- **In `link` mode the `.gitignore` line is `/cortex`**, with no final slash (§3.5): a link is a file to git, and `cortex/` matches only a directory, so the link — and the absolute path of a developer's store in it — went into the commit. Whether git ignores `cortex` and `cortex.local.toml` is asked of git (`git check-ignore`), which reads every rule, and sync notes either one git does not ignore.
+- **`cortex validate` takes a copy or a link from a checkout for that checkout** (§3.8) — the contributors' test loop, in the mode that asks Claude Code for no permission. It refuses a spec synced for another version than the pinned one whatever the store it is in, not only in this machine's `CORTEX_HOME`.
+- **Sync and validate say what failed, on which path** — a `CORTEX_HOME` that is a file, a read-only project, a concurrent sync, a failed `mklink` — and exit `1` (`2` for validate), where they printed a traceback.
+- **Sync names the project root** it found. The search still goes up through the directories: in a workspace, a service is a repository of its own inside the workspace root, and stopping at a repository's edge would miss the workspace's `cortex.toml`.
+- **An empty certificate directory** where the build machine kept one counts as no certificates: the system's bundle is loaded.
+
+### Phase 2 — found in the second review
+
+- **A release from 1.0.0 without its spec archive fails the build** (§3.3). The build skipped it in silence, and the binary would have checked that version against its `SHA256SUMS` alone; a release before 1.0.0 still has none to give. `cortex --version --verbose` prints the table a binary carries, and CI checks, of each binary it builds, that it is the table the build was given — a module left out of the bundle would otherwise check nothing, as a build made without `--known-specs` does, which says so.
+- **What an interrupted or a racing sync leaves beside `cortex/` is removed** (§3.5): a staged link or copy, an entry moved aside, once no sync can still be using it — ten minutes. A link among them named this machine's store, and `/cortex` did not keep it out of a commit. What is removed is decided by what it is, not by what it was when sync looked; a `cortex.local.toml` sync cannot write puts `cortex/` back as it was; and a sync that finds `cortex/` put back meanwhile says so.
+- **A copy that lost a file is copied again** by sync, which says which files; `cortex validate` refuses a copy that no longer matches its manifest — a file added, changed or missing — rather than validate against another spec.
+- **A value `cortex.toml` is refused for is shown escaped**, as JSON writes it: a committed file may hold a newline or a terminal's control sequence.
+- **A stored version left writable is found by its files**, on every target: on Windows a directory never tells.
+- **A copy's own directory is made read-only once in place**, and writable again before it is moved: macOS renames no directory its owner may not write in, where Linux does — a copy sealed before its rename never reached `cortex/` there. What the copy holds is read-only throughout.
+
+### Phase 2 — found in the third review
+
+- **One sync of a project at a time** (§3.5): the others wait for it, up to two minutes. Racing, most of them failed on a path of their own, and a residue could outlive them. The lock writes nothing: on POSIX it is the project's directory, on Windows a byte of `cortex.toml` far past its end. Under it, what an interrupted sync left beside `cortex/` is removed at once, whatever its age, and a copy kept as it was is sealed again.
+- **A value of `spec` a message quotes is escaped**, as `cortex.toml`'s are.
+
+### Phase 2 — found in the fourth review
+
+- **A file system without the lock stops no sync** (§3.5). Only a lock another process holds is waited for. NFS emulates `flock` with a POSIX lock, which a read-only descriptor cannot take: each sync waited two minutes there, then blamed a sync that did not exist. Any other answer of the lock is now a warning, and the sync runs without it.
+- **The Windows lock is a file of the user's temporary directory**, named after the project, and no longer a byte of `cortex.toml`: a file held open cannot be replaced on Windows, and a `git pull`, or an editor that saves by renaming, failed on `cortex.toml` for as long as a sync ran or waited. On POSIX the lock is still the project's directory, and writes nothing.
+- **A `cortex.local.toml` half written is removed** with the rest of what an interrupted sync left: it names this machine's paths, and git does not ignore it.
+- **Names read from the project are printed escaped** — the target of a link at `cortex/`, a file listed as added, changed or missing — as the files' values are.
+- **A copy left writable is not an error of `cortex validate`.** A sync killed between putting a copy in place and sealing it leaves its root writable: validate reads it the same, and the next sync seals it again.
+
+### Phase 2 — found in the fifth review
+
+- **One lock file on Windows, not one per project.** A file per project piled up in the user's temporary directory, and none was ever removed — removing a lock file is a race of its own. Every project now locks a byte of the same file, `cortex-sync.lock`, at an offset drawn from its path: two projects that draw the same byte only wait for each other.
+
