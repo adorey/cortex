@@ -1,0 +1,59 @@
+name: cli tests
+
+# The `cortex` command (ADR-008), from source, on the three platforms it ships for, and the
+# install scripts against a release served from the runner. The built binary replays the same
+# suite in the binary workflow; this one runs on every change first.
+on:
+  push:
+    branches: [main, "release/**"]     # a pull request's branch runs as a pull request, once
+    paths:
+      - "cli/**"
+      - "core/**"
+      - "agents/**"
+      - "templates/**"
+      - "install.sh"
+      - "install.ps1"
+      - ".github/workflows/cli-tests.yml"
+  pull_request:
+    paths:
+      - "cli/**"
+      - "core/**"
+      - "agents/**"
+      - "templates/**"
+      - "install.sh"
+      - "install.ps1"
+      - ".github/workflows/cli-tests.yml"
+
+# A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
+# branch or a tag, a run in progress is never cut short.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: cortex-cli (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 3.11 is the floor cli/pyproject.toml declares, for tomllib.
+          - { os: ubuntu-latest, python-version: "3.11" }
+          - { os: ubuntu-latest, python-version: "3.12" }
+          - { os: macos-latest, python-version: "3.12" }
+          - { os: windows-latest, python-version: "3.12" }
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Nothing is installed: the tests run the command from core/ and cli/ as they are.
+      - name: Run the CLI suite
+        working-directory: cli
+        run: python -m unittest discover -s tests -v

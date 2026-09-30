@@ -1,0 +1,11 @@
+# The build of the cortex binary (cli/build.py), pinned with every dependency, for the four
+# targets: `python cli/pin_build.py` writes requirements-build.txt from this file, with the
+# hashes of every file PyPI holds for each version — one file for Linux, macOS and Windows.
+pyinstaller==6.22.3
+altgraph==0.17.5
+packaging==26.3
+pyinstaller-hooks-contrib==2026.7
+setuptools==84.0.0
+macholib==1.16.4 ; sys_platform == "darwin"
+pefile==2024.8.26 ; sys_platform == "win32"
+pywin32-ctypes==0.2.3 ; sys_platform == "win32"

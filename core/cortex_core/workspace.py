@@ -1,6 +1,6 @@
 """The workspace's layout on disk — what the validator walks and the prompt shows (ADR-007, #88).
 
-``find`` walks a tree the way the validator's script ran ``find``; ``services`` is the one
+``find`` walks a tree the way the validator's script ran ``find``, in name order; ``services`` is the one
 discovery of a workspace's services — a folder with a ``project-overview.md``, as setup.sh
 scaffolds one — for the validator's overlay roots and for the index an agent is shown.
 """
@@ -30,12 +30,13 @@ def _is(test, follow_links: bool) -> bool:
 def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: bool = False,
          prune_names: Tuple[str, ...] = (), prune_paths: Tuple[str, ...] = (),
          follow_links: bool = False) -> List[str]:
-    """``find TOP [-maxdepth N] -name NAME [-type f]``, in ``find``'s order, without entering the
-    directories below ``TOP`` that are named in ``prune_names`` or located at ``prune_paths``.
+    """``find TOP [-maxdepth N] -name NAME [-type f]``, without entering the directories below
+    ``TOP`` that are named in ``prune_names`` or located at ``prune_paths``.
 
-    Depth first, each directory's entries in the order the file system returns them — the
-    order ``find`` prints, so the report lists files in the same sequence as the script did.
-    Pruning looks below ``TOP`` only: what the directories above it are called changes nothing.
+    Depth first, each directory's entries sorted by name — not in the order the file system
+    returns them, as ``find`` prints them: that order is ext4's on one machine, APFS's or NTFS's on
+    another, and the report must be the same on every platform (ADR-008 §3.1). The script's
+    captured outputs came out sorted too. Pruning looks below ``TOP`` only: what the directories above it are called changes nothing.
     With ``follow_links``, files and directories behind symbolic links count as the resolver
     reads them — ``find -L`` — and, as there, a directory that is one of its own ancestors — a
     link loop — is not entered again, while a second path to the same directory is listed too.
@@ -53,7 +54,7 @@ def find(top: str, name: str, *, maxdepth: Optional[int] = None, regular_files: 
                 return
             ancestors = ancestors | {(st.st_dev, st.st_ino)}
         try:
-            entries = list(os.scandir(directory))
+            entries = sorted(os.scandir(directory), key=lambda entry: entry.name)
         except OSError:
             return                    # find reports it on stderr, which the script discards
         for entry in entries:
@@ -78,7 +79,7 @@ def same_directory(a: str, b: str) -> bool:
 
 def services(project_root: str, base_root: Optional[str] = None) -> List[str]:
     """Every service of the workspace: a folder below the project root, five levels deep at most,
-    holding a ``project-overview.md`` — in ``find``'s order.
+    holding a ``project-overview.md`` — in ``find``'s order, sorted by name.
 
     Services are looked for outside the base, wherever it is mounted and whatever it is called,
     outside the project root's own ``agents/`` — the cascade's tiers and ADR-006's team files,

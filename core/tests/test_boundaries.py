@@ -1,6 +1,7 @@
-"""The two directions ADR-007 §3.3 forbids, enforced mechanically.
+"""The directions ADR-007 §3.3 and ADR-008 §3.9 forbid, enforced mechanically.
 
-1. The core never imports the runtime — the runtime depends on the core, not the reverse.
+1. The core never imports the runtime, nor the ``cortex`` command — both depend on the core, not
+   the reverse.
 2. The spec never references the core — the ADR-002 firewall, extended to the new package.
    (The runtime's own firewall test, ``runtime/tests/test_firewall.py``, keeps guarding its
    tokens; this one adds the core's without touching it.)
@@ -25,8 +26,9 @@ SPEC_DIR = Path(__file__).resolve().parents[2] / "agents"
 FORBIDDEN_IN_SPEC = ["cortex_core", "from cortex_core", "import cortex_core"]
 
 
-def runtime_imports(source: str):
-    """Top-level module names imported by ``source`` that belong to the runtime."""
+def runtime_imports(source: str, package: str = "cortex_runtime"):
+    """Top-level module names imported by ``source`` that belong to ``package`` — the runtime,
+    unless another is named."""
     found = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
@@ -35,7 +37,7 @@ def runtime_imports(source: str):
             names = [node.module]
         else:
             continue
-        found += [n for n in names if n.split(".")[0] == "cortex_runtime"]
+        found += [n for n in names if n.split(".")[0] == package]
     return found
 
 
@@ -78,11 +80,22 @@ class DependencyDirectionTests(unittest.TestCase):
         ]
         self.assertEqual(offenders, [], "cortex-core must not depend on the runtime (ADR-007 §3.3):\n" + "\n".join(offenders))
 
+    def test_core_never_imports_the_cli(self):
+        # ADR-008 §3.9: the command is a package of its own, which grows away from the cascade.
+        offenders = [
+            f"{py.relative_to(CORE_PKG.parent)} imports {name}"
+            for py in sorted(CORE_PKG.rglob("*.py"))
+            for name in runtime_imports(py.read_text(encoding="utf-8"), "cortex_cli")
+        ]
+        self.assertEqual(offenders, [], "cortex-core must not depend on the cortex command (ADR-008 §3.9):\n" + "\n".join(offenders))
+
     def test_the_guard_can_fail(self):
         # Proves the detector is not vacuous: both import forms are caught.
         self.assertEqual(runtime_imports("import cortex_runtime"), ["cortex_runtime"])
         self.assertEqual(runtime_imports("from cortex_runtime.resolver import x"), ["cortex_runtime.resolver"])
         self.assertEqual(runtime_imports("import cortex_core"), [])
+        self.assertEqual(runtime_imports("from cortex_cli import main", "cortex_cli"), ["cortex_cli"])
+        self.assertEqual(runtime_imports("import cortex_runtime", "cortex_cli"), [])
 
 
 class OneImplementationTests(unittest.TestCase):
@@ -127,16 +140,18 @@ class SpecFirewallTests(unittest.TestCase):
 
 
 class TestLayoutTests(unittest.TestCase):
-    """The two suites share a repository, and IDE test explorers run them in one pytest session."""
+    """The suites share a repository, and IDE test explorers run them in one pytest session."""
 
     REPO = Path(__file__).resolve().parents[2]
 
-    def test_core_and_runtime_test_modules_have_distinct_names(self):
-        # Two packages named ``tests``: a module name found in both is collected once, the other
-        # file silently never runs.
-        core = {p.name for p in (self.REPO / "core" / "tests").glob("test_*.py")}
-        runtime = {p.name for p in (self.REPO / "runtime" / "tests").glob("test_*.py")}
-        self.assertEqual(core & runtime, set())
+    def test_the_test_modules_of_the_three_suites_have_distinct_names(self):
+        # Three packages named ``tests``: a module name found in two is collected once, the other
+        # file silently never runs. Helper modules count too: each suite imports its own by name.
+        suites = {name: {p.name for p in (self.REPO / name / "tests").glob("*.py") if p.name != "__init__.py"}
+                  for name in ("core", "runtime", "cli")}
+        for a, b in (("core", "runtime"), ("core", "cli"), ("runtime", "cli")):
+            with self.subTest(suites=(a, b)):
+                self.assertEqual(suites[a] & suites[b], set())
 
     def test_no_core_test_imports_the_tests_package_by_name(self):
         # ``tests`` is the runtime's package name too: in one pytest session, ``from tests import
@@ -150,14 +165,13 @@ class TestLayoutTests(unittest.TestCase):
         ]
         self.assertEqual(offenders, [])
 
-    def test_the_macos_job_runs_every_order_free_module(self):
-        # The macOS job lists its modules by name: a new one must be listed there, or be named
-        # here as depending on the order of an ext4 directory listing.
-        order_dependent = {"test_validate", "test_validator_golden", "test_shim"}
+    def test_the_macos_job_runs_the_whole_suite(self):
+        # It once listed its modules by name, leaving out those that depended on the order of an
+        # ext4 directory listing. The validator now lists in name order (ADR-008 §3.1): a module
+        # added later must run on macOS too, without anyone listing it.
         workflow = (self.REPO / ".github" / "workflows" / "core-tests.yml").read_text(encoding="utf-8")
-        listed = set(re.findall(r"\btests\.(test_\w+)", workflow))
-        present = {p.stem for p in (self.REPO / "core" / "tests").glob("test_*.py")}
-        self.assertEqual(present - order_dependent, listed)
+        self.assertIn("/usr/bin/python3 -m unittest discover -s tests", workflow)
+        self.assertEqual(re.findall(r"\btests\.(test_\w+)", workflow), [])
 
 
 if __name__ == "__main__":
