@@ -1,7 +1,7 @@
 """Overlay validation — ADR-001 Tier 1 and Tier 2 (ADR-007).
 
-``bin/validate-overlays.sh`` runs this module. It is a literal port of the Bash implementation
-that script held until Cortex 0.9.0: same checks in the same order, same messages, same exit
+``cortex validate`` runs this module (ADR-008 §3.8). It began as a literal port of the Bash
+validator Cortex shipped until 0.9.0: same checks in the same order, same messages, same exit
 codes, byte-identical output — so that nothing a host project relied on changed with the port.
 
 It then departed from that output on purpose (ADR-007 §3.6 and its amendments): a file without a
@@ -14,14 +14,13 @@ The cascade's own rules — which layer replaces, which file cannot be overridde
 restated here: they come from the resolver, the one implementation the runtime runs too.
 """
 
-# The standard library and this package only: bin/validate-overlays.sh imports it under
-# ``python -I`` from the Cortex checkout, with nothing installed (see the shim).
+# The standard library and this package only: the core runs from source, with nothing installed
+# (ADR-007 §3.3), and the cortex binary embeds nothing else (ADR-008 §3.1).
 from __future__ import annotations
 
 import io
 import os
 import re
-import signal
 import sys
 from typing import List, Optional, TextIO
 
@@ -30,7 +29,8 @@ from .workspace import find, same_directory, services  # noqa: F401 — find is 
 
 LAYERS = ("roles", "capabilities", "personalities", "workflows")
 
-USAGE = 'Usage: validate-overlays.sh [OPTIONS]\n\nOptions:\n  --service PATH     Validate overlays under a specific service folder only\n                     (path relative to project root or absolute)\n  --strict           Treat warnings as errors (CI-friendly)\n  -h, --help         Show this help\n\nExit codes:\n  0   No errors (and no warnings in --strict mode)\n  1   Errors detected (or warnings in --strict mode)\n  2   Bad arguments\n\nReference: ADR-001-layered-overrides.md\n'
+# {prog}: the command the caller runs — `cortex validate` (ADR-008 §3.8).
+USAGE = 'Usage: {prog} [OPTIONS]\n\nOptions:\n  --service PATH     Validate overlays under a specific service folder only\n                     (path relative to project root or absolute)\n  --strict           Treat warnings as errors (CI-friendly)\n  -h, --help         Show this help\n\nExit codes:\n  0   No errors (and no warnings in --strict mode)\n  1   Errors detected (or warnings in --strict mode)\n  2   Bad arguments\n\nReference: ADR-001-layered-overrides.md\n'
 SEPARATOR = '──────────────────────────────────────────'
 
 _SPACE = "[ \t\n\v\f\r]"          # POSIX [[:space:]]
@@ -55,6 +55,13 @@ def shown(value: str) -> str:
     """``value`` with its control characters written out — ``\\x1b`` for ESC — so that nothing
     read from a project reaches the terminal as a control sequence (#85)."""
     return _CONTROL.sub(lambda m: "\\x%02x" % (ord(m.group()) & 0xFF), value)
+
+
+def display(path: str) -> str:
+    """``path`` as the report prints it: with ``/`` on every platform (ADR-008 §3.1). Only where
+    the separator is another character — ``\\`` on Windows — is it rewritten: there, it cannot be
+    part of a name, and on POSIX a ``\\`` is one."""
+    return path.replace(os.sep, "/") if os.sep != "/" else path
 
 
 def strip_prefix(value: str, prefix: str) -> str:
@@ -104,7 +111,8 @@ def extract_field(text: str, name: str) -> Optional[str]:
 class Report:
     """Verdict lines and counters, as the script's ``report_*`` helpers print them.
 
-    Paths and messages go through ``shown``: they carry what was read from the project.
+    Paths and messages go through ``shown``: they carry what was read from the project. Paths
+    also go through ``display``: the same on every platform.
     """
 
     def __init__(self, out: TextIO, colors: Colors):
@@ -115,20 +123,20 @@ class Report:
         self.out.write(text + "\n")
 
     def error(self, rel_path: str, code: str, message: str) -> None:
-        self.echo(f"{self.c.RED}✗{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.RED}✗{self.c.NC} {shown(display(rel_path))}")
         self.echo(f"  {self.c.RED}{code}{self.c.NC} — {shown(message)}")
         self.errors += 1
 
     def warning(self, rel_path: str, code: str, message: str) -> None:
-        self.echo(f"{self.c.YELLOW}⚠{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.YELLOW}⚠{self.c.NC} {shown(display(rel_path))}")
         self.echo(f"  {self.c.YELLOW}{code}{self.c.NC} — {shown(message)}")
         self.warnings += 1
 
     def ok(self, rel_path: str) -> None:
-        self.echo(f"{self.c.GREEN}✓{self.c.NC} {shown(rel_path)}")
+        self.echo(f"{self.c.GREEN}✓{self.c.NC} {shown(display(rel_path))}")
 
     def info(self, rel_path: str, note: str) -> None:
-        self.echo(f"{self.c.BLUE}ℹ{self.c.NC} {shown(rel_path)} ({note})")
+        self.echo(f"{self.c.BLUE}ℹ{self.c.NC} {shown(display(rel_path))} ({note})")
 
 
 def base_file(base: str, project_root: str, base_root: str) -> str:
@@ -160,7 +168,7 @@ def check_overlay(file: str, root: str, project_root: str, base_root: str, repor
         text = read_text(file)
     except OSError as error:
         # The script's head failed, said so on stderr, and so found no header.
-        _stderr(f"head: cannot open '{file}' for reading: {error.strerror}\n")
+        _stderr(f"head: cannot open '{display(file)}' for reading: {error.strerror}\n")
         text = ""
 
     # Tier 1.1 — header presence, in the first ten lines. Without one, a file at the path of a
@@ -269,11 +277,11 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
     c = colors
     report = Report(out, c)
     report.echo(f"{c.BOLD}{c.BLUE}Cortex overlay validator{c.NC}")
-    report.echo(f"  Project root:  {shown(project_root)}")
-    report.echo(f"  Cortex dir:    {shown(base_root)}")
+    report.echo(f"  Project root:  {shown(display(project_root))}")
+    report.echo(f"  Cortex dir:    {shown(display(base_root))}")
     report.echo(f"  Strict mode:   {'true' if strict else 'false'}")
     if service:
-        report.echo(f"  Service only:  {shown(service)}")
+        report.echo(f"  Service only:  {shown(display(service))}")
     report.echo("")
 
     roots = overlay_roots(project_root, base_root, service)
@@ -285,7 +293,7 @@ def validate(project_root: str, base_root: str, service: str, strict: bool, out:
     for root in roots:
         in_workspace = os.path.normpath(root) == os.path.normpath(project_root)
         rel_root = "." if in_workspace else strip_prefix(root, f"{project_root}/")
-        report.echo(f"{c.BOLD}── Scope: {shown(rel_root)} ──{c.NC}")
+        report.echo(f"{c.BOLD}── Scope: {shown(display(rel_root))} ──{c.NC}")
         found = 0
         for layer in LAYERS:
             layer_dir = f"{root}/agents/{layer}"
@@ -315,25 +323,19 @@ def _stream(stream: TextIO) -> TextIO:
     return io.TextIOWrapper(stream.buffer, encoding="utf-8", errors="surrogateescape", newline="\n", write_through=True)
 
 
-def main(argv: Optional[List[str]] = None, *, project_root: Optional[str] = None,
-         base_root: Optional[str] = None) -> int:
-    """``bin/validate-overlays.sh [--service PATH] [--strict] [-h|--help]``.
+def main(argv: List[str], *, project_root: str, base_root: str, prog: str = "cortex validate") -> int:
+    """``cortex validate [--service PATH] [--strict] [-h|--help]``.
 
-    The two roots are no options: ``cli`` receives them from the script, which derives them from
-    its own location. Left out, they are derived the same way from this file's location in a
-    Cortex checkout — ``{project}/cortex/core/cortex_core/validate.py``.
+    The two roots are no options: the ``cortex`` command finds them from the project (ADR-008
+    §3.8). ``prog`` names the command in the help.
     """
-    args = sys.argv[1:] if argv is None else list(argv)
+    args = list(argv)
     # What the caller already wrote goes out first: the wrappers write under its buffers.
     sys.stdout.flush()
     sys.stderr.flush()
-    if base_root is None:
-        base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    if project_root is None:
-        project_root = os.path.dirname(base_root)
     out, err = _stream(sys.stdout), _stream(sys.stderr)
     try:
-        return _main(args, project_root, base_root, out, err)
+        return _main(args, project_root, base_root, out, err, prog)
     finally:
         # The wrappers borrow the process's own streams: detached, returning leaves stdout and
         # stderr open for whatever runs next in this process.
@@ -341,59 +343,23 @@ def main(argv: Optional[List[str]] = None, *, project_root: Optional[str] = None
         err.detach()
 
 
-def _main(args: List[str], project_root: str, base_root: str, out: TextIO, err: TextIO) -> int:
+def _main(args: List[str], project_root: str, base_root: str, out: TextIO, err: TextIO,
+          prog: str) -> int:
     service, strict = "", False
     i = 0
     while i < len(args):
         arg = args[i]
         if arg == "--service":
             if i + 1 >= len(args):
-                return 1          # the script's `shift 2` fails under errexit: exit 1, nothing printed
+                return 1          # the Bash validator's `shift 2` failed under errexit: exit 1, nothing printed
             service, i = args[i + 1], i + 2
         elif arg == "--strict":
             strict, i = True, i + 1
         elif arg in ("-h", "--help"):
-            out.write(USAGE)
+            out.write(USAGE.format(prog=prog))
             return 0
         else:
             err.write(f"Unknown argument: {arg}\n")
-            err.write(USAGE)
+            err.write(USAGE.format(prog=prog))
             return 2
     return validate(project_root, base_root, service, strict, out, Colors(out.isatty()))
-
-
-def _default_sigpipe() -> None:
-    if hasattr(signal, "SIGPIPE"):
-        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-
-
-def cli() -> int:
-    """The command line ``bin/validate-overlays.sh`` runs: ``PROJECT_ROOT BASE_ROOT [OPTIONS]``,
-    the two roots from the script, the options from its caller.
-
-    A reader that goes away — ``| head`` — ends the run as it ended the script, by SIGPIPE and in
-    silence, not with a BrokenPipeError.
-    """
-    _default_sigpipe()
-    if len(sys.argv) < 3:
-        sys.stderr.write("usage: PROJECT_ROOT BASE_ROOT [OPTIONS] — run it as bin/validate-overlays.sh\n")
-        return 2
-    return main(sys.argv[3:], project_root=sys.argv[1], base_root=sys.argv[2])
-
-
-def _module_main() -> int:
-    """``python3 -m cortex_core.validate [OPTIONS]`` from a checkout's core/ (ADR-007 §3.5): the
-    roots come from where this file sits, as the shim derives them from where it sits — which
-    only holds inside a Cortex checkout. Installed, in a site-packages, there is none around it:
-    derived from there, the roots would name no project, and the run would pass over nothing."""
-    _default_sigpipe()
-    base_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    if not (os.path.isdir(f"{base_root}/agents") and os.path.isfile(f"{base_root}/bin/validate-overlays.sh")):
-        _stderr("cortex_core.validate is not inside a Cortex checkout here; run the checkout's "
-                "bin/validate-overlays.sh, or run the module from that checkout's core/ directory.\n")
-        return 2
-    return main()
-
-
-if __name__ == "__main__":
-    sys.exit(_module_main())

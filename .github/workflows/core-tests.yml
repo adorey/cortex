@@ -1,21 +1,27 @@
 name: core tests
 
 # cortex-core is the one implementation of the cascade in code (ADR-007). It also reads the
-# spec itself — the self-hosting test resolves Cortex's own agents/ — so spec changes run it,
-# and bin/validate-overlays.sh is a shim over it, replayed against the captured outputs.
+# spec itself — the self-hosting test resolves Cortex's own agents/ — so spec changes run it.
 on:
   push:
+    branches: [main, "release/**"]     # a pull request's branch runs as a pull request, once
     paths:
       - "core/**"
       - "agents/**"
-      - "bin/validate-overlays.sh"
+      - "cli/tests/**"
       - ".github/workflows/core-tests.yml"
   pull_request:
     paths:
       - "core/**"
       - "agents/**"
-      - "bin/validate-overlays.sh"
+      - "cli/tests/**"
       - ".github/workflows/core-tests.yml"
+
+# A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
+# branch or a tag, a run in progress is never cut short.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -27,9 +33,9 @@ jobs:
         # 3.9 is the floor ADR-007 promises. A floor CI never runs on is a claim, not a guarantee.
         python-version: ["3.9", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -41,15 +47,15 @@ jobs:
   macos:
     # Apple's own Python — the 3.9.6 of the Command Line Tools that ADR-007 §3.3 names — on a
     # file system that ignores case, where two spellings of one directory must still be one.
-    # The resolver's tests only: the validator's captured outputs list files in the order the
-    # file system returns them, which is ext4's in the captures and not APFS's.
+    # The whole suite: the validator lists files in name order, not in the file system's, so
+    # the outputs captured on ext4 hold on APFS too (ADR-008 §3.1).
     name: cortex-core (macOS, system Python)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Run the resolver's tests
+      - name: Run the core suite
         working-directory: core
         run: |
           /usr/bin/python3 --version
-          /usr/bin/python3 -m unittest -v tests.test_package tests.test_core_resolver tests.test_catalog tests.test_prompt tests.test_boundaries tests.test_self_hosting tests.test_workspace
+          /usr/bin/python3 -m unittest discover -s tests -v

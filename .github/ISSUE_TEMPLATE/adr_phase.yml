@@ -74,7 +74,7 @@ body:
         beats a description.
       placeholder: |
         - `grep -rn '"cortex" / "agents"' runtime/cortex_runtime/` returns nothing
-        - `bin/validate-overlays.sh --strict` exits 0 against a scaffolded host project
+        - `cortex validate --strict` exits 0 against a scaffolded host project
     validations:
       required: true
 

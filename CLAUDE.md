@@ -1,9 +1,9 @@
 <!--
-  This repo IS cortex — there is no nested `cortex/` submodule/clone to point at.
+  This repo IS cortex — there is no `cortex/` to point at, and no cortex.toml to sync.
   Every path below is local to the repo root. This file is hand-adapted from
   templates/bootstrap-instructions.md (the generic host-project template) for
   self-hosting: base == root here, so the base/overlay cascade collapses to a
-  single tier. Do not regenerate this file with setup.sh — it targets host
+  single tier. Do not regenerate this file with `cortex init` — it targets host
   projects, not cortex's own repo.
 -->
 
@@ -21,8 +21,8 @@ Read `project-overview.md` at the repo root — vision, actors and constraints, 
 Read `project-context.md` at the repo root — stack, conventions and tools for developing Cortex.
 
 ### Step 3 — Active personality
-1. Read `agents/personalities/.active-theme` — its first line is the active theme name (e.g. `h2g2`, `none`).
-   - **File missing, empty, or content `none`** → skip this step entirely (no-personality mode).
+1. The active theme is `theme` in `cortex.local.toml` at the repo root — git-ignored, a developer's own choice — or `h2g2` when that file has no `theme` key.
+   - **`none`** → skip this step entirely (no-personality mode).
 2. Read `agents/personalities/{theme}/theme.md` and `agents/personalities/{theme}/characters.md`. No cascade here — this directory is the base, not an overlay of something else.
 3. Find the character assigned to the `prompt-manager` role in `characters.md` — **that is YOU**.
 4. Read that character's individual card (e.g. `agents/personalities/h2g2/Oolon-Colluphid.md`).
@@ -44,10 +44,10 @@ You are the Prompt Manager. On every request:
 
 Every file under `agents/roles/`, `agents/capabilities/`, `agents/personalities/`, `agents/workflows/` is the **base** consumed by every host project that mounts Cortex. A change here is framework-level, not project-level:
 
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before editing any of the four layers — it covers the repo structure, the test loop (throwaway host projects in `/tmp`, both submodule and standalone-clone modes), and validation tooling.
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before editing any of the four layers — it covers the repo structure, the test loop (throwaway host projects in `/tmp`, single and workspace, reading this checkout through `cortex init --from`), and validation tooling.
 - A change to structure, contracts, or cross-cutting behavior (the cascade, the runtime, security, persistence…) needs an ADR — see [docs/adr/](docs/adr/) and its own [README](docs/adr/README.md) for the process. Check the index for prior decisions before proposing a new one.
 - `docs/extending-layers.md` describes the overlay convention **from a host project's point of view** — useful to know when changing a base file, since it's what host-project overlays point at (`Base: cortex/agents/...`); it does not apply reflexively to this repo.
-- `./bin/validate-overlays.sh` checks overlay integrity in host projects, and `bin/check-english.sh` enforces the English-only rule CI gates on — run the relevant one after structural edits.
+- `cortex validate` checks overlay integrity — in a host project, or here, where the base is its own project — and `bin/check-english.sh` enforces the English-only rule CI gates on: run the relevant one after structural edits.
 
 ## References (read on demand depending on context)
 - **Agent roles:** `agents/roles/{category}/`

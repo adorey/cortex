@@ -1,6 +1,6 @@
 """Cascade resolution — ADR-001 §3.1 and §3.2 compiled to code (ADR-002 §3.1, ADR-007).
 
-The one implementation of the cascade in code: the runtime and ``bin/validate-overlays.sh``
+The one implementation of the cascade in code: the runtime and ``cortex validate``
 both run it.
 
 Layout consumed:

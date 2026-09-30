@@ -60,7 +60,7 @@ def read_project_overview(root: Path, service: Optional[str] = None) -> str:
     return _read_tiers(root, service, _OVERVIEW_FILE, ("## Team overview", "## Developer overview", "## Service overview"))
 
 
-def derive_capabilities(root: Path, service: Optional[str] = None) -> List[str]:
+def derive_capabilities(root: Path, service: Optional[str] = None, *, base_root: Optional[Path] = None) -> List[str]:
     """Return cascade-relative capability paths whose techno is named in project-context.md.
 
     Deterministic replacement for the Prompt Manager's manual stack cross-reference.
@@ -71,7 +71,7 @@ def derive_capabilities(root: Path, service: Optional[str] = None) -> List[str]:
     if not context.strip():
         return []
     selected = []
-    for rel in capability_catalog(root, service):
+    for rel in capability_catalog(root, service, base_root=base_root):
         techno = Path(rel).stem.lower()
         if re.search(rf"\b{re.escape(techno)}\b", context):
             selected.append(rel)
