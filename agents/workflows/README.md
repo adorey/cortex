@@ -27,7 +27,9 @@ cortex/agents/workflows/                       ← priority 3 — Generic workfl
     │   ├── frontend-testing.md
     │   └── support-triage.md
     ├── intelligence/                                ← Research & analysis
-    │   └── tech-watch.md
+    │   ├── tech-watch.md
+    │   ├── market-study.md
+    │   └── innovation-funding.md
     ├── ops/                                         ← Deployment & incident (future)
     └── product/                                     ← Discovery & roadmap (future)
 
@@ -60,13 +62,15 @@ The Prompt Manager is the **single entry point**. For every request it:
 | `engineering/` | `frontend-testing.md` | Adding or reviewing frontend tests |
 | `engineering/` | `support-triage.md` | Diagnosing a support ticket |
 | `intelligence/` | `tech-watch.md` | Technology watch on a subject or tool |
+| `intelligence/` | `market-study.md` | Market deep-dive, competitive landscape, diversification |
+| `intelligence/` | `innovation-funding.md` | R&D eligibility triage, tax credits, grant windows |
 
 ## 🗂️ Categories
 
 | Category | Purpose | Examples of future workflows |
 |---|---|---|
 | `engineering/` | Development & technical | `bug-fix`, `refactoring` |
-| `intelligence/` | Research & analysis | `security-audit`, `competitive-watch` |
+| `intelligence/` | Research & analysis | `security-audit`, `patent-landscape` |
 | `ops/` | Deployment & incident | `deployment`, `incident-response` |
 | `product/` | Discovery & roadmap | `backlog-grooming`, `user-story-mapping` |
 
