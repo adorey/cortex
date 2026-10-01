@@ -222,7 +222,7 @@ class OptionTests(InitTestCase):
         proc = self.init("--theme", "no-such-theme")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("theme 'no-such-theme' is neither in", proc.err)
-        self.assertIn("acme, h2g2", proc.err)
+        self.assertIn("acme, breaking-bad, h2g2", proc.err)
         self.assertEqual(list(self.project.iterdir()), [])
 
     def test_a_theme_is_a_name(self):
