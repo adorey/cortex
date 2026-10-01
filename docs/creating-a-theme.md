@@ -8,9 +8,11 @@
 
 A theme is a **personality layer** that sits on top of the technical roles and capabilities to give a tone, style and identity to your AI agents. It is purely cosmetic and cultural: it does not affect technical skills or stack best practices.
 
-**Examples:**
+**Shipped with Cortex:**
 - `h2g2` — The Hitchhiker's Guide to the Galaxy (British humour, SF)
 - `breaking-bad` — Breaking Bad / Better Call Saul (high-stakes precision, dry dark humour)
+
+**Ideas for a theme of your own:**
 - `star-wars` — Star Wars (Jedi wisdom, imperial rigour…)
 - `corporate` — Neutral professional (no character, formal tone)
 - `lotr` — The Lord of the Rings (elven wisdom, dwarven robustness…)
