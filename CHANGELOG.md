@@ -7,6 +7,9 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+- `breaking-bad` personality theme — *Breaking Bad* / *Better Call Saul*: seventeen characters covering every role, from @Saul (prompt manager) to @Howard (regulatory compliance writer), with themed workflows. Activate it with `cortex init --theme breaking-bad`, or `theme = "breaking-bad"` in `cortex.toml` — in `cortex.local.toml` for one developer.
+
 ## [1.1.0] - 2026-09-30 — Vogon Poetry _(Released)_
 [Full notes](changelog/1.1.0.md)
 
