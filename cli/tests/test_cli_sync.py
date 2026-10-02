@@ -250,7 +250,7 @@ class ForeignCortexTests(SyncTestCase):
                     before = snapshot(cortex)
                     proc = self.sync(project, mode)
                     self.assertEqual(proc.returncode, 1)
-                    self.assertIn(f"cortex/ is {words}, which cortex sync did not write", proc.err)
+                    self.assertIn(f"cortex/ is {words}, which Cortex did not write", proc.err)
                     self.assertEqual(snapshot(cortex), before)
                     self.assertFalse((project / "cortex.local.toml").exists())
 
