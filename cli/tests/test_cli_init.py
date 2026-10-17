@@ -725,6 +725,40 @@ class OptionTests(InitTestCase):
         status = subprocess.run(["git", "-C", str(self.project), "status", "--short"], capture_output=True, text=True)
         self.assertEqual(sorted(status.stdout.splitlines()), ["D  .gitmodules", "D  cortex"])
 
+    @unittest.skipUnless(HAS_GIT and os.name != "nt", "needs git and a POSIX shell")
+    def test_an_older_git_finds_the_repository_deinit_moves(self):
+        # git before 2.31 knows no --path-format: rev-parse prints it back, and the path after it.
+        self._submodule_stack(over_a_clone=True)
+        bin_dir = self.tmp / "older-git"
+        bin_dir.mkdir()
+        (bin_dir / "git").write_text('#!/bin/sh\nfor a do\n  shift\n'
+                                     '  case $a in --path-format=*) echo "$a" ;; *) set -- "$@" "$a" ;; esac\n'
+                                     f'done\nexec {quote(shutil.which("git"))} "$@"\n', encoding="utf-8")
+        (bin_dir / "git").chmod(0o755)
+        proc = harness.run("init", cwd=self.project, env=dict(self.env, PATH=str(bin_dir)))
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(self._shown(proc.stderr.decode())[-1],
+                         remove(display(self.project / ".git" / "modules" / "cortex")))
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_clone_beside_a_submodule_moved_elsewhere(self):
+        # The submodule's settings belong to the one git mv moved: the cortex/ cloned since is a clone.
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-c", "protocol.file.allow=always"]
+        upstream = self.tmp / "upstream"
+        subprocess.run(["git", "init", "-q", str(upstream)], check=True)
+        subprocess.run([*git, "-C", str(upstream), "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        subprocess.run([*git, "-C", str(self.project), "submodule", "add", "-q", str(upstream), "cortex"], check=True)
+        (self.project / "vendor").mkdir()
+        subprocess.run([*git, "-C", str(self.project), "mv", "cortex", "vendor/cortex"], check=True)
+        subprocess.run([*git, "-C", str(self.project), "commit", "-q", "-m", "moved"], check=True)
+        subprocess.run([*git, "clone", "-q", str(upstream), str(self.project / "cortex")], check=True)
+        proc = harness.run("init", cwd=self.project, env=self._with_git())
+        err = proc.stderr.decode()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a git clone", err)
+        self.assertNotIn("submodule", err)
+
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_the_developer_who_added_it_over_a_clone_after_the_pull(self):
         # The pull takes .gitmodules away, and cortex/.git is a directory: a submodule left behind, no clone.

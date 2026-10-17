@@ -201,10 +201,21 @@ def submodule_name(path: Path) -> str:
     return path.name
 
 
+def _named_in_gitmodules(path: Path) -> bool:
+    """``.gitmodules`` still has a section named as the submodule would be: one that lives elsewhere,
+    moved with ``git mv``, and owns the settings — ``cortex/`` is then a clone of its own."""
+    name = re.escape(submodule_name(path))
+    try:
+        text = (path.parent / ".gitmodules").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return re.search(rf'^\s*\[submodule\s+"{name}"\s*\]', text, flags=re.M) is not None
+
+
 def _left_by_submodule(path: Path) -> bool:
     """A ``cortex/`` whose repository is its own ``.git`` directory, in a project whose settings still
     hold the submodule: the one ``git submodule add`` was run on, as a clone, once a pull removed it."""
-    if not (path / ".git").is_dir():
+    if not (path / ".git").is_dir() or _named_in_gitmodules(path):
         return False
     section = _git(str(path.parent), "config", "--local", "--get-regexp",
                    rf"^submodule\.{re.escape(submodule_name(path))}\.")
@@ -221,9 +232,11 @@ def _absorbed(path: Path) -> str:
     """Where ``git submodule deinit`` moves a repository kept in ``cortex/.git``: the project's
     ``modules/<name>`` — under ``.git/worktrees/<worktree>/`` in a linked worktree."""
     name = submodule_name(path)
-    proc = _git(str(path.parent), "rev-parse", "--path-format=absolute", "--git-path", f"modules/{name}")
+    # --git-path answers relative to the project, or absolute in a linked worktree; git older than
+    # 2.31 knows no --path-format, and would print it back.
+    proc = _git(str(path.parent), "rev-parse", "--git-path", f"modules/{name}")
     if proc is not None and proc.returncode == 0 and proc.stdout.strip():
-        return os.path.normpath(proc.stdout.strip())
+        return os.path.normpath(os.path.join(str(path.parent), proc.stdout.strip()))
     return os.path.join(str(path.parent), ".git", "modules", name)
 
 
