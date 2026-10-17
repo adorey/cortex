@@ -28,7 +28,7 @@ git rm -f .gitmodules          # when cortex was the project's only submodule
 rm -rf .git/modules/cortex
 ```
 
-`git rm cortex` removes the submodule's section from `.gitmodules` and leaves the file, tracked: `cortex init` adds `git rm -f .gitmodules` when that section was the last one, so no empty `.gitmodules` is committed. On Windows, the last command is `Remove-Item -Recurse -Force .git\modules\cortex`. The commands `cortex init` prints name the project by its absolute path, so they run from any directory, and the path under `.git/modules/` is read from the submodule itself. A submodule whose repository is in its own `cortex/.git` directory — as older git made them, and as `git submodule add` leaves one run on an existing clone — gets `git submodule absorbgitdirs cortex` first, which moves that repository under `.git/modules/`: before git 2.35, `deinit` refuses one kept in `cortex/`. The last command removes it there too — unless a repository is in that place already, an earlier submodule's or another one's: git cannot move `cortex/.git` there, and `cortex init` says so, without printing commands that would fail. A submodule staged but never committed needs `git rm -f cortex`, which `cortex init` prints then.
+`git rm cortex` removes the submodule's section from `.gitmodules` and leaves the file, tracked: `cortex init` adds `git rm -f .gitmodules` when that section was the last one, so no empty `.gitmodules` is committed. On Windows, the last command is `Remove-Item -Recurse -Force .git\modules\cortex`. The commands `cortex init` prints name the project by its absolute path, so they run from any directory, and the path under `.git/modules/` is read from the submodule itself. A submodule whose repository is in its own `cortex/.git` directory — as older git made them, and as `git submodule add` leaves one run on an existing clone — gets `git submodule absorbgitdirs cortex` first, which moves that repository under `.git/modules/`: before git 2.35, `deinit` refuses one kept in `cortex/`. The last command removes it there too — unless a repository is in that place already, an earlier submodule's or another one's: git cannot move `cortex/.git` there, and `cortex init` says so, without printing commands that would fail. That repository was a clone, likely to hold work of yours: `cortex init` prints first the three checks of [§4](#4-every-other-developer-after-a-pull). A submodule staged but never committed needs `git rm -f cortex`, which `cortex init` prints then.
 
 Then initialise the project with the options you gave `setup.sh` — they are the same:
 
@@ -67,18 +67,19 @@ That is the step after every clone, as `npm install` is. It writes `spec` in `co
 theme = "star-wars"
 ```
 
-**A clone that had the submodule initialised.** The pull that removes the submodule leaves `cortex/` behind: git no longer tracks it, and keeps its files, the submodule's repository under `.git/modules/` and its settings in `.git/config` — the pull warns *unable to rmdir 'cortex'*. `cortex sync` then refuses, and prints what is left to remove. Check first that `cortex/` holds nothing of yours — what changed in it, ignored files included, and the commits no remote branch holds — then run what it printed:
+**A clone that had the submodule initialised.** The pull that removes the submodule leaves `cortex/` behind: git no longer tracks it, and keeps its files, the submodule's repository under `.git/modules/` and its settings in `.git/config` — the pull warns *unable to rmdir 'cortex'*. `cortex sync` then refuses, and prints what is left to remove. Check first that `cortex/` holds nothing of yours — what changed in it, ignored files included, the commits no remote branch holds, the reflog's included, and the stashes — then run what it printed:
 
 ```bash
 git -C cortex status --short --ignored -- . ':(exclude)agents/personalities/.active-*'
-git -C cortex log --oneline HEAD --branches --not --remotes
-# these two print nothing? Then:
+git -C cortex log --format='%h %an: %s' HEAD --branches --reflog --not --remotes
+git -C cortex stash list
+# nothing of yours in what they print? Then:
 git config --remove-section submodule.cortex
 rm -rf cortex .git/modules/cortex
 cortex sync
 ```
 
-The first check leaves out `agents/personalities/.active-*` — `.active-theme`, the theme `setup.sh` wrote there: nothing reads it now — set `theme` in `cortex.local.toml` to keep the one you chose. In a shallow submodule, the second may list commits of Cortex's own — the one it was pinned to, or the tip its `main` had.
+The first check leaves out `agents/personalities/.active-*` — `.active-theme`, the theme `setup.sh` wrote there: nothing reads it now — set `theme` in `cortex.local.toml` to keep the one you chose. The second prints each commit's author, since it may list commits of Cortex's own: in a shallow submodule, the one it was pinned to, or the tip its `main` had; and commits that no Cortex branch holds any more, rewritten or deleted upstream, which the reflog keeps.
 
 If you already ran the commands 1.0.0 or 1.1.0 printed, their last one removed `.git/modules/cortex`: git can no longer show what changed in `cortex/`, and `cortex sync` says so. Look through it yourself before you remove it.
 
