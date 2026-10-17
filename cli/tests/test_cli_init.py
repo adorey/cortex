@@ -541,7 +541,8 @@ class OptionTests(InitTestCase):
         return teammate
 
     CHECKS = (["status", "--short", "--ignored", "--", ".", ":(exclude)agents/personalities/.active-*"],
-              ["log", "--oneline", "HEAD", "--branches", "--not", "--remotes"])
+              ["log", "--oneline", "HEAD", "--branches", "--reflog", "--not", "--remotes"],
+              ["stash", "list"])
 
     def _checks_printed(self, err, cortex):
         # The very checks the tests run, as the refusal prints them: quoted where the shell needs it.
@@ -620,6 +621,22 @@ class OptionTests(InitTestCase):
         listed = self._listed(cortex, self.CHECKS[0])
         self.assertIn(" M README.md", listed)
         self.assertIn("?? agents/", listed)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_teammate_s_stash_and_lost_commits_are_listed(self):
+        # A commit made on a detached HEAD and left behind is in the reflog only; a stash is in no branch.
+        teammate = self._teammate_after_the_pull()
+        cortex = teammate / "cortex"
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-C", str(cortex)]
+        subprocess.run([*git, "checkout", "-q", "--detach"], check=True)
+        (cortex / "lost.md").write_text("lost\n", encoding="utf-8")
+        subprocess.run([*git, "add", "lost.md"], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "lost work"], check=True)
+        subprocess.run([*git, "checkout", "-q", "--detach", "HEAD~1"], check=True)
+        (cortex / "README.md").write_text("stashed\n", encoding="utf-8")
+        subprocess.run([*git, "stash", "-q"], check=True)
+        self.assertIn("lost work", self._listed(cortex, self.CHECKS[1]))
+        self.assertIn("stash@{0}", self._listed(cortex, self.CHECKS[2]))
 
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_teammate_s_commits_on_another_branch_are_listed(self):

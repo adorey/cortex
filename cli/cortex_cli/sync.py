@@ -360,8 +360,10 @@ def leaving(path: Path) -> str:
             marker = quote(f":(exclude){OLD_THEME_MARKER}")
             check = (f"here, with the submodule's repository. Check first that it holds nothing of yours: the first "
                      f"command lists the files changed, added or ignored in it, the second the commits no remote "
-                     f"branch holds.\n\n    git -C {target} status --short --ignored -- . {marker}\n"
-                     f"    git -C {target} log --oneline HEAD --branches --not --remotes\n\n")
+                     f"branch holds — the reflog's included — and the third the stashes.\n\n"
+                     f"    git -C {target} status --short --ignored -- . {marker}\n"
+                     f"    git -C {target} log --oneline HEAD --branches --reflog --not --remotes\n"
+                     f"    git -C {target} stash list\n\n")
         else:
             # The third command 1.0.0 and 1.1.0 printed — the one that ran — removed the repository.
             check = (f"here. Its repository is already gone, so git cannot show what changed in it: look through "
