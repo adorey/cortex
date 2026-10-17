@@ -7,6 +7,10 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+- **The `release/` capabilities** (`agents/capabilities/release/`): four cards for shipping a versioned project. `semver.md` covers Semantic Versioning 2.0.0 — what bumps what, breaking changes, pre-releases, deprecation; `changelog.md`, Keep a Changelog — the six sections, the `[Unreleased]` buffer, a changelog against release notes; `conventional-commits.md`, the type that drives the bump and the PR title a squash merge keeps; `release-please.md`, the Release PR pattern — config and manifest, monorepos, pre-releases. `architect`, `lead-backend`, `lead-frontend`, `platform-engineer` and `tech-writer` load them.
+- **The `release-automation` workflow** (`agents/workflows/engineering/release-automation.md`) — six steps from the versioning decision to the first automated release: strategy and ADR, CI wiring, runtime version exposure, dry-run, documentation, permissions audit.
+
 ## [1.1.1] - 2026-09-30 — Unpleasantly Like Being Drunk _(Released)_
 [Full notes](changelog/1.1.1.md)
 
