@@ -7,6 +7,9 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-17 — Know Where Your Towel Is _(Released)_
+[Full notes](changelog/1.1.2.md)
+
 ### Fixed
 - **A submodule whose repository is its own `.git` directory** ([#157](https://github.com/adorey/cortex/issues/157)) — `git submodule add` leaves one when run on an existing clone. It was handled wrongly in these cases:
   - **The migrator's clone.** `git submodule deinit` refuses that repository before git 2.35, and from then on moves it under `.git/modules/`, where nothing removed it. The commands `cortex init` prints now begin with `git submodule absorbgitdirs`, which moves it there on any git, and end with its removal, under the name git gives the submodule. If a repository is in that place already — an earlier submodule's, which `git rm` keeps, or another one's — git cannot move it there: `cortex init` says so, and prints no command that would fail.
