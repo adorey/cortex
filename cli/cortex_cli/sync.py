@@ -420,19 +420,19 @@ def existing_entry(target: Path, the_store: store.Store, project: config.Project
         pointed = link_target(target)
         if _inside(pointed, the_store.versions) or (project.spec == LINK and is_checkout(Path(pointed))):
             return "link"
-        raise SyncError(f"{LINK}/ is a link to {shown(display(pointed))}, which cortex sync did not make. Move or remove it, "
-                        "then run cortex sync again.")
+        raise SyncError(f"{LINK}/ is a link to {shown(display(pointed))}, which Cortex did not make. Move or remove it, "
+                        "then run the command again.")
     if target.is_dir() and not (target / ".git").exists() and (target / MARKER).is_file():
         marker = read_marker(target)
         if marker is None:
-            raise SyncError(f"{LINK}/ holds a {MARKER} file cortex sync cannot read: it did not write this directory. "
-                            "Move or remove it, then run cortex sync again.")
+            raise SyncError(f"{LINK}/ holds a {MARKER} file Cortex cannot read: Cortex did not write this directory. "
+                            "Move or remove it, then run the command again.")
         changed = changed_files(target, marker)
         if changed:
             names = "\n".join(f"    {shown(rel)}" for rel in changed[:20]) + ("\n    …" if len(changed) > 20 else "")
-            raise SyncError(f"{LINK}/ is a copy cortex sync made, and it holds files sync did not write:\n{names}\n"
+            raise SyncError(f"{LINK}/ is a copy Cortex made, and it holds files Cortex did not write:\n{names}\n"
                             "Overlays belong in agents/, not in the copy. Move those files out, or remove cortex/ "
-                            "yourself, then run cortex sync again.")
+                            "yourself, then run the command again.")
         return "copy"
     raise SyncError(f"{LINK}/ is {describe(target)}, which Cortex did not write. It would shadow the spec "
                     f"{config.LOCAL_FILE} names, and Cortex never deletes what it did not write.\n{leaving(target)}")
@@ -503,7 +503,7 @@ def _take(fd: int, at: int, root: Path) -> None:
                 raise
         if time.monotonic() > deadline:
             raise SyncError(f"another cortex sync of {display(str(root))} has run for {LOCK_WAIT} seconds — "
-                            "wait for it, then run cortex sync again")
+                            "wait for it, then run the command again")
         time.sleep(0.1)
 
 
@@ -642,7 +642,7 @@ def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path
 
 
 RACE = (f"{LINK}/ was put back while this sync ran — by another cortex sync, most likely. "
-        "Run cortex sync again.")
+        "Run the command again.")
 
 
 def unswap(target: Path, aside: Optional[Path]) -> None:
