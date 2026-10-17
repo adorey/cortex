@@ -71,7 +71,7 @@ theme = "star-wars"
 
 ```bash
 git -C cortex status --short --ignored -- . ':(exclude)agents/personalities/.active-*'
-git -C cortex log --oneline HEAD --branches --reflog --not --remotes
+git -C cortex log --format='%h %an: %s' HEAD --branches --reflog --not --remotes
 git -C cortex stash list
 # these three print nothing? Then:
 git config --remove-section submodule.cortex
@@ -79,7 +79,7 @@ rm -rf cortex .git/modules/cortex
 cortex sync
 ```
 
-The first check leaves out `agents/personalities/.active-*` — `.active-theme`, the theme `setup.sh` wrote there: nothing reads it now — set `theme` in `cortex.local.toml` to keep the one you chose. In a shallow submodule, the second may list commits of Cortex's own — the one it was pinned to, or the tip its `main` had.
+The first check leaves out `agents/personalities/.active-*` — `.active-theme`, the theme `setup.sh` wrote there: nothing reads it now — set `theme` in `cortex.local.toml` to keep the one you chose. The second prints each commit's author, since it may list commits of Cortex's own: in a shallow submodule, the one it was pinned to, or the tip its `main` had; and the commits a Cortex branch held before it was rewritten upstream, which the reflog keeps.
 
 If you already ran the commands 1.0.0 or 1.1.0 printed, their last one removed `.git/modules/cortex`: git can no longer show what changed in `cortex/`, and `cortex sync` says so. Look through it yourself before you remove it.
 
