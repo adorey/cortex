@@ -149,6 +149,7 @@ Alerts          : {severity}-{service}-{metric} (e.g. critical-api-error-rate)
 
 **Categories to load:**
 - `infrastructure/` → Project infra tools (Docker, Kubernetes…)
+- `release/` → always load `release/semver.md` — versioning, tagging, changelog discipline (+ `release/conventional-commits.md` and `release/release-please.md` when the project automates its releases)
 - `security/` → Always load `security/owasp.md`
 
 ## 🔗 Interactions
