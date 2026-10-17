@@ -67,12 +67,13 @@ That is the step after every clone, as `npm install` is. It writes `spec` in `co
 theme = "star-wars"
 ```
 
-**A clone that had the submodule initialised.** The pull that removes the submodule leaves `cortex/` behind: git no longer tracks it, and keeps its files, the submodule's repository under `.git/modules/` and its settings in `.git/config` — the pull warns *unable to rmdir 'cortex'*. `cortex sync` then refuses, and prints what is left to remove. Check first that `cortex/` holds nothing of yours — what changed in it, ignored files included, and the commits no remote branch holds — then run what it printed:
+**A clone that had the submodule initialised.** The pull that removes the submodule leaves `cortex/` behind: git no longer tracks it, and keeps its files, the submodule's repository under `.git/modules/` and its settings in `.git/config` — the pull warns *unable to rmdir 'cortex'*. `cortex sync` then refuses, and prints what is left to remove. Check first that `cortex/` holds nothing of yours — what changed in it, ignored files included, the commits no remote branch holds, the reflog's included, and the stashes — then run what it printed:
 
 ```bash
 git -C cortex status --short --ignored -- . ':(exclude)agents/personalities/.active-*'
-git -C cortex log --oneline HEAD --branches --not --remotes
-# these two print nothing? Then:
+git -C cortex log --oneline HEAD --branches --reflog --not --remotes
+git -C cortex stash list
+# these three print nothing? Then:
 git config --remove-section submodule.cortex
 rm -rf cortex .git/modules/cortex
 cortex sync
