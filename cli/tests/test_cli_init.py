@@ -1039,8 +1039,9 @@ class OptionTests(InitTestCase):
         linked = self.tmp / "linked"
         subprocess.run([*git, "-C", str(self.project), "worktree", "add", "-q", str(linked)], check=True, capture_output=True)
         subprocess.run([*git, "-C", str(linked), "submodule", "update", "-q", "--init"], check=True, capture_output=True)
+        # git writes UTF-8 whatever Windows' code page: text=True would read a path with an accent wrongly.
         modules = Path(subprocess.run(["git", "-C", str(linked / "cortex"), "rev-parse", "--absolute-git-dir"],
-                                      capture_output=True, text=True, check=True).stdout.strip())
+                                      capture_output=True, encoding="utf-8", check=True).stdout.strip())
         self.assertIn("worktrees", modules.parts)
         proc = harness.run("init", cwd=linked, env=self._with_git())
         err = proc.stderr.decode()
