@@ -28,7 +28,7 @@ git rm -f .gitmodules          # when cortex was the project's only submodule
 rm -rf .git/modules/cortex
 ```
 
-`git rm cortex` removes the submodule's section from `.gitmodules` and leaves the file, tracked: `cortex init` adds `git rm -f .gitmodules` when that section was the last one, so no empty `.gitmodules` is committed. On Windows, the last command is `Remove-Item -Recurse -Force .git\modules\cortex`. The commands `cortex init` prints name the project by its absolute path, so they run from any directory, and the path under `.git/modules/` is read from the submodule itself. A submodule whose repository is in its own `cortex/.git` directory, as older git made them, needs no removal under `.git/modules/`.
+`git rm cortex` removes the submodule's section from `.gitmodules` and leaves the file, tracked: `cortex init` adds `git rm -f .gitmodules` when that section was the last one, so no empty `.gitmodules` is committed. On Windows, the last command is `Remove-Item -Recurse -Force .git\modules\cortex`. The commands `cortex init` prints name the project by its absolute path, so they run from any directory, and the path under `.git/modules/` is read from the submodule itself. A submodule whose repository is in its own `cortex/.git` directory — as older git made them, and as `git submodule add` leaves one run on an existing clone — has that repository moved under `.git/modules/` by `deinit`: the last command removes it there too. A submodule staged but never committed needs `git rm -f cortex`, which `cortex init` prints then.
 
 Then initialise the project with the options you gave `setup.sh` — they are the same:
 
