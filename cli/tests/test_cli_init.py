@@ -754,6 +754,31 @@ class OptionTests(InitTestCase):
                                   "one Cortex can follow under .git/modules/", proc.err)
                     self.assertNotIn("\x1b", proc.err)
 
+    def test_a_link_in_the_place_is_no_empty_directory(self):
+        # git follows the link, and would move the repository out of .git/: Cortex prints no command.
+        (self.project / "cortex" / ".git").mkdir(parents=True)
+        (self.project / ".gitmodules").write_text('[submodule "cortex"]\n\tpath = cortex\n\turl = x\n', encoding="utf-8")
+        (self.project / "elsewhere").mkdir()
+        (self.project / ".git" / "modules").mkdir(parents=True)
+        try:
+            (self.project / ".git" / "modules" / "cortex").symlink_to(self.project / "elsewhere", target_is_directory=True)
+        except OSError:
+            self.skipTest("no symbolic links here")
+        proc = self.init()
+        self.assertEqual(proc.returncode, 1)
+        self.assertNotIn("shown here, not run", proc.err)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_clone_beside_the_settings_of_another_submodule(self):
+        # submodule.cortex-old.* is another submodule's section: cortex/ is a clone, not one left behind.
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        subprocess.run(["git", "-C", str(self.project), "config", "submodule.cortex-old.url", "x"], check=True)
+        (self.project / "cortex" / ".git").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(self.project / "cortex")], check=True)
+        proc = harness.run("init", cwd=self.project, env=self._with_git())
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a git clone", proc.stderr.decode())
+
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_place_an_earlier_submodule_left_is_named_not_removed(self):
         # git rm keeps the repository of the submodule it removes: a clone made a submodule in place, by
