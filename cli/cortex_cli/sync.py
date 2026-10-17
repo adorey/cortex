@@ -358,14 +358,14 @@ def leaving(path: Path) -> str:
             # The scripts' theme marker, ignored in every Cortex before 1.0.0 and read by nothing now: any
             # agents/personalities/.active-*, as 1.0.0's own .gitignore treats them.
             marker = quote(f":(exclude){OLD_THEME_MARKER}")
-            # The reflogs of the remote branches keep their tips from before an upstream rewrite, and
-            # --not --remotes leaves them in: the author tells them apart.
+            # The reflogs keep commits no Cortex branch holds any more — rewritten or deleted upstream —
+            # and --not --remotes leaves them in: the author tells them apart.
             authored = quote("--format=%h %an: %s")
             check = (f"here, with the submodule's repository. Check first that it holds nothing of yours: the first "
                      f"command lists the files changed, added or ignored in it, the second the commits no remote "
-                     f"branch holds — the reflog's included — and the third the stashes. The reflog also keeps the "
-                     f"commits a Cortex branch held before it was rewritten upstream: their author tells them from "
-                     f"yours.\n\n"
+                     f"branch holds — the reflog's included — and the third the stashes. The reflog also keeps "
+                     f"commits that no Cortex branch holds any more, rewritten or deleted upstream: their author "
+                     f"tells them from yours.\n\n"
                      f"    git -C {target} status --short --ignored -- . {marker}\n"
                      f"    git -C {target} log {authored} HEAD --branches --reflog --not --remotes\n"
                      f"    git -C {target} stash list\n\n")
