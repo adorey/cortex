@@ -124,6 +124,7 @@ cortex/
 │   │   ├── frameworks/                # symfony, vue, starlight
 │   │   ├── infrastructure/            # docker, kubernetes
 │   │   ├── databases/                 # mysql, postgresql, mongodb
+│   │   ├── release/                   # semver, changelog, conventional-commits, release-please
 │   │   ├── search/                    # opensearch
 │   │   ├── testing/                   # component-testing, e2e-testing
 │   │   ├── practices/                 # code-comments
