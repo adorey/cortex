@@ -13,6 +13,7 @@ release note under [`changelog/`](changelog/).
   - **The developer who added the submodule that way, after pulling its removal.** Their `cortex/` was taken for a plain clone: it gets the teammate's checks and the removal of the submodule's settings, as #147 gave every other teammate.
   - **A submodule staged but never committed.** It gets `git rm -f`, which git requires there.
   - **A project in a subdirectory of its repository.** git names its submodule by its path from the top, `app/cortex`. The removal of the submodule's settings, which a teammate gets after the pull, now names that section, where 1.1.1 named `submodule.cortex` — another submodule's, if the top of the repository has one.
+- **A submodule in a linked worktree of the project is no longer taken for a worktree** ([#158](https://github.com/adorey/cortex/issues/158)). Its repository is under `.git/worktrees/<worktree>/modules/`, and the refusal printed a `git worktree remove` that could not work. It now gets the submodule's commands, the migrator's or the teammate's.
 
 ## [1.1.1] - 2026-09-30 — Unpleasantly Like Being Drunk _(Released)_
 [Full notes](changelog/1.1.1.md)
