@@ -249,8 +249,9 @@ def _staged_only(path: Path) -> bool:
 
 
 def _plain_name(name: str) -> bool:
-    """A name git takes for a submodule: it ignores one with a ``..`` in its path."""
-    return bool(name) and ".." not in re.split(r"[/\\]", name)
+    """A name git takes for a submodule — it ignores one with a ``..`` in its path — and that can be
+    printed in a command as it is: no control character (#85)."""
+    return bool(name) and ".." not in re.split(r"[/\\]", name) and shown(name) == name
 
 
 def _absorbed(path: Path) -> Tuple[str, str, str]:
@@ -269,15 +270,24 @@ def _absorbed(path: Path) -> Tuple[str, str, str]:
     return name, os.path.normpath(modules + os.sep + name), modules     # as git joins it: an absolute name too
 
 
+def _empty_directory(path: str) -> bool:
+    """An empty directory, no link: git moves a repository onto it, as rename does."""
+    try:
+        return os.path.isdir(path) and not os.path.islink(path) and not os.listdir(path)
+    except OSError:
+        return False
+
+
 def _stuck(name: str, target: str, modules: str) -> str:
     """Why git cannot move a repository kept in ``cortex/.git`` under ``modules/`` — so that the
     commands removing the submodule would fail — or nothing."""
     if not _plain_name(name) or not target.startswith(modules + os.sep):
-        return (f"Its repository is in {LINK}/.git, and git cannot move it under the project's .git/modules/ by "
-                f'the name .gitmodules gives the submodule, "{name}": git ignores a name with .. in its path, and '
-                f". names .git/modules/ itself. Give the submodule another name in .gitmodules and .git/config, "
-                f"or remove it by hand.")
-    if os.path.lexists(target):
+        return (f"Its repository is in {LINK}/.git, and the name .gitmodules gives the submodule, "
+                f'"{shown(name)}", is not one Cortex can follow under .git/modules/: git ignores a name with .. in '
+                f"its path, . would make the repository .git/modules/ itself, and a control character has no "
+                f"place in a command. Give the submodule another name in .gitmodules and .git/config, or remove it "
+                f"by hand.")
+    if os.path.lexists(target) and not _empty_directory(target):
         return (f"Its repository is in {LINK}/.git, and git moves it to {display(target)} before the submodule goes "
                 f"— but a repository is there already: one an earlier submodule of that name left, as git rm does, "
                 f"or another submodule's. git cannot move {LINK}/.git there, and the commands that remove the "

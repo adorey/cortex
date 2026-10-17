@@ -659,6 +659,8 @@ class OptionTests(InitTestCase):
     def test_a_teammate_whose_settings_hold_no_submodule_section(self):
         teammate = self._teammate_after_the_pull()
         subprocess.run(["git", "-C", str(teammate), "config", "--remove-section", "submodule.cortex"], check=True)
+        # Another submodule's section, whose name starts the same, is not cortex's.
+        subprocess.run(["git", "-C", str(teammate), "config", "submodule.cortex-old.url", "x"], check=True)
         # A section in the user's own settings is none of this project's: --local.
         (self.tmp / "gitconfig").write_text('[submodule "cortex"]\n\turl = elsewhere\n', encoding="utf-8")
         proc = harness.run("sync", cwd=teammate, env=dict(self._with_git(), GIT_CONFIG_GLOBAL=str(self.tmp / "gitconfig")))
@@ -721,29 +723,36 @@ class OptionTests(InitTestCase):
         (self.project / "cortex" / ".git").mkdir(parents=True)
         modules = self.project / ".git" / "modules"
         for name, there in (("../../src", None), ("a/../../src", None), ("..\\..\\src", None), (".", None),
-                            ("./", None), ("cortex", "cortex"), ("/srv/elsewhere", None)):
-            with self.subTest(name=name):
+                            ("./", None), ("x\x1b[31mred", None), ("cortex", "HEAD"), ("cortex", ""),
+                            ("/srv/elsewhere", None)):
+            with self.subTest(name=name, there=there):
                 (self.project / ".gitmodules").write_text(f'[submodule "{name}"]\n\tpath = cortex\n\turl = x\n',
                                                           encoding="utf-8")
-                if there:
-                    (modules / there).mkdir(parents=True)
+                if there is not None:
+                    (modules / name).mkdir(parents=True)
+                    if there:
+                        (modules / name / there).write_text("ref: refs/heads/main\n", encoding="utf-8")
                 proc = self.init()
-                if there:
-                    shutil.rmtree(modules / there)
+                if there is not None:
+                    shutil.rmtree(modules / name)
                 self.assertEqual(proc.returncode, 1)
-                if name.startswith("/"):
-                    # git joins an absolute name to modules/, as any other.
-                    self.assertEqual(self._shown(proc.err)[-1], remove(display(modules / "srv" / "elsewhere")))
+                if name.startswith("/") or there == "":
+                    # git joins an absolute name to modules/, as any other; it moves a repository onto an
+                    # empty directory, as rename does.
+                    self.assertEqual(self._shown(proc.err)[-1], remove(display(modules / name.lstrip("/"))))
                     continue
                 self.assertNotIn("shown here, not run", proc.err)
                 self.assertNotIn("rm -rf", proc.err)
                 self.assertNotIn("Remove-Item", proc.err)
                 if there:
-                    self.assertIn(f"git moves it to {display(modules / there)} before the submodule goes — but a "
+                    self.assertIn(f"git moves it to {display(modules / name)} before the submodule goes — but a "
                                   "repository is there already", proc.err)
                 else:
-                    self.assertIn(f'git cannot move it under the project\'s .git/modules/ by the name .gitmodules gives '
-                                  f'the submodule, "{name}"', proc.err)
+                    # A control character is written out, never sent to the terminal (#85).
+                    written = name.replace("\x1b", "\\x1b")
+                    self.assertIn(f'the name .gitmodules gives the submodule, "{written}", is not '
+                                  "one Cortex can follow under .git/modules/", proc.err)
+                    self.assertNotIn("\x1b", proc.err)
 
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_place_an_earlier_submodule_left_is_named_not_removed(self):
@@ -943,8 +952,9 @@ class OptionTests(InitTestCase):
 
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_the_developer_who_added_it_in_a_subdirectory_after_the_pull(self):
-        # git names a submodule added in app/ by its path from the top: its settings are submodule.app/cortex.
-        self._the_adder_after_the_pull(another=False, inside="app")
+        # git names a submodule added in app/ by its path from the top: its settings are submodule.app/cortex —
+        # here with a space and parentheses, which the shell and git's pattern must both take as they are.
+        self._the_adder_after_the_pull(another=False, inside="my app (2)")
 
     def _the_adder_after_the_pull(self, another, inside=""):
         git, origin, teammate = self._submodule_stack(over_a_clone=True, another=another, inside=inside)
@@ -966,7 +976,8 @@ class OptionTests(InitTestCase):
         self.assertIn("was removed by a commit you pulled", err)
         self.assertIn("with the submodule's repository", err)
         self._checks_printed(err, project / "cortex")
-        self.assertEqual(self._shown(err), [f"git -C {quote(display(project))} config --remove-section submodule.{name}",
+        section = quote(f"submodule.{name}") if inside else f"submodule.{name}"
+        self.assertEqual(self._shown(err), [f"git -C {quote(display(project))} config --remove-section {section}",
                                             remove(display(project / "cortex"))])
         self._sync_after_running(project, err)
         if os.name != "nt":
