@@ -33,7 +33,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, TextIO
+from typing import Dict, List, Optional, TextIO, Tuple
 
 from cortex_core.validate import shown
 
@@ -182,12 +182,128 @@ def in_index(path: Path) -> Optional[bool]:
     return proc.stdout.startswith("160000 ")
 
 
+def _top_and_prefix(root: str) -> Optional[Tuple[str, str]]:
+    """The top of the repository the project is in, and the project's place in it, as git says."""
+    proc = _git(root, "rev-parse", "--show-toplevel", "--show-prefix")
+    if proc is None or proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    top, _, rest = proc.stdout.partition("\n")
+    return top, rest.split("\n", 1)[0]
+
+
+def submodule_name(path: Path) -> str:
+    """The name of the submodule at ``cortex/`` — its section in ``.gitmodules``, at the top of the
+    repository, read by git — or, without one, the name ``git submodule add`` gives: its path there."""
+    where = _top_and_prefix(str(path.parent))
+    if where is not None:
+        top, prefix = where
+        proc = _git(top, "config", "-f", ".gitmodules", "-z", "--get-regexp", r"^submodule\..*\.path$")
+        names = [key[len("submodule."):-len(".path")]
+                 for key, _, value in (entry.partition("\n") for entry in
+                                       (proc.stdout.split("\0") if proc is not None and proc.returncode == 0 else []))
+                 if value.rstrip("/") == prefix + path.name]
+        return names[-1] if names else prefix + path.name          # two sections with that path: git takes the last
+    # Without git: the project's .gitmodules, read as git reads it — a header in any case, a comment
+    # after it, and no section left open by a header of another kind.
+    try:
+        lines = (path.parent / ".gitmodules").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return path.name
+    name, found = None, path.name
+    for line in lines:
+        if line.lstrip().startswith("["):
+            section = re.fullmatch(r'\s*\[submodule\s+"(.+)"\s*\]\s*(?:[#;].*)?', line, flags=re.I)
+            name = section.group(1) if section else None
+            continue
+        key, _, value = line.partition("=")
+        if name and key.strip().lower() == "path" and value.strip().strip('"').rstrip("/") == path.name:
+            found = name
+    return found
+
+
+def _named_in_gitmodules(path: Path) -> bool:
+    """``.gitmodules`` gives the name the submodule at ``cortex/`` would have to another path: a
+    submodule moved with ``git mv``, which owns the settings — ``cortex/`` is then a clone of its own."""
+    where = _top_and_prefix(str(path.parent))
+    if where is None:
+        return False
+    top, prefix = where
+    proc = _git(top, "config", "-f", ".gitmodules", "--get", f"submodule.{submodule_name(path)}.path")
+    return proc is not None and proc.returncode == 0 and proc.stdout.strip().rstrip("/") != prefix + path.name
+
+
+def _left_by_submodule(path: Path) -> bool:
+    """A ``cortex/`` whose repository is its own ``.git`` directory, in a project whose settings still
+    hold the submodule: the one ``git submodule add`` was run on, as a clone, once a pull removed it."""
+    if not (path / ".git").is_dir() or _named_in_gitmodules(path):
+        return False
+    section = _git(str(path.parent), "config", "--local", "--get-regexp",
+                   rf"^submodule\.{re.escape(submodule_name(path))}\.")
+    return section is not None and section.returncode == 0 and bool(section.stdout.strip())
+
+
+def _staged_only(path: Path) -> bool:
+    """The submodule is in the index, and in no commit yet: ``git rm`` refuses it without ``-f``."""
+    head = _git(str(path.parent), "ls-tree", "HEAD", "--", path.name)
+    return head is not None and (head.returncode != 0 or not head.stdout.strip())
+
+
+def _plain_name(name: str) -> bool:
+    """A name git takes for a submodule — it ignores one with a ``..`` in its path — and that can be
+    printed in a command as it is: no control character (#85)."""
+    return bool(name) and ".." not in re.split(r"[/\\]", name) and shown(name) == name
+
+
+def _absorbed(path: Path) -> Tuple[str, str, str]:
+    """The submodule's name, where ``git submodule absorbgitdirs`` moves a repository kept in
+    ``cortex/.git`` — ``modules/<name>``, under ``.git/worktrees/<worktree>/`` in a linked worktree —
+    and that ``modules/``."""
+    name = submodule_name(path)
+    # --git-path answers relative to the directory git runs in, its real one — undoing a .. on the
+    # side of a link would land elsewhere — or absolute in a linked worktree; git older than 2.31
+    # knows no --path-format, and would print it back.
+    proc = _git(str(path.parent), "rev-parse", "--git-path", "modules")
+    if proc is not None and proc.returncode == 0 and proc.stdout.strip():
+        modules = os.path.normpath(os.path.join(os.path.realpath(str(path.parent)), proc.stdout.strip()))
+    else:
+        modules = os.path.normpath(os.path.join(str(path.parent), ".git", "modules"))
+    return name, os.path.normpath(modules + os.sep + name), modules     # as git joins it: an absolute name too
+
+
+def _empty_directory(path: str) -> bool:
+    """An empty directory, no link: git moves a repository onto it, as rename does."""
+    try:
+        return os.path.isdir(path) and not os.path.islink(path) and not os.listdir(path)
+    except OSError:
+        return False
+
+
+def _stuck(name: str, target: str, modules: str) -> str:
+    """Why git cannot move a repository kept in ``cortex/.git`` under ``modules/`` — so that the
+    commands removing the submodule would fail — or nothing."""
+    if not _plain_name(name) or not target.startswith(modules + os.sep):
+        return (f"Its repository is in {LINK}/.git, and the name .gitmodules gives the submodule, "
+                f'"{shown(name)}", is not one Cortex can follow under .git/modules/: git ignores a name with .. in '
+                f"its path, . would make the repository .git/modules/ itself, and a control character has no "
+                f"place in a command. Give the submodule another name in .gitmodules and .git/config, or remove it "
+                f"by hand.")
+    if os.path.lexists(target) and not _empty_directory(target):
+        return (f"Its repository is in {LINK}/.git, and git moves it to {display(target)} before the submodule goes "
+                f"— but a repository is there already: one an earlier submodule of that name left, as git rm does, "
+                f"or another submodule's. git cannot move {LINK}/.git there, and the commands that remove the "
+                f"submodule would fail. Find out whose repository that is before you touch it: another submodule "
+                f"may still use it.")
+    return ""
+
+
 def kind_of(path: Path) -> str:
     """What is at ``cortex/`` when sync did not make it."""
     gitdir = _gitdir(path) if (path / ".git").is_file() else None
-    if gitdir is not None and f"{os.sep}worktrees{os.sep}" in gitdir:
+    # A worktree of another repository names …/worktrees/<name>; a submodule in a linked worktree of
+    # the project names …/worktrees/<name>/modules/<module>, and is a submodule.
+    if gitdir is not None and os.path.basename(os.path.dirname(gitdir)) == "worktrees":
         return "worktree"
-    if is_submodule(path) or (path / ".git").is_file():
+    if is_submodule(path) or (path / ".git").is_file() or _left_by_submodule(path):
         return "submodule"
     if (path / ".git").is_dir():
         return "clone"
@@ -206,8 +322,31 @@ def quote(path: str) -> str:
     return shlex.quote(path)
 
 
+def _word(text: str) -> str:
+    """``text`` as one word of the shell the commands are shown for, quoted only when it needs it."""
+    return text if re.fullmatch(r"[\w./-]+", text) else quote(text)
+
+
 def _remove_command(path: str) -> str:
     return f"Remove-Item -Recurse -Force {quote(path)}" if os.name == "nt" else f"rm -rf {quote(path)}"
+
+
+def _checks(path: Path) -> str:
+    """The three checks that ``cortex/`` holds nothing of the developer's, before its repository goes."""
+    target = quote(display(str(path)))
+    # The scripts' theme marker, ignored in every Cortex before 1.0.0 and read by nothing now: any
+    # agents/personalities/.active-*, as 1.0.0's own .gitignore treats them.
+    marker = quote(f":(exclude){OLD_THEME_MARKER}")
+    # The reflogs keep commits no Cortex branch holds any more — rewritten or deleted upstream — and
+    # --not --remotes leaves them in: the author tells them apart.
+    authored = quote("--format=%h %an: %s")
+    return ("Check first that it holds nothing of yours: the first command lists the files changed, added or "
+            "ignored in it, the second the commits no remote branch holds — the reflog's included — and the "
+            "third the stashes. The reflog also keeps commits that no Cortex branch holds any more, rewritten or "
+            "deleted upstream: their author tells them from yours.\n\n"
+            f"    git -C {target} status --short --ignored -- . {marker}\n"
+            f"    git -C {target} log {authored} HEAD --branches --reflog --not --remotes\n"
+            f"    git -C {target} stash list\n\n")
 
 
 def leaving(path: Path) -> str:
@@ -223,22 +362,17 @@ def leaving(path: Path) -> str:
         modules = gitdir is not None and os.path.isdir(gitdir)
         kept = modules or (path / ".git").is_dir()          # a clone made a submodule in place keeps its .git
         commands = []
-        section = _git(root, "config", "--local", "--get-regexp", rf"^submodule\.{LINK}\.")
+        # Its name: app/cortex, for one git submodule add made in the subdirectory app of the repository.
+        name = submodule_name(path)
+        section = _git(root, "config", "--local", "--get-regexp", rf"^submodule\.{re.escape(name)}\.")
         if section is not None and section.returncode == 0 and section.stdout.strip():
-            commands.append(f"git -C {quote(root)} config --remove-section submodule.{LINK}")
+            commands.append(f"git -C {quote(root)} config --remove-section {_word(f'submodule.{name}')}")
         commands.append(_remove_command(display(str(path))))
         if modules:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
-        target = quote(display(str(path)))
         if kept:
-            # The scripts' theme marker, ignored in every Cortex before 1.0.0 and read by nothing now: any
-            # agents/personalities/.active-*, as 1.0.0's own .gitignore treats them.
-            marker = quote(f":(exclude){OLD_THEME_MARKER}")
-            check = (f"here, with the submodule's repository. Check first that it holds nothing of yours: the first "
-                     f"command lists the files changed, added or ignored in it, the second the commits no remote "
-                     f"branch holds.\n\n    git -C {target} status --short --ignored -- . {marker}\n"
-                     f"    git -C {target} log --oneline HEAD --branches --not --remotes\n\n")
+            check = f"here, with the submodule's repository. {_checks(path)}"
         else:
             # The third command 1.0.0 and 1.1.0 printed — the one that ran — removed the repository.
             check = (f"here. Its repository is already gone, so git cannot show what changed in it: look through "
@@ -248,16 +382,34 @@ def leaving(path: Path) -> str:
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
     if kind == "submodule":
-        commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {LINK}"]
+        # A submodule staged and never committed is refused by git rm without -f.
+        force = "-f " if in_index(path) and _staged_only(path) else ""
+        commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {force}{LINK}"]
+        if (path / ".git").is_dir():
+            # deinit refuses a repository kept in cortex/.git before git 2.35: absorbgitdirs, there since
+            # 2.12, moves it under modules/ first.
+            commands.insert(0, f"git -C {quote(root)} submodule absorbgitdirs {LINK}")
         if only_submodule(path):
             # git rm empties .gitmodules of its last section, and leaves the file, tracked.
             commands.append(f"git -C {quote(root)} rm -f .gitmodules")
-        # A submodule's repository stays under the superproject's .git/modules/ once it is gone.
+        # A submodule's repository stays under the superproject's .git/modules/ once it is gone — and
+        # one kept in cortex/.git goes there too, moved by absorbgitdirs.
         gitdir = _gitdir(path)
+        if gitdir is None and (path / ".git").is_dir():
+            name, gitdir, modules = _absorbed(path)
+            stuck = _stuck(name, gitdir, modules)
+            if stuck:
+                # A removal there could only reach another repository; the commands, only fail.
+                return (f"Cortex now lives in the store, and the submodule is to go. {stuck} Then run the command "
+                        "again. The migration guide covers it: "
+                        "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
         if gitdir is not None:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
-        return (f"Cortex now lives in the store, and the submodule is to go. These commands rewrite the git "
+        # A clone made a submodule in place is the likeliest to hold the developer's own work.
+        own = (f"The submodule keeps its repository in {LINK}/.git, as a clone made a submodule in place does, "
+               f"and it goes with the submodule. {_checks(path)}" if (path / ".git").is_dir() else "")
+        return (f"Cortex now lives in the store, and the submodule is to go. {own}These commands rewrite the git "
                 f"state of the project at {root}, so they are shown here, not run:\n\n{shown}\n"
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
@@ -282,19 +434,19 @@ def existing_entry(target: Path, the_store: store.Store, project: config.Project
         pointed = link_target(target)
         if _inside(pointed, the_store.versions) or (project.spec == LINK and is_checkout(Path(pointed))):
             return "link"
-        raise SyncError(f"{LINK}/ is a link to {shown(display(pointed))}, which cortex sync did not make. Move or remove it, "
-                        "then run cortex sync again.")
+        raise SyncError(f"{LINK}/ is a link to {shown(display(pointed))}, which Cortex did not make. Move or remove it, "
+                        "then run the command again.")
     if target.is_dir() and not (target / ".git").exists() and (target / MARKER).is_file():
         marker = read_marker(target)
         if marker is None:
-            raise SyncError(f"{LINK}/ holds a {MARKER} file cortex sync cannot read: it did not write this directory. "
-                            "Move or remove it, then run cortex sync again.")
+            raise SyncError(f"{LINK}/ holds a {MARKER} file Cortex cannot read: Cortex did not write this directory. "
+                            "Move or remove it, then run the command again.")
         changed = changed_files(target, marker)
         if changed:
             names = "\n".join(f"    {shown(rel)}" for rel in changed[:20]) + ("\n    …" if len(changed) > 20 else "")
-            raise SyncError(f"{LINK}/ is a copy cortex sync made, and it holds files sync did not write:\n{names}\n"
+            raise SyncError(f"{LINK}/ is a copy Cortex made, and it holds files Cortex did not write:\n{names}\n"
                             "Overlays belong in agents/, not in the copy. Move those files out, or remove cortex/ "
-                            "yourself, then run cortex sync again.")
+                            "yourself, then run the command again.")
         return "copy"
     raise SyncError(f"{LINK}/ is {describe(target)}, which Cortex did not write. It would shadow the spec "
                     f"{config.LOCAL_FILE} names, and Cortex never deletes what it did not write.\n{leaving(target)}")
@@ -365,7 +517,7 @@ def _take(fd: int, at: int, root: Path) -> None:
                 raise
         if time.monotonic() > deadline:
             raise SyncError(f"another cortex sync of {display(str(root))} has run for {LOCK_WAIT} seconds — "
-                            "wait for it, then run cortex sync again")
+                            "wait for it, then run the command again")
         time.sleep(0.1)
 
 
@@ -504,7 +656,7 @@ def swap(target: Path, new: Optional[Path], old: Optional[str]) -> Optional[Path
 
 
 RACE = (f"{LINK}/ was put back while this sync ran — by another cortex sync, most likely. "
-        "Run cortex sync again.")
+        "Run the command again.")
 
 
 def unswap(target: Path, aside: Optional[Path]) -> None:
