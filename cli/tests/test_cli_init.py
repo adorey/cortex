@@ -1033,6 +1033,32 @@ class OptionTests(InitTestCase):
         self.assertFalse((self.project / "cortex").exists())
 
     @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_submodule_in_a_linked_worktree_of_the_project(self):
+        # Its repository is under .git/worktrees/<worktree>/modules/: a submodule, not a worktree.
+        git, _, _ = self._submodule_stack()
+        linked = self.tmp / "linked"
+        subprocess.run([*git, "-C", str(self.project), "worktree", "add", "-q", str(linked)], check=True, capture_output=True)
+        subprocess.run([*git, "-C", str(linked), "submodule", "update", "-q", "--init"], check=True, capture_output=True)
+        modules = Path(subprocess.run(["git", "-C", str(linked / "cortex"), "rev-parse", "--absolute-git-dir"],
+                                      capture_output=True, text=True, check=True).stdout.strip())
+        self.assertIn("worktrees", modules.parts)
+        proc = harness.run("init", cwd=linked, env=self._with_git())
+        err = proc.stderr.decode()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a git submodule", err)
+        self.assertNotIn("worktree remove", err)
+        root = quote(display(linked))
+        self.assertEqual(self._shown(err), [f"git -C {root} submodule deinit -f cortex", f"git -C {root} rm cortex",
+                                            f"git -C {root} rm -f .gitmodules", remove(display(modules))])
+        if os.name == "nt":
+            return
+        for command in self._shown(err):
+            subprocess.run(command, shell=True, check=True, capture_output=True)
+        self.assertFalse(modules.exists())
+        status = subprocess.run(["git", "-C", str(linked), "status", "--short"], capture_output=True, text=True)
+        self.assertEqual(sorted(status.stdout.splitlines()), ["D  .gitmodules", "D  cortex"])
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_worktree_is_no_submodule(self):
         other = self.tmp / "other"
         git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI"]
