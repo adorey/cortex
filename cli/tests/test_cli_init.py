@@ -541,7 +541,7 @@ class OptionTests(InitTestCase):
         return teammate
 
     CHECKS = (["status", "--short", "--ignored", "--", ".", ":(exclude)agents/personalities/.active-*"],
-              ["log", "--oneline", "HEAD", "--branches", "--reflog", "--not", "--remotes"],
+              ["log", "--format=%h %an: %s", "HEAD", "--branches", "--reflog", "--not", "--remotes"],
               ["stash", "list"])
 
     def _checks_printed(self, err, cortex):
@@ -635,7 +635,7 @@ class OptionTests(InitTestCase):
         subprocess.run([*git, "checkout", "-q", "--detach", "HEAD~1"], check=True)
         (cortex / "README.md").write_text("stashed\n", encoding="utf-8")
         subprocess.run([*git, "stash", "-q"], check=True)
-        self.assertIn("lost work", self._listed(cortex, self.CHECKS[1]))
+        self.assertIn("CI: lost work", self._listed(cortex, self.CHECKS[1]))
         self.assertIn("stash@{0}", self._listed(cortex, self.CHECKS[2]))
 
     @unittest.skipUnless(HAS_GIT, "needs git")
