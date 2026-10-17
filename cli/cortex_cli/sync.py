@@ -299,7 +299,9 @@ def _stuck(name: str, target: str, modules: str) -> str:
 def kind_of(path: Path) -> str:
     """What is at ``cortex/`` when sync did not make it."""
     gitdir = _gitdir(path) if (path / ".git").is_file() else None
-    if gitdir is not None and f"{os.sep}worktrees{os.sep}" in gitdir:
+    # A worktree of another repository names …/worktrees/<name>; a submodule in a linked worktree of
+    # the project names …/worktrees/<name>/modules/<module>, and is a submodule.
+    if gitdir is not None and os.path.basename(os.path.dirname(gitdir)) == "worktrees":
         return "worktree"
     if is_submodule(path) or (path / ".git").is_file() or _left_by_submodule(path):
         return "submodule"
