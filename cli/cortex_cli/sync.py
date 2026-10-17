@@ -331,6 +331,24 @@ def _remove_command(path: str) -> str:
     return f"Remove-Item -Recurse -Force {quote(path)}" if os.name == "nt" else f"rm -rf {quote(path)}"
 
 
+def _checks(path: Path) -> str:
+    """The three checks that ``cortex/`` holds nothing of the developer's, before its repository goes."""
+    target = quote(display(str(path)))
+    # The scripts' theme marker, ignored in every Cortex before 1.0.0 and read by nothing now: any
+    # agents/personalities/.active-*, as 1.0.0's own .gitignore treats them.
+    marker = quote(f":(exclude){OLD_THEME_MARKER}")
+    # The reflogs keep commits no Cortex branch holds any more — rewritten or deleted upstream — and
+    # --not --remotes leaves them in: the author tells them apart.
+    authored = quote("--format=%h %an: %s")
+    return ("Check first that it holds nothing of yours: the first command lists the files changed, added or "
+            "ignored in it, the second the commits no remote branch holds — the reflog's included — and the "
+            "third the stashes. The reflog also keeps commits that no Cortex branch holds any more, rewritten or "
+            "deleted upstream: their author tells them from yours.\n\n"
+            f"    git -C {target} status --short --ignored -- . {marker}\n"
+            f"    git -C {target} log {authored} HEAD --branches --reflog --not --remotes\n"
+            f"    git -C {target} stash list\n\n")
+
+
 def leaving(path: Path) -> str:
     """How to leave the submodule, the worktree or the clone at ``cortex/`` (ADR-008 §3.10): the
     commands, shown and never run — they rewrite the project's git state, and the developer should
@@ -353,22 +371,8 @@ def leaving(path: Path) -> str:
         if modules:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
-        target = quote(display(str(path)))
         if kept:
-            # The scripts' theme marker, ignored in every Cortex before 1.0.0 and read by nothing now: any
-            # agents/personalities/.active-*, as 1.0.0's own .gitignore treats them.
-            marker = quote(f":(exclude){OLD_THEME_MARKER}")
-            # The reflogs keep commits no Cortex branch holds any more — rewritten or deleted upstream —
-            # and --not --remotes leaves them in: the author tells them apart.
-            authored = quote("--format=%h %an: %s")
-            check = (f"here, with the submodule's repository. Check first that it holds nothing of yours: the first "
-                     f"command lists the files changed, added or ignored in it, the second the commits no remote "
-                     f"branch holds — the reflog's included — and the third the stashes. The reflog also keeps "
-                     f"commits that no Cortex branch holds any more, rewritten or deleted upstream: their author "
-                     f"tells them from yours.\n\n"
-                     f"    git -C {target} status --short --ignored -- . {marker}\n"
-                     f"    git -C {target} log {authored} HEAD --branches --reflog --not --remotes\n"
-                     f"    git -C {target} stash list\n\n")
+            check = f"here, with the submodule's repository. {_checks(path)}"
         else:
             # The third command 1.0.0 and 1.1.0 printed — the one that ran — removed the repository.
             check = (f"here. Its repository is already gone, so git cannot show what changed in it: look through "
@@ -402,7 +406,10 @@ def leaving(path: Path) -> str:
         if gitdir is not None:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
-        return (f"Cortex now lives in the store, and the submodule is to go. These commands rewrite the git "
+        # A clone made a submodule in place is the likeliest to hold the developer's own work.
+        own = (f"The submodule keeps its repository in {LINK}/.git, as a clone made a submodule in place does, "
+               f"and it goes with the submodule. {_checks(path)}" if (path / ".git").is_dir() else "")
+        return (f"Cortex now lives in the store, and the submodule is to go. {own}These commands rewrite the git "
                 f"state of the project at {root}, so they are shown here, not run:\n\n{shown}\n"
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")

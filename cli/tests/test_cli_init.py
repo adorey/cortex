@@ -464,6 +464,7 @@ class OptionTests(InitTestCase):
                 err = proc.stderr.decode()
                 self.assertNotEqual(proc.returncode, 0)
                 self.assertIn("cortex/ is a git submodule", err)
+                self.assertNotIn("Check first", err)          # the repository is under .git/modules/
                 root = display(self.project)
                 for line in (f"git -C {quote(root)} submodule deinit -f cortex", f"git -C {quote(root)} rm cortex",
                              remove(display(self.project / ".git" / "modules" / "cortex"))):
@@ -853,9 +854,12 @@ class OptionTests(InitTestCase):
         self.assertTrue((self.project / "cortex" / ".git").is_dir())
         proc = harness.run("init", cwd=self.project, env=self._with_git())
         self.assertEqual(proc.returncode, 1)
-        commands = self._shown(proc.stderr.decode())
+        err = proc.stderr.decode()
+        commands = self._shown(err)
         self.assertEqual(commands[0], f"git -C {quote(display(self.project))} submodule absorbgitdirs cortex")
         self.assertEqual(commands[-1], remove(display(self.project / ".git" / "modules" / "cortex")))
+        # The clone's history goes too: the teammate's checks come first (#160).
+        self._checks_printed(err, self.project / "cortex")
         if os.name == "nt":
             return
         for command in commands:
