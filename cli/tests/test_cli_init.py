@@ -471,10 +471,11 @@ class OptionTests(InitTestCase):
                 after = {p.relative_to(self.project).as_posix(): p.read_bytes() for p in self.project.rglob("*") if p.is_file()}
                 self.assertEqual(after, before)
 
-    def _submodule_stack(self, over_a_clone=False, another=False):
+    def _submodule_stack(self, over_a_clone=False, another=False, inside=""):
         """A project whose cortex/ is a submodule, pushed to an origin, and a teammate's clone of it
         with the submodule initialised. ``over_a_clone``: added on a clone of Cortex already there,
-        which keeps its repository in cortex/.git. ``another``: a second submodule, which stays."""
+        which keeps its repository in cortex/.git. ``another``: a second submodule, which stays.
+        ``inside``: the project is that subdirectory of the repository."""
         git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-c", "protocol.file.allow=always"]
         upstream, origin, teammate = self.tmp / "upstream", self.tmp / "origin.git", self.tmp / "teammate"
         subprocess.run(["git", "init", "-q", str(upstream)], check=True)
@@ -484,9 +485,11 @@ class OptionTests(InitTestCase):
         subprocess.run([*git, "-C", str(upstream), "commit", "-q", "-m", "x"], check=True)
         subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
         subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        project = self.project / inside
+        project.mkdir(parents=True, exist_ok=True)
         if over_a_clone:
-            subprocess.run([*git, "clone", "-q", str(upstream), str(self.project / "cortex")], check=True)
-        subprocess.run([*git, "-C", str(self.project), "submodule", "add", "-q", str(upstream), "cortex"], check=True)
+            subprocess.run([*git, "clone", "-q", str(upstream), str(project / "cortex")], check=True)
+        subprocess.run([*git, "-C", str(project), "submodule", "add", "-q", str(upstream), "cortex"], check=True)
         if another:
             subprocess.run([*git, "-C", str(self.project), "submodule", "add", "-q", str(upstream), "other"], check=True)
         subprocess.run([*git, "-C", str(self.project), "commit", "-q", "-m", "the submodule"], check=True)
@@ -714,7 +717,7 @@ class OptionTests(InitTestCase):
 
     def test_a_removal_that_could_reach_another_repository_is_not_printed(self):
         # absorbgitdirs refuses a directory that is there already, and git ignores a name with .. in its
-        # path: a removal there could only reach another submodule's repository, or the project.
+        # path: the commands would fail, and a removal there could only reach another repository.
         (self.project / "cortex" / ".git").mkdir(parents=True)
         modules = self.project / ".git" / "modules"
         for name, there in (("../../src", None), ("a/../../src", None), ("..\\..\\src", None), (".", None),
@@ -728,27 +731,59 @@ class OptionTests(InitTestCase):
                 if there:
                     shutil.rmtree(modules / there)
                 self.assertEqual(proc.returncode, 1)
-                commands = self._shown(proc.err)
-                self.assertIn(f"git -C {quote(display(self.project))} submodule absorbgitdirs cortex", commands)
-                removals = [c for c in commands if c.startswith(("rm ", "Remove-Item"))]
                 if name.startswith("/"):
                     # git joins an absolute name to modules/, as any other.
-                    self.assertEqual(removals, [remove(display(modules / "srv" / "elsewhere"))])
+                    self.assertEqual(self._shown(proc.err)[-1], remove(display(modules / "srv" / "elsewhere")))
                     continue
-                self.assertEqual(removals, [])
-                self.assertIn("to a place Cortex cannot name for sure: remove it there yourself", proc.err)
+                self.assertNotIn("shown here, not run", proc.err)
+                self.assertNotIn("rm -rf", proc.err)
+                self.assertNotIn("Remove-Item", proc.err)
+                if there:
+                    self.assertIn(f"git moves it to {display(modules / there)} before the submodule goes — but a "
+                                  "repository is there already", proc.err)
+                else:
+                    self.assertIn(f'git cannot move it under the project\'s .git/modules/ by the name .gitmodules gives '
+                                  f'the submodule, "{name}"', proc.err)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_place_an_earlier_submodule_left_is_named_not_removed(self):
+        # git rm keeps the repository of the submodule it removes: a clone made a submodule in place, by
+        # the same name, cannot be moved there — and that repository may be in use.
+        git, _, _ = self._submodule_stack()
+        for command in (["submodule", "deinit", "-q", "-f", "cortex"], ["rm", "-q", "cortex"]):
+            subprocess.run([*git, "-C", str(self.project), *command], check=True)
+        subprocess.run([*git, "-C", str(self.project), "commit", "-q", "-m", "no submodule"], check=True)
+        subprocess.run([*git, "clone", "-q", str(self.tmp / "upstream"), str(self.project / "cortex")], check=True)
+        subprocess.run([*git, "-C", str(self.project), "submodule", "add", "-q", str(self.tmp / "upstream"), "cortex"],
+                       check=True, capture_output=True)
+        modules = self.project / ".git" / "modules" / "cortex"
+        self.assertTrue(modules.is_dir())
+        proc = harness.run("init", cwd=self.project, env=self._with_git())
+        err = proc.stderr.decode()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn(f"git moves it to {display(modules)} before the submodule goes", err)
+        self.assertNotIn("shown here, not run", err)
+        # git itself refuses: the commands would only have failed.
+        absorb = subprocess.run(["git", "-C", str(self.project), "submodule", "absorbgitdirs", "cortex"],
+                                capture_output=True)
+        self.assertNotEqual(absorb.returncode, 0)
+        self.assertTrue((self.project / "cortex" / ".git").is_dir())
 
     def test_without_git_gitmodules_is_read_as_git_reads_it(self):
-        # A header in capitals, a comment after it: cortex's section, not the one before it.
+        # A header in capitals or with a comment opens a section; one of another kind closes it; of two
+        # sections with that path, git takes the last.
         (self.project / "cortex" / ".git").mkdir(parents=True)
         modules = self.project / ".git" / "modules"
         (modules / "other").mkdir(parents=True)
-        (self.project / ".gitmodules").write_text('[submodule "other"]\n\tpath = other\n\turl = x\n'
-                                                  '[Submodule "team-spec"]  # Cortex\n\tpath = cortex\n\turl = x\n',
-                                                  encoding="utf-8")
-        proc = self.init()
-        self.assertEqual(proc.returncode, 1)
-        self.assertEqual(self._shown(proc.err)[-1], remove(display(modules / "team-spec")))
+        other = '[submodule "other"]\n\tpath = other\n\turl = x\n'
+        for text, name in ((other + '[Submodule "team-spec"]  # Cortex\n\tpath = cortex\n\turl = x\n', "team-spec"),
+                           (other + '[core]\n\tpath = cortex\n', "cortex"),
+                           ('[submodule "first"]\n\tpath = cortex\n[submodule "second"]\n\tpath = cortex\n', "second")):
+            with self.subTest(name=name):
+                (self.project / ".gitmodules").write_text(text, encoding="utf-8")
+                proc = self.init()
+                self.assertEqual(proc.returncode, 1)
+                self.assertEqual(self._shown(proc.err)[-1], remove(display(modules / name)))
 
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_submodule_added_over_a_clone_leaves_no_repository_behind(self):
@@ -822,6 +857,17 @@ class OptionTests(InitTestCase):
         self.assertTrue((self.project / ".git" / "modules" / "other").is_dir())
 
     @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_of_two_sections_with_its_path_git_takes_the_last(self):
+        git, _, _ = self._submodule_stack(over_a_clone=True)
+        gitmodules = self.project / ".gitmodules"
+        gitmodules.write_text(f'[submodule "first"]\n\tpath = cortex\n\turl = x\n{gitmodules.read_text(encoding="utf-8")}',
+                              encoding="utf-8")
+        subprocess.run([*git, "-C", str(self.project), "add", ".gitmodules"], check=True)
+        proc = harness.run("init", cwd=self.project, env=self._with_git())
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(self._shown(proc.stderr.decode())[-1], remove(display(self.project / ".git" / "modules" / "cortex")))
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_project_in_a_subdirectory_of_the_repository(self):
         # git names the submodule by its path from the top — app/cortex — and keeps the top's own.
         git, _, _ = self._submodule_stack()
@@ -836,6 +882,12 @@ class OptionTests(InitTestCase):
         self.assertEqual(commands[-1], remove(display(self.project / ".git" / "modules" / "app" / "cortex")))
         if os.name == "nt":
             return
+        # Reached through a link, the project's .. is the repository's, as git answers it — not the link's.
+        link = self.tmp / "elsewhere" / "app"
+        link.parent.mkdir()
+        link.symlink_to(app)
+        through = harness.run("init", cwd=link, env=self._with_git())
+        self.assertEqual(self._shown(through.stderr.decode())[-1], commands[-1])
         for command in commands:
             subprocess.run(command, shell=True, check=True, capture_output=True)
         self.assertFalse((self.project / ".git" / "modules" / "app" / "cortex").exists())
@@ -889,28 +941,38 @@ class OptionTests(InitTestCase):
         # .gitmodules stays, for the other submodule: it names no cortex, and cortex/ is still no clone.
         self._the_adder_after_the_pull(another=True)
 
-    def _the_adder_after_the_pull(self, another):
-        git, origin, teammate = self._submodule_stack(over_a_clone=True, another=another)
-        removal = [["submodule", "deinit", "-q", "-f", "cortex"], ["rm", "-q", "cortex"]]
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_the_developer_who_added_it_in_a_subdirectory_after_the_pull(self):
+        # git names a submodule added in app/ by its path from the top: its settings are submodule.app/cortex.
+        self._the_adder_after_the_pull(another=False, inside="app")
+
+    def _the_adder_after_the_pull(self, another, inside=""):
+        git, origin, teammate = self._submodule_stack(over_a_clone=True, another=another, inside=inside)
+        project, name = self.project / inside, f"{inside}/cortex" if inside else "cortex"
+        removal = [["submodule", "deinit", "-q", "-f", name], ["rm", "-q", name]]
         for command in removal if another else [*removal, ["rm", "-q", "-f", ".gitmodules"]]:
             subprocess.run([*git, "-C", str(teammate), *command], check=True)
-        self._rmtree(teammate / ".git" / "modules" / "cortex")
-        (teammate / "cortex.toml").write_text(f'version = "{OWN}"\ntheme = "h2g2"\n', encoding="utf-8")
-        subprocess.run([*git, "-C", str(teammate), "add", "cortex.toml"], check=True)
+        self._rmtree(teammate / ".git" / "modules" / name)
+        (teammate / inside / "cortex.toml").write_text(f'version = "{OWN}"\ntheme = "h2g2"\n', encoding="utf-8")
+        subprocess.run([*git, "-C", str(teammate / inside), "add", "cortex.toml"], check=True)
         subprocess.run([*git, "-C", str(teammate), "commit", "-q", "-m", "the store"], check=True)
         subprocess.run([*git, "-C", str(teammate), "push", "-q", "origin", "HEAD:refs/heads/main"], check=True)
         subprocess.run([*git, "-C", str(self.project), "pull", "-q", str(origin), "main"], capture_output=True)
-        self.assertTrue((self.project / "cortex" / ".git").is_dir())
+        self.assertTrue((project / "cortex" / ".git").is_dir())
         self.assertEqual((self.project / ".gitmodules").exists(), another)
-        proc = harness.run("sync", cwd=self.project, env=self._with_git())
+        proc = harness.run("sync", cwd=project, env=self._with_git())
         err = proc.stderr.decode()
         self.assertEqual(proc.returncode, 1)
         self.assertIn("was removed by a commit you pulled", err)
         self.assertIn("with the submodule's repository", err)
-        self._checks_printed(err, self.project / "cortex")
-        self.assertEqual(self._shown(err), [f"git -C {quote(display(self.project))} config --remove-section submodule.cortex",
-                                            remove(display(self.project / "cortex"))])
-        self._sync_after_running(self.project, err)
+        self._checks_printed(err, project / "cortex")
+        self.assertEqual(self._shown(err), [f"git -C {quote(display(project))} config --remove-section submodule.{name}",
+                                            remove(display(project / "cortex"))])
+        self._sync_after_running(project, err)
+        if os.name != "nt":
+            left = subprocess.run(["git", "-C", str(self.project), "config", "--local", "--get-regexp", "^submodule\\."],
+                                  capture_output=True, text=True)
+            self.assertNotIn(f"submodule.{name}.", left.stdout)
 
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_submodule_staged_never_committed(self):

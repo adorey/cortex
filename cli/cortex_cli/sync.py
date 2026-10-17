@@ -198,18 +198,18 @@ def submodule_name(path: Path) -> str:
     if where is not None:
         top, prefix = where
         proc = _git(top, "config", "-f", ".gitmodules", "-z", "--get-regexp", r"^submodule\..*\.path$")
-        for entry in (proc.stdout.split("\0") if proc is not None and proc.returncode == 0 else []):
-            key, _, value = entry.partition("\n")
-            if value.rstrip("/") == prefix + path.name:
-                return key[len("submodule."):-len(".path")]
-        return prefix + path.name
+        names = [key[len("submodule."):-len(".path")]
+                 for key, _, value in (entry.partition("\n") for entry in
+                                       (proc.stdout.split("\0") if proc is not None and proc.returncode == 0 else []))
+                 if value.rstrip("/") == prefix + path.name]
+        return names[-1] if names else prefix + path.name          # two sections with that path: git takes the last
     # Without git: the project's .gitmodules, read as git reads it — a header in any case, a comment
     # after it, and no section left open by a header of another kind.
     try:
         lines = (path.parent / ".gitmodules").read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return path.name
-    name = None
+    name, found = None, path.name
     for line in lines:
         if line.lstrip().startswith("["):
             section = re.fullmatch(r'\s*\[submodule\s+"(.+)"\s*\]\s*(?:[#;].*)?', line, flags=re.I)
@@ -217,8 +217,8 @@ def submodule_name(path: Path) -> str:
             continue
         key, _, value = line.partition("=")
         if name and key.strip().lower() == "path" and value.strip().strip('"').rstrip("/") == path.name:
-            return name
-    return path.name
+            found = name
+    return found
 
 
 def _named_in_gitmodules(path: Path) -> bool:
@@ -253,25 +253,37 @@ def _plain_name(name: str) -> bool:
     return bool(name) and ".." not in re.split(r"[/\\]", name)
 
 
-def _absorbed(path: Path) -> Optional[str]:
-    """Where ``git submodule absorbgitdirs`` moves a repository kept in ``cortex/.git``: the project's
-    ``modules/<name>`` — under ``.git/worktrees/<worktree>/`` in a linked worktree. ``None`` unless it
-    is a directory to come, inside ``modules/``: absorbgitdirs refuses one that is there already, and
-    a removal there could only reach another submodule's repository."""
+def _absorbed(path: Path) -> Tuple[str, str, str]:
+    """The submodule's name, where ``git submodule absorbgitdirs`` moves a repository kept in
+    ``cortex/.git`` — ``modules/<name>``, under ``.git/worktrees/<worktree>/`` in a linked worktree —
+    and that ``modules/``."""
     name = submodule_name(path)
-    if not _plain_name(name):
-        return None
-    # --git-path answers relative to the project, or absolute in a linked worktree; git older than
-    # 2.31 knows no --path-format, and would print it back.
+    # --git-path answers relative to the directory git runs in, its real one — undoing a .. on the
+    # side of a link would land elsewhere — or absolute in a linked worktree; git older than 2.31
+    # knows no --path-format, and would print it back.
     proc = _git(str(path.parent), "rev-parse", "--git-path", "modules")
     if proc is not None and proc.returncode == 0 and proc.stdout.strip():
-        modules = os.path.normpath(os.path.join(str(path.parent), proc.stdout.strip()))
+        modules = os.path.normpath(os.path.join(os.path.realpath(str(path.parent)), proc.stdout.strip()))
     else:
         modules = os.path.normpath(os.path.join(str(path.parent), ".git", "modules"))
-    target = os.path.normpath(modules + os.sep + name)        # as git joins it: an absolute name too
-    if not target.startswith(modules + os.sep) or os.path.lexists(target):
-        return None
-    return target
+    return name, os.path.normpath(modules + os.sep + name), modules     # as git joins it: an absolute name too
+
+
+def _stuck(name: str, target: str, modules: str) -> str:
+    """Why git cannot move a repository kept in ``cortex/.git`` under ``modules/`` — so that the
+    commands removing the submodule would fail — or nothing."""
+    if not _plain_name(name) or not target.startswith(modules + os.sep):
+        return (f"Its repository is in {LINK}/.git, and git cannot move it under the project's .git/modules/ by "
+                f'the name .gitmodules gives the submodule, "{name}": git ignores a name with .. in its path, and '
+                f". names .git/modules/ itself. Give the submodule another name in .gitmodules and .git/config, "
+                f"or remove it by hand.")
+    if os.path.lexists(target):
+        return (f"Its repository is in {LINK}/.git, and git moves it to {display(target)} before the submodule goes "
+                f"— but a repository is there already: one an earlier submodule of that name left, as git rm does, "
+                f"or another submodule's. git cannot move {LINK}/.git there, and the commands that remove the "
+                f"submodule would fail. Find out whose repository that is before you touch it: another submodule "
+                f"may still use it.")
+    return ""
 
 
 def kind_of(path: Path) -> str:
@@ -298,6 +310,11 @@ def quote(path: str) -> str:
     return shlex.quote(path)
 
 
+def _word(text: str) -> str:
+    """``text`` as one word of the shell the commands are shown for, quoted only when it needs it."""
+    return text if re.fullmatch(r"[\w./-]+", text) else quote(text)
+
+
 def _remove_command(path: str) -> str:
     return f"Remove-Item -Recurse -Force {quote(path)}" if os.name == "nt" else f"rm -rf {quote(path)}"
 
@@ -315,9 +332,11 @@ def leaving(path: Path) -> str:
         modules = gitdir is not None and os.path.isdir(gitdir)
         kept = modules or (path / ".git").is_dir()          # a clone made a submodule in place keeps its .git
         commands = []
-        section = _git(root, "config", "--local", "--get-regexp", rf"^submodule\.{LINK}\.")
+        # Its name: app/cortex, for one git submodule add made in the subdirectory app of the repository.
+        name = submodule_name(path)
+        section = _git(root, "config", "--local", "--get-regexp", rf"^submodule\.{re.escape(name)}\.")
         if section is not None and section.returncode == 0 and section.stdout.strip():
-            commands.append(f"git -C {quote(root)} config --remove-section submodule.{LINK}")
+            commands.append(f"git -C {quote(root)} config --remove-section {_word(f'submodule.{name}')}")
         commands.append(_remove_command(display(str(path))))
         if modules:
             commands.append(_remove_command(display(gitdir)))
@@ -353,17 +372,19 @@ def leaving(path: Path) -> str:
         # A submodule's repository stays under the superproject's .git/modules/ once it is gone — and
         # one kept in cortex/.git goes there too, moved by absorbgitdirs.
         gitdir = _gitdir(path)
-        unnamed = ""
         if gitdir is None and (path / ".git").is_dir():
-            gitdir = _absorbed(path)
-            if gitdir is None:
-                unnamed = (f"The first one moves the repository in {LINK}/.git under the project's .git/modules/, "
-                           "to a place Cortex cannot name for sure: remove it there yourself.\n\n")
+            name, gitdir, modules = _absorbed(path)
+            stuck = _stuck(name, gitdir, modules)
+            if stuck:
+                # A removal there could only reach another repository; the commands, only fail.
+                return (f"Cortex now lives in the store, and the submodule is to go. {stuck} Then run the command "
+                        "again. The migration guide covers it: "
+                        "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
         if gitdir is not None:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
         return (f"Cortex now lives in the store, and the submodule is to go. These commands rewrite the git "
-                f"state of the project at {root}, so they are shown here, not run:\n\n{shown}\n{unnamed}"
+                f"state of the project at {root}, so they are shown here, not run:\n\n{shown}\n"
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
     if kind == "worktree":
