@@ -464,6 +464,7 @@ class OptionTests(InitTestCase):
                 err = proc.stderr.decode()
                 self.assertNotEqual(proc.returncode, 0)
                 self.assertIn("cortex/ is a git submodule", err)
+                self.assertNotIn("Check first", err)          # the repository is under .git/modules/
                 root = display(self.project)
                 for line in (f"git -C {quote(root)} submodule deinit -f cortex", f"git -C {quote(root)} rm cortex",
                              remove(display(self.project / ".git" / "modules" / "cortex"))):
@@ -541,7 +542,8 @@ class OptionTests(InitTestCase):
         return teammate
 
     CHECKS = (["status", "--short", "--ignored", "--", ".", ":(exclude)agents/personalities/.active-*"],
-              ["log", "--oneline", "HEAD", "--branches", "--not", "--remotes"])
+              ["log", "--format=%h %an: %s", "HEAD", "--branches", "--reflog", "--not", "--remotes"],
+              ["stash", "list"])
 
     def _checks_printed(self, err, cortex):
         # The very checks the tests run, as the refusal prints them: quoted where the shell needs it.
@@ -620,6 +622,22 @@ class OptionTests(InitTestCase):
         listed = self._listed(cortex, self.CHECKS[0])
         self.assertIn(" M README.md", listed)
         self.assertIn("?? agents/", listed)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_teammate_s_stash_and_lost_commits_are_listed(self):
+        # A commit made on a detached HEAD and left behind is in the reflog only; a stash is in no branch.
+        teammate = self._teammate_after_the_pull()
+        cortex = teammate / "cortex"
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-C", str(cortex)]
+        subprocess.run([*git, "checkout", "-q", "--detach"], check=True)
+        (cortex / "lost.md").write_text("lost\n", encoding="utf-8")
+        subprocess.run([*git, "add", "lost.md"], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "lost work"], check=True)
+        subprocess.run([*git, "checkout", "-q", "--detach", "HEAD~1"], check=True)
+        (cortex / "README.md").write_text("stashed\n", encoding="utf-8")
+        subprocess.run([*git, "stash", "-q"], check=True)
+        self.assertIn("CI: lost work", self._listed(cortex, self.CHECKS[1]))
+        self.assertIn("stash@{0}", self._listed(cortex, self.CHECKS[2]))
 
     @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_teammate_s_commits_on_another_branch_are_listed(self):
@@ -836,9 +854,12 @@ class OptionTests(InitTestCase):
         self.assertTrue((self.project / "cortex" / ".git").is_dir())
         proc = harness.run("init", cwd=self.project, env=self._with_git())
         self.assertEqual(proc.returncode, 1)
-        commands = self._shown(proc.stderr.decode())
+        err = proc.stderr.decode()
+        commands = self._shown(err)
         self.assertEqual(commands[0], f"git -C {quote(display(self.project))} submodule absorbgitdirs cortex")
         self.assertEqual(commands[-1], remove(display(self.project / ".git" / "modules" / "cortex")))
+        # The clone's history goes too: the teammate's checks come first (#160).
+        self._checks_printed(err, self.project / "cortex")
         if os.name == "nt":
             return
         for command in commands:
