@@ -182,12 +182,57 @@ def in_index(path: Path) -> Optional[bool]:
     return proc.stdout.startswith("160000 ")
 
 
+def submodule_name(path: Path) -> str:
+    """The name ``.gitmodules`` gives the submodule at ``cortex/`` — its section in the project's
+    settings — or ``cortex`` when the file is gone."""
+    try:
+        lines = (path.parent / ".gitmodules").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return path.name
+    name = None
+    for line in lines:
+        section = re.fullmatch(r'\s*\[submodule\s+"(.+)"\s*\]\s*', line)
+        if section:
+            name = section.group(1)
+            continue
+        key, _, value = line.partition("=")
+        if name and key.strip() == "path" and value.strip().strip('"').rstrip("/") == path.name:
+            return name
+    return path.name
+
+
+def _left_by_submodule(path: Path) -> bool:
+    """A ``cortex/`` whose repository is its own ``.git`` directory, in a project whose settings still
+    hold the submodule: the one ``git submodule add`` was run on, as a clone, once a pull removed it."""
+    if not (path / ".git").is_dir():
+        return False
+    section = _git(str(path.parent), "config", "--local", "--get-regexp",
+                   rf"^submodule\.{re.escape(submodule_name(path))}\.")
+    return section is not None and section.returncode == 0 and bool(section.stdout.strip())
+
+
+def _staged_only(path: Path) -> bool:
+    """The submodule is in the index, and in no commit yet: ``git rm`` refuses it without ``-f``."""
+    head = _git(str(path.parent), "ls-tree", "HEAD", "--", path.name)
+    return head is not None and (head.returncode != 0 or not head.stdout.strip())
+
+
+def _absorbed(path: Path) -> str:
+    """Where ``git submodule deinit`` moves a repository kept in ``cortex/.git``: the project's
+    ``modules/<name>`` — under ``.git/worktrees/<worktree>/`` in a linked worktree."""
+    name = submodule_name(path)
+    proc = _git(str(path.parent), "rev-parse", "--path-format=absolute", "--git-path", f"modules/{name}")
+    if proc is not None and proc.returncode == 0 and proc.stdout.strip():
+        return os.path.normpath(proc.stdout.strip())
+    return os.path.join(str(path.parent), ".git", "modules", name)
+
+
 def kind_of(path: Path) -> str:
     """What is at ``cortex/`` when sync did not make it."""
     gitdir = _gitdir(path) if (path / ".git").is_file() else None
     if gitdir is not None and f"{os.sep}worktrees{os.sep}" in gitdir:
         return "worktree"
-    if is_submodule(path) or (path / ".git").is_file():
+    if is_submodule(path) or (path / ".git").is_file() or _left_by_submodule(path):
         return "submodule"
     if (path / ".git").is_dir():
         return "clone"
@@ -248,12 +293,17 @@ def leaving(path: Path) -> str:
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
     if kind == "submodule":
-        commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {LINK}"]
+        # A submodule staged and never committed is refused by git rm without -f.
+        force = "-f " if in_index(path) and _staged_only(path) else ""
+        commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {force}{LINK}"]
         if only_submodule(path):
             # git rm empties .gitmodules of its last section, and leaves the file, tracked.
             commands.append(f"git -C {quote(root)} rm -f .gitmodules")
-        # A submodule's repository stays under the superproject's .git/modules/ once it is gone.
+        # A submodule's repository stays under the superproject's .git/modules/ once it is gone — and
+        # one kept in cortex/.git goes there too: deinit moves it before emptying cortex/.
         gitdir = _gitdir(path)
+        if gitdir is None and (path / ".git").is_dir():
+            gitdir = _absorbed(path)
         if gitdir is not None:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
