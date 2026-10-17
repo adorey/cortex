@@ -262,7 +262,7 @@ class ForeignCortexTests(SyncTestCase):
         (project / "cortex").symlink_to(elsewhere, target_is_directory=True)
         proc = self.sync(project, "--link")
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("which cortex sync did not make", proc.err)
+        self.assertIn("which Cortex did not make", proc.err)
         self.assertEqual(os.readlink(project / "cortex"), str(elsewhere))
 
 
@@ -619,7 +619,7 @@ class SafetyTests(SyncTestCase):
         before = snapshot(project / "cortex")
         proc = self.sync(project)
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("holds a .synced file cortex sync cannot read", proc.err)
+        self.assertIn("holds a .synced file Cortex cannot read", proc.err)
         self.assertEqual(snapshot(project / "cortex"), before)
 
     def test_a_clone_with_a_marker_is_still_a_clone(self):
