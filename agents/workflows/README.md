@@ -25,6 +25,7 @@ cortex/agents/workflows/                       ← priority 3 — Generic workfl
     │   ├── code-review.md
     │   ├── feature-development.md
     │   ├── frontend-testing.md
+    │   ├── release-automation.md
     │   └── support-triage.md
     ├── intelligence/                                ← Research & analysis
     │   └── tech-watch.md
@@ -58,6 +59,7 @@ The Prompt Manager is the **single entry point**. For every request it:
 | `engineering/` | `code-review.md` | Reviewing a pull request, or handling the review of ours |
 | `engineering/` | `feature-development.md` | Developing a new feature |
 | `engineering/` | `frontend-testing.md` | Adding or reviewing frontend tests |
+| `engineering/` | `release-automation.md` | Setting up or maintaining versioning, changelog and release automation |
 | `engineering/` | `support-triage.md` | Diagnosing a support ticket |
 | `intelligence/` | `tech-watch.md` | Technology watch on a subject or tool |
 
