@@ -201,15 +201,19 @@ def submodule_name(path: Path) -> str:
     return path.name
 
 
+def _plain_name(name: str) -> bool:
+    """A submodule name that stays under ``modules/``: git ignores one with a ``..`` in its path, and
+    one that is absolute would take the removal of its repository anywhere."""
+    parts = re.split(r"[/\\]", name)
+    return bool(name) and parts[0] != "" and ".." not in parts and ":" not in name
+
+
 def _named_in_gitmodules(path: Path) -> bool:
     """``.gitmodules`` still has a section named as the submodule would be: one that lives elsewhere,
     moved with ``git mv``, and owns the settings — ``cortex/`` is then a clone of its own."""
-    name = re.escape(submodule_name(path))
-    try:
-        text = (path.parent / ".gitmodules").read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return False
-    return re.search(rf'^\s*\[submodule\s+"{name}"\s*\]', text, flags=re.M) is not None
+    proc = _git(str(path.parent), "config", "-f", ".gitmodules", "--get-regexp",
+                rf"^submodule\.{re.escape(submodule_name(path))}\.")
+    return proc is not None and proc.returncode == 0 and bool(proc.stdout.strip())
 
 
 def _left_by_submodule(path: Path) -> bool:
@@ -228,10 +232,13 @@ def _staged_only(path: Path) -> bool:
     return head is not None and (head.returncode != 0 or not head.stdout.strip())
 
 
-def _absorbed(path: Path) -> str:
-    """Where ``git submodule deinit`` moves a repository kept in ``cortex/.git``: the project's
-    ``modules/<name>`` — under ``.git/worktrees/<worktree>/`` in a linked worktree."""
+def _absorbed(path: Path) -> Optional[str]:
+    """Where ``git submodule absorbgitdirs`` moves a repository kept in ``cortex/.git``: the project's
+    ``modules/<name>`` — under ``.git/worktrees/<worktree>/`` in a linked worktree. ``None`` for a
+    name that would lead out of ``modules/``."""
     name = submodule_name(path)
+    if not _plain_name(name):
+        return None
     # --git-path answers relative to the project, or absolute in a linked worktree; git older than
     # 2.31 knows no --path-format, and would print it back.
     proc = _git(str(path.parent), "rev-parse", "--git-path", f"modules/{name}")
@@ -309,11 +316,15 @@ def leaving(path: Path) -> str:
         # A submodule staged and never committed is refused by git rm without -f.
         force = "-f " if in_index(path) and _staged_only(path) else ""
         commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {force}{LINK}"]
+        if (path / ".git").is_dir():
+            # deinit refuses a repository kept in cortex/.git before git 2.35: absorbgitdirs, there since
+            # 2.12, moves it under modules/ first.
+            commands.insert(0, f"git -C {quote(root)} submodule absorbgitdirs {LINK}")
         if only_submodule(path):
             # git rm empties .gitmodules of its last section, and leaves the file, tracked.
             commands.append(f"git -C {quote(root)} rm -f .gitmodules")
         # A submodule's repository stays under the superproject's .git/modules/ once it is gone — and
-        # one kept in cortex/.git goes there too: deinit moves it before emptying cortex/.
+        # one kept in cortex/.git goes there too, moved by absorbgitdirs.
         gitdir = _gitdir(path)
         if gitdir is None and (path / ".git").is_dir():
             gitdir = _absorbed(path)
