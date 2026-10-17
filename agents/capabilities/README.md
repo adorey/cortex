@@ -38,6 +38,11 @@ capabilities/
 │   ├── mysql.md              # MySQL best practices
 │   ├── postgresql.md         # PostgreSQL best practices
 │   └── mongodb.md            # MongoDB best practices
+├── release/
+│   ├── semver.md             # Semantic Versioning 2.0.0
+│   ├── changelog.md          # Keep a Changelog discipline
+│   ├── conventional-commits.md  # Commit & PR-title convention
+│   └── release-please.md     # Release PR automation
 ├── search/
 │   └── opensearch.md         # OpenSearch best practices
 ├── testing/
@@ -65,7 +70,7 @@ Each technical role has a `## 🔌 Capabilities` section listing the categories 
 ```
 
 Two kinds of category coexist here: those resolved **against the project's stack** (`languages/`,
-`frameworks/`, `databases/`…) and those loaded **unconditionally** (`security/`, `practices/`) because
+`frameworks/`, `databases/`…) and those loaded **unconditionally** (`security/`, `practices/`, `release/`) because
 the craft they carry is true whatever the stack.
 
 ### 2. The Prompt Manager resolves the files
