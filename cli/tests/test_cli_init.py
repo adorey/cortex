@@ -684,6 +684,16 @@ class OptionTests(InitTestCase):
         self.assertIn(f"git -C {quote(display(self.project))} rm cortex", commands)
         self.assertFalse(any(".gitmodules" in command for command in commands), commands)
 
+    def test_a_refusal_init_prints_names_no_sync_it_never_ran(self):
+        # cortex init runs the same checks as sync: its refusals name Cortex, and the command to run again.
+        (self.project / "cortex").mkdir()
+        (self.project / "cortex" / ".synced").write_text("", encoding="utf-8")
+        proc = self.init()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("holds a .synced file Cortex cannot read: Cortex did not write this directory", proc.err)
+        self.assertIn("then run the command again", proc.err)
+        self.assertNotIn("cortex sync", proc.err)
+
     def test_a_clone_is_refused_and_its_removal_printed(self):
         (self.project / "cortex" / ".git").mkdir(parents=True)
         proc = self.init()
