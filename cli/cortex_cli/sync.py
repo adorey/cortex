@@ -244,8 +244,9 @@ def _left_by_submodule(path: Path) -> bool:
 
 def _staged(path: Path) -> bool:
     """The index holds for ``cortex`` what the last commit does not — a submodule never committed, or a
-    new commit of it staged: ``git rm`` refuses it without ``-f``, even once ``deinit`` emptied it."""
-    proc = _git(str(path.parent), "diff", "--cached", "--quiet", "--", path.name)
+    new commit of it staged: ``git rm`` refuses it without ``-f``, even once ``deinit`` emptied it. git rm
+    sees it whatever ``submodule.<name>.ignore`` or ``diff.ignoreSubmodules`` says, and so does this."""
+    proc = _git(str(path.parent), "diff", "--cached", "--quiet", "--ignore-submodules=none", "--", path.name)
     return proc is not None and proc.returncode != 0
 
 
