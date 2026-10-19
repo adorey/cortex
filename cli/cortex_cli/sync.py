@@ -242,10 +242,12 @@ def _left_by_submodule(path: Path) -> bool:
     return section is not None and section.returncode == 0 and bool(section.stdout.strip())
 
 
-def _staged_only(path: Path) -> bool:
-    """The submodule is in the index, and in no commit yet: ``git rm`` refuses it without ``-f``."""
-    head = _git(str(path.parent), "ls-tree", "HEAD", "--", path.name)
-    return head is not None and (head.returncode != 0 or not head.stdout.strip())
+def _staged(path: Path) -> bool:
+    """The index holds for ``cortex`` what the last commit does not — a submodule never committed, or a
+    new commit of it staged: ``git rm`` refuses it without ``-f``, even once ``deinit`` emptied it. git rm
+    sees it whatever ``submodule.<name>.ignore`` or ``diff.ignoreSubmodules`` says, and so does this."""
+    proc = _git(str(path.parent), "diff", "--cached", "--quiet", "--ignore-submodules=none", "--", path.name)
+    return proc is not None and proc.returncode != 0
 
 
 def _plain_name(name: str) -> bool:
@@ -299,9 +301,10 @@ def _stuck(name: str, target: str, modules: str) -> str:
 def kind_of(path: Path) -> str:
     """What is at ``cortex/`` when sync did not make it."""
     gitdir = _gitdir(path) if (path / ".git").is_file() else None
-    # A worktree of another repository names …/worktrees/<name>; a submodule in a linked worktree of
-    # the project names …/worktrees/<name>/modules/<module>, and is a submodule.
-    if gitdir is not None and os.path.basename(os.path.dirname(gitdir)) == "worktrees":
+    # A worktree of another repository has an administrative directory, …/worktrees/<name>, which holds
+    # commondir; a submodule's repository — under modules/, of the project or of a linked worktree of
+    # it — never does, whatever its directories are called.
+    if gitdir is not None and os.path.isfile(os.path.join(gitdir, "commondir")):
         return "worktree"
     if is_submodule(path) or (path / ".git").is_file() or _left_by_submodule(path):
         return "submodule"
@@ -382,8 +385,8 @@ def leaving(path: Path) -> str:
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
     if kind == "submodule":
-        # A submodule staged and never committed is refused by git rm without -f.
-        force = "-f " if in_index(path) and _staged_only(path) else ""
+        # git rm refuses without -f a submodule whose index entry is not the last commit's.
+        force = "-f " if in_index(path) and _staged(path) else ""
         commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {force}{LINK}"]
         if (path / ".git").is_dir():
             # deinit refuses a repository kept in cortex/.git before git 2.35: absorbgitdirs, there since
