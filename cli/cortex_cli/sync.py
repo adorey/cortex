@@ -242,10 +242,11 @@ def _left_by_submodule(path: Path) -> bool:
     return section is not None and section.returncode == 0 and bool(section.stdout.strip())
 
 
-def _staged_only(path: Path) -> bool:
-    """The submodule is in the index, and in no commit yet: ``git rm`` refuses it without ``-f``."""
-    head = _git(str(path.parent), "ls-tree", "HEAD", "--", path.name)
-    return head is not None and (head.returncode != 0 or not head.stdout.strip())
+def _staged(path: Path) -> bool:
+    """The index holds for ``cortex`` what the last commit does not — a submodule never committed, or a
+    new commit of it staged: ``git rm`` refuses it without ``-f``, even once ``deinit`` emptied it."""
+    proc = _git(str(path.parent), "diff", "--cached", "--quiet", "--", path.name)
+    return proc is not None and proc.returncode != 0
 
 
 def _plain_name(name: str) -> bool:
@@ -383,8 +384,8 @@ def leaving(path: Path) -> str:
                 "Then run the command again. The migration guide covers it: "
                 "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
     if kind == "submodule":
-        # A submodule staged and never committed is refused by git rm without -f.
-        force = "-f " if in_index(path) and _staged_only(path) else ""
+        # git rm refuses without -f a submodule whose index entry is not the last commit's.
+        force = "-f " if in_index(path) and _staged(path) else ""
         commands = [f"git -C {quote(root)} submodule deinit -f {LINK}", f"git -C {quote(root)} rm {force}{LINK}"]
         if (path / ".git").is_dir():
             # deinit refuses a repository kept in cortex/.git before git 2.35: absorbgitdirs, there since
