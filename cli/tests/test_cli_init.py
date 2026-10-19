@@ -1091,6 +1091,30 @@ class OptionTests(InitTestCase):
         self.assertEqual(sorted(status.stdout.splitlines()), ["D  .gitmodules", "D  cortex"])
 
     @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_submodule_with_a_new_commit_staged(self):
+        # The index differs from the last commit: git rm refuses it without -f, even after deinit -f.
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-c", "protocol.file.allow=always"]
+        upstream = self.tmp / "upstream"
+        subprocess.run(["git", "init", "-q", str(upstream)], check=True)
+        for message in ("one", "two"):
+            subprocess.run([*git, "-C", str(upstream), "commit", "-q", "--allow-empty", "-m", message], check=True)
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        subprocess.run([*git, "-C", str(self.project), "submodule", "add", "-q", str(upstream), "cortex"], check=True)
+        subprocess.run([*git, "-C", str(self.project), "commit", "-q", "-m", "the submodule"], check=True)
+        subprocess.run([*git, "-C", str(self.project / "cortex"), "checkout", "-q", "HEAD~1"], check=True)
+        subprocess.run([*git, "-C", str(self.project), "add", "cortex"], check=True)
+        proc = harness.run("init", cwd=self.project, env=self._with_git())
+        self.assertEqual(proc.returncode, 1)
+        commands = self._shown(proc.stderr.decode())
+        self.assertIn(f"git -C {quote(display(self.project))} rm -f cortex", commands)
+        if os.name == "nt":
+            return
+        for command in commands:
+            subprocess.run(command, shell=True, check=True, capture_output=True)
+        status = subprocess.run(["git", "-C", str(self.project), "status", "--short"], capture_output=True, text=True)
+        self.assertEqual(sorted(status.stdout.splitlines()), ["D  .gitmodules", "D  cortex"])
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_project_in_a_directory_named_worktrees(self):
         # Its submodule's repository is .git/modules/worktrees/cortex: no worktree's, which holds commondir.
         git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-c", "protocol.file.allow=always"]
