@@ -1091,6 +1091,23 @@ class OptionTests(InitTestCase):
         self.assertEqual(sorted(status.stdout.splitlines()), ["D  .gitmodules", "D  cortex"])
 
     @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_project_in_a_directory_named_worktrees(self):
+        # Its submodule's repository is .git/modules/worktrees/cortex: no worktree's, which holds commondir.
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-c", "protocol.file.allow=always"]
+        upstream, project = self.tmp / "upstream", self.project / "worktrees"
+        subprocess.run(["git", "init", "-q", str(upstream)], check=True)
+        subprocess.run([*git, "-C", str(upstream), "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        project.mkdir()
+        subprocess.run([*git, "-C", str(project), "submodule", "add", "-q", str(upstream), "cortex"], check=True)
+        subprocess.run([*git, "-C", str(self.project), "commit", "-q", "-m", "the submodule"], check=True)
+        proc = harness.run("init", cwd=project, env=self._with_git())
+        err = proc.stderr.decode()
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("cortex/ is a git submodule", err)
+        self.assertNotIn("worktree remove", err)
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_worktree_is_no_submodule(self):
         other = self.tmp / "other"
         git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI"]
