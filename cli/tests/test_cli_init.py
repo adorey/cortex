@@ -1115,6 +1115,28 @@ class OptionTests(InitTestCase):
         self.assertEqual(sorted(status.stdout.splitlines()), ["D  .gitmodules", "D  cortex"])
 
     @unittest.skipUnless(HAS_GIT, "needs git")
+    def test_a_submodule_its_settings_hide_from_diff(self):
+        # submodule.cortex.ignore = all hides a staged submodule from git diff, not from git rm.
+        git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-c", "protocol.file.allow=always"]
+        upstream = self.tmp / "upstream"
+        subprocess.run(["git", "init", "-q", str(upstream)], check=True)
+        subprocess.run([*git, "-C", str(upstream), "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        subprocess.run([*git, "-C", str(self.project), "commit", "-q", "--allow-empty", "-m", "root"], check=True)
+        subprocess.run([*git, "-C", str(self.project), "submodule", "add", "-q", str(upstream), "cortex"], check=True)
+        subprocess.run(["git", "-C", str(self.project), "config", "submodule.cortex.ignore", "all"], check=True)
+        proc = harness.run("init", cwd=self.project, env=self._with_git())
+        self.assertEqual(proc.returncode, 1)
+        commands = self._shown(proc.stderr.decode())
+        self.assertIn(f"git -C {quote(display(self.project))} rm -f cortex", commands)
+        if os.name == "nt":
+            return
+        for command in commands:
+            subprocess.run(command, shell=True, check=True, capture_output=True)
+        status = subprocess.run(["git", "-C", str(self.project), "status", "--short"], capture_output=True, text=True)
+        self.assertEqual(status.stdout, "")
+
+    @unittest.skipUnless(HAS_GIT, "needs git")
     def test_a_project_in_a_directory_named_worktrees(self):
         # Its submodule's repository is .git/modules/worktrees/cortex: no worktree's, which holds commondir.
         git = ["git", "-c", "user.email=ci@example.com", "-c", "user.name=CI", "-c", "protocol.file.allow=always"]
