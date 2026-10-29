@@ -152,5 +152,6 @@ ADR files       : ADR-{NNN}-{kebab-case-title}.md (e.g. ADR-001-event-driven-mod
 - `frameworks/` → load the project's framework(s) (+ `frameworks/starlight.md` when the project uses Starlight)
 - `databases/` → load the project’s DBMS
 - `infrastructure/` → load relevant infra (Docker, Kubernetes)
+- `release/` → always load `release/semver.md` — API stability, deprecation flow, breaking-change strategy
 - `security/` → always load `security/owasp.md`
 - `practices/` → always load `practices/code-comments.md` — the why, not the what; descriptive, not narrative

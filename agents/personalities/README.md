@@ -21,6 +21,7 @@ personalities/
 | Theme | Inspired by | Style |
 |-------|-------------|-------|
 | `h2g2/` | The Hitchhiker's Guide to the Galaxy | British humour, SF, benevolent absurdity |
+| `breaking-bad/` | Breaking Bad / Better Call Saul | High-stakes precision, dry dark humour, obsession with purity |
 
 ## Creating a theme
 
