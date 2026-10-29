@@ -37,6 +37,8 @@
 - [ ] Write the INELIGIBLE column with the reason (compliance / maintenance / integration / operations)
 - [ ] Resist the temptation to widen. A narrow defensible file beats a broad indefensible one
 
+**Deliverable:** The eligible / ineligible split, with one sentence of uncertainty or of reason per item.
+
 ---
 
 ### Step 2 — State of the art & uncertainty
@@ -50,6 +52,8 @@
 - [ ] Where this is recorded (decision records are the natural home)
 - [ ] 🔁 **Process fix:** add a "state of the art & uncertainty" section to the decision-record template
       so the next file writes itself
+
+**Deliverable:** For each eligible item, the state of the art reviewed, the uncertainty stated, and where it is recorded.
 
 ---
 
@@ -65,6 +69,8 @@
 - [ ] Model combination rules: grants typically reduce tax-credit bases
 - [ ] Build the calendar of windows with the earliest hard deadline first
 
+**Deliverable:** The matching instruments, each with its verified rate, ceiling, expiry and conditions, and the calendar of windows.
+
 ---
 
 ### Step 4 — Evidence
@@ -76,6 +82,8 @@
 - [ ] Verify granularity is defensible (who, when, on what)
 - [ ] Identify gaps between the claim and the evidence — reduce the claim, not the standard
 - [ ] Propose the tagging convention that makes next year's extraction automatic
+
+**Deliverable:** Time per eligible item, traced to the tracker, and a claim reduced wherever the evidence falls short.
 
 ---
 
@@ -90,6 +98,8 @@
 - [ ] Instruments claimed, with rates and computation
 - [ ] Explicit statement of what was excluded and why (this paragraph is a defence asset)
 
+**Deliverable:** The technical file, ready to submit, including what was excluded and why.
+
 ---
 
 ### Step 6 — Arbitration & submission
@@ -101,6 +111,8 @@
 - [ ] Name the owner and the deadline for each submission
 - [ ] Decide whether external advisory support is needed
 - [ ] Confirm the roadmap is not being distorted to fit a scheme
+
+**Deliverable:** The go / no-go of each submission, with its owner and its deadline.
 
 ---
 
