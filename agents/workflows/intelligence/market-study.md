@@ -41,6 +41,8 @@ This workflow activates when the prompt contains formulations such as:
 - [ ] List what is already known internally (prior studies, deal loss reports, RFP analyses)
 - [ ] Agree the evidence grading convention (verified / measured / declarative / estimated)
 
+**Deliverable:** The study's brief: the decisions it serves and who takes them, the perimeter, what is out of scope, and the grading convention.
+
 ---
 
 ### Step 2 — Internal evidence
@@ -53,6 +55,8 @@ This workflow activates when the prompt contains formulations such as:
 - [ ] Note the phrasing traps (what a figure does and does not license you to say)
 - [ ] Mine existing internal corpora: RFP analyses, feature matrices, lost-deal notes, support themes
 - [ ] Identify assets the market does not know we have
+
+**Deliverable:** The product's footprint in numbers, each figure with its source and what it licenses you to say, and the assets the market does not know about.
 
 > Most diversification studies fail here: they describe an external market against an imagined version
 > of the product.
@@ -73,6 +77,8 @@ This workflow activates when the prompt contains formulations such as:
 - [ ] Note which competitors have already made the move we are considering
 - [ ] Write the symmetric position table: where we win / where we lose
 
+**Deliverable:** The buyer and the driver calendar, the four rings mapped, and the symmetric table of where we win and where we lose.
+
 ---
 
 ### Step 4 — Adjacency scoring
@@ -87,6 +93,8 @@ This workflow activates when the prompt contains formulations such as:
 - [ ] For each serious axis, pose build / partner / acquire explicitly with cost, delay, risk
 - [ ] Write the exclusion list and the reason for each exclusion
 
+**Deliverable:** The scoring grid, build / partner / acquire for each serious axis, and the exclusion list with its reasons.
+
 ---
 
 ### Step 5 — Fundability
@@ -99,6 +107,8 @@ This workflow activates when the prompt contains formulations such as:
 - [ ] List instruments with jurisdiction, territorial condition, window and ceiling
 - [ ] Flag any axis that is fundable *only* (not viable on own funds) — it is a project, not a product line
 
+**Deliverable:** Each axis marked with the uncertainty it would resolve, or "none", and the matching instruments with their conditions.
+
 ---
 
 ### Step 6 — Limits
@@ -110,6 +120,8 @@ This workflow activates when the prompt contains formulations such as:
 - [ ] Regulatory barriers to entry on each axis (licences, certifications, accreditations)
 - [ ] Contractual limits with existing customers and partners
 - [ ] Group-level conflicts: is a sister entity already on this market?
+
+**Deliverable:** The limits of each axis, in writing: data reuse, regulatory barriers, contractual limits, group-level conflicts.
 
 ---
 
@@ -125,6 +137,8 @@ This workflow activates when the prompt contains formulations such as:
 - [ ] Risk table including dispersion and inaction
 - [ ] Decisions requested, as answerable questions with named owners
 - [ ] Full source list with links; internal sources cited by path
+
+**Deliverable:** The decision document, with the decisions requested as answerable questions and their owners.
 
 ---
 
