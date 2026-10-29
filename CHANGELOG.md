@@ -7,6 +7,9 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Changed
+- **`cortex-core` needs Python 3.11 or later**, as the CLI and the runtime already did ([#177](https://github.com/adorey/cortex/issues/177)). The 3.9 floor served the shim that ran the core from source on a host, with its system Python (ADR-007 §3.3); the `cortex` binary replaced it in 1.0.0, and a host needs no Python since. CI runs the core's tests on the Python that `ubuntu-latest` and `macos-latest` ship, and on 3.11: the 3.9 job stopped before any test once `ubuntu-latest` became Ubuntu 26.04, which ships no 3.9.
+
 ## [1.2.0] - 2026-10-29 — Share and Enjoy _(Released)_
 [Full notes](changelog/1.2.0.md)
 
