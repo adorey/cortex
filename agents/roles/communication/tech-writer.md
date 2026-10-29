@@ -144,3 +144,4 @@ Changelog       : CHANGELOG.md following Keep a Changelog format
 
 **Categories to load:**
 - `frameworks/starlight.md` → load when the project uses Starlight (conventions, frontmatter rules, i18n, component overrides)
+- `release/` → always load `release/changelog.md` and `release/semver.md` — changelog discipline, release notes, deprecation announcements

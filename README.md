@@ -124,13 +124,15 @@ cortex/
 │   │   ├── frameworks/                # symfony, vue, starlight
 │   │   ├── infrastructure/            # docker, kubernetes
 │   │   ├── databases/                 # mysql, postgresql, mongodb
+│   │   ├── release/                   # semver, changelog, conventional-commits, release-please
 │   │   ├── search/                    # opensearch
 │   │   ├── testing/                   # component-testing, e2e-testing
 │   │   ├── practices/                 # code-comments
 │   │   └── security/                  # owasp
 │   │
 │   ├── personalities/                 # Layer 3: Personality themes
-│   │   └── h2g2/                      # H2G2 theme (The Hitchhiker's Guide)
+│   │   ├── h2g2/                      # H2G2 theme (The Hitchhiker's Guide)
+│   │   └── breaking-bad/              # Breaking Bad / Better Call Saul theme
 │   │
 │   └── workflows/                     # Layer 4: Multi-agent orchestration templates
 │       ├── engineering/               # feature-development
