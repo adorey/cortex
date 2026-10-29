@@ -87,3 +87,14 @@ Every external figure carries a grade. No grade, no figure.
 ❌ Reusing last year's study's figures without re-dating them
 ❌ Anonymous claims: "it is known that…"
 ```
+
+## ✅ Quick checklist
+
+- [ ] Every claim about the outside world carries its grade: ✅ 📊 🌐 📐
+- [ ] No 🌐 was promoted to ✅ between the draft and the final version
+- [ ] Every 📐 estimate shows its derivation, inline
+- [ ] Every figure is dated, its denominator stated, and none is summed across vendors
+- [ ] The strongest case against the recommendation was written before the recommendation
+- [ ] Sources were searched in the order above, not from memory
+- [ ] Observation and interpretation are kept apart, and a contradiction between sources keeps both
+- [ ] No source is used that would be embarrassing to quote in the deliverable
