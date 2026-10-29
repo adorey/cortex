@@ -1,8 +1,8 @@
 """The grammar of ``cortex.toml`` and ``cortex.local.toml`` — ADR-008 §3.4.
 
 One definition for the two readers, the ``cortex`` command and the runtime, so that neither
-accepts a file the other refuses. It checks what a TOML parser returned: the core runs on Python
-3.9, which has no ``tomllib``; both readers have it.
+accepts a file the other refuses. It checks what a TOML parser returned: each reader parses the file
+with its own ``tomllib``.
 
 Versions and theme names are ASCII, matched whole: ``\\d`` would take the digits of any script,
 and ``$`` a trailing newline — ``"1.0.0\\n"`` would then name a directory of the store.

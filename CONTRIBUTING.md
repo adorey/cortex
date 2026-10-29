@@ -51,7 +51,7 @@ cortex/
 ### Prerequisites
 
 - Git (for cloning your fork)
-- Python 3.11 or later, to run the `cortex` command from your checkout — `cortex-core` alone runs on 3.9
+- Python 3.11 or later, to run the `cortex` command and `cortex-core` from your checkout
 - Nothing else: a host project needs neither Bash nor Python, only the `cortex` binary
 
 ### Clone & test loop

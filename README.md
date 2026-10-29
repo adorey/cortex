@@ -141,7 +141,7 @@ cortex/
 ├── core/                              # ── cortex-core — the cascade in code (ADR-007) ──
 │   ├── cortex_core/                   # resolution, merge semantics, capability catalog,
 │   │                                  #   prompt assembly — standard library only
-│   └── tests/                         # runs on Python 3.9+ with nothing installed
+│   └── tests/                         # runs on Python 3.11+ with nothing installed
 │
 ├── cli/                               # ── the `cortex` command (ADR-008) ──
 │   ├── cortex_cli/                    # init, sync, validate — built into a native binary
