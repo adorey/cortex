@@ -7,7 +7,7 @@ cascade, applying its merge semantic, finding a role, a workflow or a character,
 capabilities the cascade offers, assembling an agent's system prompt, and validating overlays.
 The [runtime](../runtime/README.md) and the [`cortex` command](../cli/README.md) consume it.
 
-- **Standard library only, Python 3.9 or later.** It runs from source with nothing installed —
+- **Standard library only, Python 3.11 or later.** It runs from source with nothing installed —
   the runtime and the tests use it so — and the `cortex` binary embeds nothing else.
 - **It never imports the runtime.** A test fails if it does.
 
