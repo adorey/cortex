@@ -409,9 +409,15 @@ def leaving(path: Path) -> str:
         if gitdir is not None:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
-        # A clone made a submodule in place is the likeliest to hold the developer's own work.
-        own = (f"The submodule keeps its repository in {LINK}/.git, as a clone made a submodule in place does, "
-               f"and it goes with the submodule. {_checks(path)}" if (path / ".git").is_dir() else "")
+        # A clone made a submodule in place is the likeliest to hold the developer's own work; any
+        # submodule's repository may hold some, and deinit -f throws away its changes first (#170).
+        if (path / ".git").is_dir():
+            own = (f"The submodule keeps its repository in {LINK}/.git, as a clone made a submodule in place does, "
+                   f"and it goes with the submodule. {_checks(path)}")
+        elif gitdir is not None and os.path.isdir(gitdir):
+            own = f"Its repository, {display(gitdir)}, goes with the submodule. {_checks(path)}"
+        else:
+            own = ""
         return (f"Cortex now lives in the store, and the submodule is to go. {own}These commands rewrite the git "
                 f"state of the project at {root}, so they are shown here, not run:\n\n{shown}\n"
                 "Then run the command again. The migration guide covers it: "
@@ -422,8 +428,8 @@ def leaving(path: Path) -> str:
                 f"checked it holds nothing of yours:\n\n    git --git-dir {quote(display(common))} worktree remove "
                 f"{quote(display(str(path)))}\n\nThen run the command again.")
     if kind == "clone":
-        return ("Cortex now lives in the store, and the clone is to go. Once you have checked it holds "
-                f"nothing of yours:\n\n    {_remove_command(display(str(path)))}\n\nThen run the command again.")
+        return (f"Cortex now lives in the store, and the clone is to go. {_checks(path)}"
+                f"Then remove it:\n\n    {_remove_command(display(str(path)))}\n\nThen run the command again.")
     return "Move or remove it, then run the command again."
 
 

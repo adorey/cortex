@@ -464,7 +464,10 @@ class OptionTests(InitTestCase):
                 err = proc.stderr.decode()
                 self.assertNotEqual(proc.returncode, 0)
                 self.assertIn("cortex/ is a git submodule", err)
-                self.assertNotIn("Check first", err)          # the repository is under .git/modules/
+                # Its repository under .git/modules/ may hold work of theirs: the checks come first (#170).
+                self.assertIn(f"Its repository, {display(self.project / '.git' / 'modules' / 'cortex')}, goes with", err)
+                self._checks_printed(err, self.project / "cortex")
+                self.assertLess(err.index("stash list"), err.index("submodule deinit -f"))
                 root = display(self.project)
                 for line in (f"git -C {quote(root)} submodule deinit -f cortex", f"git -C {quote(root)} rm cortex",
                              remove(display(self.project / ".git" / "modules" / "cortex"))):
@@ -717,6 +720,9 @@ class OptionTests(InitTestCase):
         proc = self.init()
         self.assertEqual(proc.returncode, 1)
         self.assertIn("cortex/ is a git clone", proc.err)
+        # A clone may hold commits or a stash of the developer's: the checks come before its removal (#170).
+        self._checks_printed(proc.err, self.project / "cortex")
+        self.assertLess(proc.err.index("stash list"), proc.err.index(remove(display(self.project / "cortex"))))
         self.assertIn(f"    {remove(display(self.project / 'cortex'))}\n", proc.err)
         self.assertEqual(sorted(p.name for p in self.project.iterdir()), ["cortex"])
 
