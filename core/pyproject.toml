@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "cortex-core"
 version = "0.1.0"
 description = "The one implementation of the Cortex cascade in code: resolution, merge semantics, capability catalog, prompt assembly and overlay validation (ADR-007)."
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 readme = "README.md"
-# No dependency, on purpose: the core must run from source on a host machine, with no
-# install step (ADR-007 §3.3). Anything added here breaks the validator's shim.
+# No dependency, on purpose: the core is standard library only (ADR-007 §3.3), and the
+# `cortex` binary embeds nothing else (ADR-008).
 dependencies = []
 
 [tool.setuptools.packages.find]
