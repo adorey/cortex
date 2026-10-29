@@ -56,7 +56,6 @@ class StandardLibraryOnlyTests(unittest.TestCase):
     """ADR-007 §3.3 — no third-party dependency. The shim imports the core from a checkout, with
     nothing installed: the core may import the standard library and itself, nothing else."""
 
-    @unittest.skipIf(sys.version_info < (3, 10), "sys.stdlib_module_names needs Python 3.10")
     def test_the_core_imports_the_standard_library_only(self):
         allowed = set(sys.stdlib_module_names) | {"cortex_core"}
         offenders = [
