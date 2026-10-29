@@ -8,11 +8,35 @@ release note under [`changelog/`](changelog/).
 ## [Unreleased]
 
 ### Added
+- `breaking-bad` personality theme — *Breaking Bad* / *Better Call Saul*: seventeen characters covering every role, from @Saul (prompt manager) to @Howard (regulatory compliance writer), with themed workflows. Activate it with `cortex init --theme breaking-bad`, or `theme = "breaking-bad"` in `cortex.toml` — in `cortex.local.toml` for one developer.
 - **Market intelligence roles and workflows.** Two roles in `agents/roles/product/`:
   - `market-analyst` — the buyer before the market, the trigger rather than the need, four rings of competition, adjacency scored rather than argued, every claim graded, and what we will not do stated;
   - `innovation-funding-advisor` — the eligibility test before any scheme, and a two-column reading of R&D and innovation. The rates and windows of a jurisdiction stay in a capability of the project.
 
   Two workflows in `agents/workflows/intelligence/` that orchestrate them: `market-study`, from scoping to a decision document, and `innovation-funding`, from eligibility triage to submission. One capability, `practices/competitive-intelligence` — sourcing, evidence grading, bias control. In `h2g2`, Zarniwoop plays the market analyst and Hotblack Desiato the funding advisor.
+
+## [1.1.2] - 2026-10-29 — Know Where Your Towel Is _(Released)_
+[Full notes](changelog/1.1.2.md)
+
+### Fixed
+- **A submodule whose repository is its own `.git` directory** ([#157](https://github.com/adorey/cortex/issues/157)) — `git submodule add` leaves one when run on an existing clone. It was handled wrongly in these cases:
+  - **The migrator's clone.** `git submodule deinit` refuses that repository before git 2.35, and from then on moves it under `.git/modules/`, where nothing removed it. The commands `cortex init` prints now begin with `git submodule absorbgitdirs`, which moves it there on any git, and end with its removal, under the name git gives the submodule. If a repository is in that place already — an earlier submodule's, which `git rm` keeps, or another one's — git cannot move it there: `cortex init` says so, and prints no command that would fail.
+  - **The developer who added the submodule that way, after pulling its removal.** Their `cortex/` was taken for a plain clone: it gets the teammate's checks and the removal of the submodule's settings, as #147 gave every other teammate.
+  - **A submodule whose index is not its last commit** — staged and never committed, or with a new commit staged. It gets `git rm -f`, which git requires there.
+  - **A project in a subdirectory of its repository.** git names its submodule by its path from the top, `app/cortex`. The removal of the submodule's settings, which a teammate gets after the pull, now names that section, where 1.1.1 named `submodule.cortex` — another submodule's, if the top of the repository has one.
+- **A submodule in a linked worktree of the project is no longer taken for a worktree** ([#158](https://github.com/adorey/cortex/issues/158)). Its repository is under `.git/worktrees/<worktree>/modules/`, and the refusal printed a `git worktree remove` that could not work. It now gets the submodule's commands, the migrator's or the teammate's. A worktree is told by the `commondir` file of its administrative directory, which no submodule's repository holds: a project in a directory named `worktrees` is not taken for one either.
+- **`cortex init`'s refusals name Cortex, and the command to run again** ([#159](https://github.com/adorey/cortex/issues/159)). A link, an unreadable `.synced` or a copy with files of yours at `cortex/` named *cortex sync*, and said to run it again — and so did a sync that lost a race or waited too long for the lock. Run by `cortex init`, relaunching `cortex sync` alone did not finish the job: they now say *the command*.
+- **The checks before removing a teammate's `cortex/` list stashes, and commits only the reflog holds** ([#160](https://github.com/adorey/cortex/issues/160)): `--reflog` joins the second check, and `git stash list` is the third. A commit made on a detached HEAD and left behind by a `git submodule update`, or a stash, would have been deleted with `cortex/` after checks that showed nothing. The second check prints each commit's author: the reflog also keeps commits that no Cortex branch holds any more, rewritten or deleted upstream, which are not yours. The migrator gets the three checks too when the submodule's repository is its own `cortex/.git`, which the commands now remove (#157).
+
+## [1.1.1] - 2026-09-30 — Unpleasantly Like Being Drunk _(Released)_
+[Full notes](changelog/1.1.1.md)
+
+### Fixed
+- **A teammate who pulled the submodule's removal is no longer sent to commands that cannot run** ([#147](https://github.com/adorey/cortex/issues/147)). After such a pull, git has dropped `cortex` from the index and kept the directory, the submodule's repository and its settings: `git submodule deinit` and `git rm` had nothing left to act on, and `cortex sync` refused again. It now tells the two states apart — asking git whether the index still holds the submodule — and prints, for the teammate, the commands that remove what the pull left. Before them come two checks: what changed in `cortex/`, ignored files included — but the theme marker `setup.sh` wrote — and the commits no remote branch holds. If a command 1.0.0 or 1.1.0 printed already removed the submodule's repository, it says instead that git can no longer show what changed.
+- **The last submodule leaves no empty `.gitmodules`:** `git rm cortex` empties the file and keeps it tracked, so the commands `cortex init` prints include `git rm -f .gitmodules` when `cortex` was the only submodule.
+- The refusal of a `cortex/` that is a submodule, a clone or another directory Cortex did not write names Cortex, not *cortex sync*: `cortex init` prints it too.
+- **A binary no longer carries the checksums of pre-releases** ([#151](https://github.com/adorey/cortex/issues/151)): 1.0.0 and 1.1.0 knew `0.0.0-alpha.1`'s, which no binary serves. A pre-release is thrown away or built again under its tag, and a checksum kept for it would have the binaries built meanwhile refuse the new build. A pre-release is checked against its release's `SHA256SUMS` alone, like a release newer than the binary.
+- The CLI suite no longer breaks when a theme is added ([#148](https://github.com/adorey/cortex/issues/148)): a test listed the shipped themes by hand, and reads them from its spec now.
 
 ## [1.1.0] - 2026-09-30 — Vogon Poetry _(Released)_
 [Full notes](changelog/1.1.0.md)
