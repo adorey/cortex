@@ -56,7 +56,6 @@ class StandardLibraryOnlyTests(unittest.TestCase):
     """ADR-007 §3.3 — no third-party dependency. The shim imports the core from a checkout, with
     nothing installed: the core may import the standard library and itself, nothing else."""
 
-    @unittest.skipIf(sys.version_info < (3, 10), "sys.stdlib_module_names needs Python 3.10")
     def test_the_core_imports_the_standard_library_only(self):
         allowed = set(sys.stdlib_module_names) | {"cortex_core"}
         offenders = [
@@ -170,7 +169,8 @@ class TestLayoutTests(unittest.TestCase):
         # ext4 directory listing. The validator now lists in name order (ADR-008 §3.1): a module
         # added later must run on macOS too, without anyone listing it.
         workflow = (self.REPO / ".github" / "workflows" / "core-tests.yml").read_text(encoding="utf-8")
-        self.assertIn("/usr/bin/python3 -m unittest discover -s tests", workflow)
+        macos = workflow.split("\n  macos:\n", 1)[1]
+        self.assertIn("python3 -m unittest discover -s tests", macos)
         self.assertEqual(re.findall(r"\btests\.(test_\w+)", workflow), [])
 
 
