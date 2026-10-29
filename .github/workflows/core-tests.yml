@@ -25,31 +25,38 @@ concurrency:
 
 jobs:
   test:
-    name: cortex-core (Python ${{ matrix.python-version }})
+    name: cortex-core (${{ matrix.label }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 is the floor ADR-007 promises. A floor CI never runs on is a claim, not a guarantee.
-        python-version: ["3.9", "3.12"]
+        include:
+          # The Python the image ships — whatever `ubuntu-latest` is — and the floor of
+          # pyproject.toml, 3.11, as the CLI and the runtime have. A floor CI never runs on is a
+          # claim, not a guarantee.
+          - { label: "Ubuntu, image's Python", python-version: "" }
+          - { label: "Python 3.11", python-version: "3.11" }
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
+      - if: matrix.python-version != ''
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Nothing is installed, on purpose: the core must run from source (ADR-007 §3.3).
+      # Nothing is installed, on purpose: the core runs from source (ADR-007 §3.3).
       - name: Run the core suite
         working-directory: core
-        run: python -m unittest discover -s tests -v
+        run: |
+          python3 --version
+          python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))'
+          python3 -m unittest discover -s tests -v
 
   macos:
-    # Apple's own Python — the 3.9.6 of the Command Line Tools that ADR-007 §3.3 names — on a
-    # file system that ignores case, where two spellings of one directory must still be one.
-    # The whole suite: the validator lists files in name order, not in the file system's, so
-    # the outputs captured on ext4 hold on APFS too (ADR-008 §3.1).
-    name: cortex-core (macOS, system Python)
+    # The Python the image ships, on a file system that ignores case, where two spellings of one
+    # directory must still be one. The whole suite: the validator lists files in name order, not
+    # in the file system's, so the outputs captured on ext4 hold on APFS too (ADR-008 §3.1).
+    name: cortex-core (macOS, image's Python)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,5 +64,6 @@ jobs:
       - name: Run the core suite
         working-directory: core
         run: |
-          /usr/bin/python3 --version
-          /usr/bin/python3 -m unittest discover -s tests -v
+          python3 --version
+          python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))'
+          python3 -m unittest discover -s tests -v
