@@ -7,7 +7,7 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
-## [1.1.2] - 2026-10-19 — Know Where Your Towel Is _(Released)_
+## [1.1.2] - 2026-10-29 — Know Where Your Towel Is _(Released)_
 [Full notes](changelog/1.1.2.md)
 
 ### Fixed
