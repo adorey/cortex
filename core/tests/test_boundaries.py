@@ -169,7 +169,8 @@ class TestLayoutTests(unittest.TestCase):
         # ext4 directory listing. The validator now lists in name order (ADR-008 §3.1): a module
         # added later must run on macOS too, without anyone listing it.
         workflow = (self.REPO / ".github" / "workflows" / "core-tests.yml").read_text(encoding="utf-8")
-        self.assertIn("/usr/bin/python3 -m unittest discover -s tests", workflow)
+        macos = workflow.split("\n  macos:\n", 1)[1]
+        self.assertIn("python3 -m unittest discover -s tests", macos)
         self.assertEqual(re.findall(r"\btests\.(test_\w+)", workflow), [])
 
 
