@@ -242,6 +242,21 @@ So every workflow that gates `main`:
 
 The ruleset requires the summary jobs, by names that no matrix changes.
 
+**No bypass is a rule, not a lock.** Whoever administers the repository can still disable the ruleset: its owner, for a personal repository; the organisation's owners and the repository's administrators, for an organisation's. It is disabled only when the cycle itself cannot run, and the change that would fix it cannot merge through the ruleset that blocks it:
+
+- GitHub Actions is down for longer than the change can wait;
+- a required check cannot run at all, for a renamed job or a runner image gone.
+
+The procedure:
+
+1. open an issue labelled `type:infra` saying why;
+2. disable the ruleset — never delete it, and never add a bypass;
+3. make the one change, still as a release: through a pull request when GitHub allows it, its release note included, so that the push makes its draft;
+4. enable the ruleset again with `bin/setup-release.sh`. Until then, `bin/setup-release.sh --check` reports the drift;
+5. close the issue with what was done.
+
+Disabling the ruleset touches no release: immutability is a setting of its own.
+
 ## 4. Phases
 
 Execution order: **1 → 2 → 3 → 4**. All four gate the release that ships this ADR: that release is the first one made by the cycle.
@@ -307,7 +322,7 @@ It then runs `bin/setup-release.sh` on this repository and publishes the release
 
 Acceptance criteria:
 
-- `bin/setup-release.sh --check adorey/cortex` reports no drift
+- `bin/setup-release.sh --check adorey/cortex` reports no drift, and reports it again once the ruleset is disabled
 - a direct push to `main` is refused, with an administrator's token too
 - a release candidate of the release that ships this ADR is published from the integration branch through phases 2 and 3, installed by `install.sh <version>` on a clean machine, and pinned and synced by a throwaway project
 - the release that ships this ADR is made by the cycle: its draft is built from the merge, published from the Releases page, and its guard is green; `releases/latest/download/SHA256SUMS` answers `200` throughout
@@ -330,7 +345,7 @@ Acceptance criteria:
 ### Negative
 
 - **A mistake after publication costs a version number.** The release can be deleted, but its tag name is never reused.
-- **Nobody can push to `main` or bypass a check, administrators included.** An urgent fix is a patch release through a pull request, its checks included.
+- **Nobody can push to `main` or bypass a check, administrators included.** An urgent fix is a patch release through a pull request, its checks included. The one way around it is to disable the ruleset by the procedure of §3.10, which leaves an issue behind, and a drift `--check` reports until it is undone.
 - **A waiting draft blocks the next merge into `main`**: publish it or discard it first.
 - **The draft comes a quarter of an hour after the merge**, and the Windows build is most of that time.
 - **Every workflow starts on every pull request**, a documentation one included. A first job reads the changed files and skips the rest, at the cost of a few seconds of runner.
