@@ -94,8 +94,11 @@ A push to `main` runs the release job, with no `paths` filter: every push is a r
   - the spec archive, from `git archive` of the merge commit;
   - `SHA256SUMS`, and an attestation for each asset and for each binary.
 - **The draft** is titled `X.Y.Z`, with `changelog/X.Y.Z.md` as its body and the six assets. Its `target_commitish` is the merge commit's SHA, not `main`, which may move. It creates no tag: a draft has none until it is published.
-- **A draft is never rebuilt.** If a release named `X.Y.Z` exists, draft or not, the job stops. A new commit is a new version, through a new pull request.
-  - A draft is either published or discarded.
+- **The draft is created last**, once the six assets are built and checked, so that a failure while building leaves nothing behind. Uploading them can still fail half-way, which the next rule recovers.
+- **A draft is never rebuilt from another commit.** If a release named `X.Y.Z` exists, the job looks at it:
+  - a published release, or a draft whose `target_commitish` is another commit: the job stops and changes nothing. A new commit is a new version, through a new pull request;
+  - a draft whose `target_commitish` is this push's merge commit is the job's own, left by a run that failed: the job deletes it and makes it again. A re-run after a lost runner or a cut upload ends with a complete draft, and costs no version number, since a draft has no tag and immutability applies from publication.
+- **A draft is either published or discarded.**
   - A discarded draft's number is spent: its section is in `main`'s `CHANGELOG.md`, so the gate refuses it again (§3.2, 2).
   - The fix is the next patch, whose release pull request marks the spent version's section `_(Not published)_`.
 
@@ -157,7 +160,7 @@ Each stage is optional: a patch goes straight to the release.
 - the version is `X.Y.Z-(alpha|beta|rc).N`, `X.Y.Z` is higher than every release, and the version is higher than every pre-release of `X.Y.Z` (no beta after an rc);
 - no tag or release is named after it, and no draft is waiting.
 
-It then makes the same build and the same draft as a release (§3.3), marked as a pre-release and not latest, with the branch's commit as its target. The maintainer publishes it, and the guard checks it.
+It then makes the same build and the same draft as a release (§3.3), marked as a pre-release and not latest, with the branch's commit as its target. A re-run of that run recovers its own draft by the same rule. The maintainer publishes it, and the guard checks it.
 
 **The note** opens with a banner saying it is a pre-release of `X.Y.Z`, not for production. The rest is `changelog/X.Y.Z.md` when the branch has it, and otherwise the `[Unreleased]` section of the branch's `CHANGELOG.md`. A pre-release has no section of its own in `CHANGELOG.md`: the release's section covers it.
 
@@ -263,7 +266,9 @@ The `release-version` and `release-draft` actions. The release job runs on a pus
 Acceptance criteria:
 
 - a push to `main` that adds `changelog/X.Y.Z.md` leaves a draft `X.Y.Z` with the six assets, the note as its body and the pushed commit as its target, and creates no tag
-- a push that adds no note or two, or whose version already has a release, draft or not, fails, and creates and changes nothing
+- a push that adds no note or two, or whose version already has a published release or a draft of another commit, fails, and creates and changes nothing
+- a re-run after a run that failed while uploading leaves one complete draft, with the six assets
+- a re-run once the release is published changes nothing
 - a version tag pushed by hand starts no release job
 - *Run workflow* on a `release/**` branch with `X.Y.Z-rc.1` leaves a draft pre-release, not latest, whose note opens with the banner
 - *Run workflow* fails and creates nothing in each of these cases: run on `main`; given `X.Y.Z-rc1`; given a beta after an rc; given a taken number
