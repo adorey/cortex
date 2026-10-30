@@ -39,7 +39,7 @@ Four more things shape the decision:
 
 ## 2. Decision
 
-**Every merge into `main` is a release, and nothing else reaches `main`. The version is the release note the pull request adds, checked before it may merge. CI builds the merge and leaves it as a draft release with every asset on it. The maintainer publishes it from the Releases page, and GitHub creates the tag then. A published release is immutable. Pre-releases — alpha, beta, release candidates — are versions too, cut by hand from the integration branch through the same draft. The cycle is written as composite actions in this repository, which Cortex calls by path, and which carry nothing of Cortex, so that they move out as they are when a second project adopts the cycle.**
+**Every merge into `main` is a release, and nothing else reaches `main`. The version is the release note the pull request adds, checked before it may merge. CI builds the merge and leaves it as a draft release with every asset on it. The maintainer publishes it from the Releases page, and GitHub creates the tag then. A published release is immutable. Pre-releases — alpha, beta, release candidates — are versions too, cut by hand from the integration branch through the same draft. An older major version lives on a branch of its own, `N.x`, and releases through the same cycle. The cycle is written as composite actions in this repository, which Cortex calls by path, and which carry nothing of Cortex, so that they move out as they are when a second project adopts the cycle.**
 
 For the maintainer, a release becomes: merge the release pull request, wait for the draft, press *Publish release*. Nobody pushes a version tag.
 
@@ -65,11 +65,11 @@ The one exception is that a binary also knows the spec archives of immutable pre
 
 ### 3.2 The release gate — what may merge into `main`
 
-The release gate is a check on every pull request into `main`, required by the ruleset (§3.10). It reads the pull request's diff against its base and the repository's releases, and it passes only when:
+The release gate is a check on every pull request into `main` or into a line's branch (§3.11), required by the ruleset (§3.10). It reads the pull request's diff against its base and the repository's releases, and it passes only when:
 
-1. the pull request adds **exactly one** release note, `changelog/X.Y.Z.md`, where `X.Y.Z` is a version with no suffix;
+1. the pull request adds **exactly one** release note of a version that has no release yet, `changelog/X.Y.Z.md`, where `X.Y.Z` is a version with no suffix. A fix carried up from an older line brings that line's notes, whose versions have their releases, and they do not count (§3.11);
 2. the first section of `CHANGELOG.md` after `## [Unreleased]` is `## [X.Y.Z] - YYYY-MM-DD — <name> _(Released)_`, with the same `X.Y.Z`, the base's `CHANGELOG.md` has no section for `X.Y.Z`, and `YYYY-MM-DD` is the day the gate runs, in UTC;
-3. `X.Y.Z` is higher than every release, that is every version tag without a suffix, and no tag or release — draft included — is named `X.Y.Z`. Pre-releases do not count: those of `X.Y.Z` precede it, and those of a later version — a `2.0.0-alpha.1` cut from a long-lived branch — must not block a 1.x release;
+3. `X.Y.Z` is higher than every release of the line the pull request merges into (§3.11) — into `main`, every release, that is every version tag without a suffix; into `N.x`, every `N.*.*` release, with `X` equal to `N` — and no tag or release, draft included, is named `X.Y.Z`. Pre-releases do not count: those of `X.Y.Z` precede it, and those of a later version — a `2.0.0-alpha.1` cut from a long-lived branch — must not block a 1.x release;
 4. no draft release is waiting: one release is in flight at a time.
 
 The gate names the version in its summary. It infers nothing from the state of the repository after the merge: the version is what the pull request adds, checked before the pull request can merge. The name of the branch does not matter.
@@ -79,15 +79,15 @@ Precedence follows semver.org §11, as `cli/cortex_cli/semver.py` does, never `s
 **A release is dated by the day it merges, in UTC.** UTC is the time zone of GitHub's own dates and of a workflow's schedule, and it assumes nothing about where a project's maintainers are. The date cannot be the day of publication: `CHANGELOG.md` is in the spec archive, which is the merge commit's, and a draft can wait. Three dates used to drift apart — the one written, the merge's and the publication's: 1.2.1 says 2026-10-30, and was merged and published on 2026-10-29. A gate that passed the day before would let a stale date merge, so the gate runs again on the day of the merge:
 
 - **where the repository has a merge queue**, every required check, the gate included, also runs on the merge group, at the moment of merging, and that run decides. The queue takes one pull request at a time, so that a push to `main` still carries one release (§3.3);
-- **where it has none** — GitHub offers merge queues to repositories owned by an organisation — a scheduled job re-runs, just after midnight UTC every night, the gate of every open pull request into `main`. A date gone stale turns red, and the pull request cannot merge until its date is corrected.
+- **where it has none** — GitHub offers merge queues to repositories owned by an organisation — a scheduled job re-runs, just after midnight UTC every night, the gate of every open pull request into `main` or into a line's branch (§3.11). A date gone stale turns red, and the pull request cannot merge until its date is corrected.
 
 The release job also compares the date with its merge commit's (§3.3), and reports a difference as a warning in its summary. It does not fail for it: failing there would spend the version over a date.
 
 ### 3.3 The draft — what a merge into `main` produces
 
-A push to `main` runs the release job, with no `paths` filter: every push is a release.
+A push to `main`, or to a line's branch `N.x` (§3.11), runs the release job, with no `paths` filter: every push is a release.
 
-- **The version** comes from the push the same way: the release note added between the push's `before` and `after`. If there is not exactly one, the job fails and creates nothing. Such a push has bypassed the gate, which the ruleset (§3.10) makes impossible, and the failure is the alarm.
+- **The version** comes from the push the same way: the release note added between the push's `before` and `after`, of a version that has no release yet. If there is not exactly one, the job fails and creates nothing. Such a push has bypassed the gate, which the ruleset (§3.10) makes impossible, and the failure is the alarm.
 - **The date** of the release is compared with the merge commit's, in UTC. A difference is a warning in the job's summary, not a failure (§3.2).
 - **The build** is the `binary` workflow's, at `X.Y.Z`:
   - the four targets, the CLI's suite replayed through each binary, and the glibc floor;
@@ -156,7 +156,7 @@ Each stage is optional: a patch goes straight to the release.
 **They are cut by hand**, with *Run workflow* on the branch and the version as its input. The job refuses unless:
 
 - the branch is a `release/**` branch;
-- the version is `X.Y.Z-(alpha|beta|rc).N`, `X.Y.Z` is higher than every release, and the version is higher than every pre-release of `X.Y.Z` (no beta after an rc);
+- the version is `X.Y.Z-(alpha|beta|rc).N`, `X.Y.Z` is higher than every release of its major version and, when no `X.x` branch exists, than every release (§3.11), and the version is higher than every pre-release of `X.Y.Z` (no beta after an rc);
 - no tag or release is named after it, and no draft is waiting.
 
 It then makes the same build and the same draft as a release (§3.3), marked as a pre-release and not latest, with the branch's commit as its target. A re-run of that run recovers its own draft by the same rule. The maintainer publishes it, and the guard checks it.
@@ -218,16 +218,16 @@ So they are written to be moved: no path, name or setting of Cortex inside them,
 
 A repository's settings are not in the repository, so a script applies them. Like `bin/setup-labels.sh`, it is idempotent, and `--check` reports drift without changing anything. An administrator runs it, with their own token: CI has no administrator rights, and should not. It takes the repository as its argument, so the same script sets up the maintainer's other repositories.
 
-- **The ruleset of the default branch:**
+- **The ruleset of the default branch and of every line's branch** (`*.x`, §3.11):
   - changes through a pull request only;
   - no force push and no deletion;
   - merge commits only;
   - required checks: the release gate, the commit messages, and the summary job of every workflow that gates a pull request into `main` — the repository checks, the builds and the tests;
-  - the head branch up to date with `main` before it merges, so that the commit checked is the commit released;
+  - the head branch up to date with its base before it merges, so that the commit checked is the commit released;
   - **no bypass, for anyone, administrators included**.
 - **Immutable releases**: on.
 - **Head branches deleted on merge**, which is what makes a stack collapse ([docs/process/adr-implementation.md](../process/adr-implementation.md) §2).
-- **The merge queue of `main`**, where the repository has one: one pull request per group, merged with a merge commit (§3.2). Where it has none, the nightly re-run of the gate is a workflow of the repository, not a setting.
+- **The merge queue of `main` and of every line's branch**, where the repository has one: one pull request per group, merged with a merge commit (§3.2). Where it has none, the nightly re-run of the gate is a workflow of the repository, not a setting.
 
 **A required check must report on every pull request into `main`.** GitHub waits for a required check by its name, and three things keep a name from ever being reported:
 
@@ -258,6 +258,20 @@ The procedure:
 
 Disabling the ruleset touches no release: immutability is a setting of its own.
 
+### 3.11 Lines — several major versions at once
+
+**A line is a major version.** `main` carries the highest. An older one, once a newer major ships, lives on a branch named after it: `1.x` beside a `main` in 2.x, as Symfony keeps `7.4` beside its default branch. A line moves on its own, for the projects that stay on it: minors and patches, features included.
+
+- **The branch `N.x`** is cut from the commit of the last `N` release, when `(N+1).0.0` ships, or later, the day a project needs it.
+- **Every merge into a line's branch is a release of that line**, through the same cycle: the gate (§3.2), the draft (§3.3), the guard (§3.5), pre-releases from a `release/**` branch cut from the line (§3.7), and the same ruleset (§3.10).
+- **A version is higher than every release of its line** (§3.2, 3): on `N.x`, every `N.*.*` release; on `main`, every release.
+- **`latest` stays the highest version** (§3.5). A release of an older line never takes it, and the default install never installs it: a project on 1.x installs its binary by its version.
+- **A fix goes up.** A fix released on `1.x` reaches `main` through a pull request from `1.x` into `main`, merged with a merge commit, which is a release of `main` like any other: it adds `main`'s own release note. It brings the notes and `CHANGELOG.md` sections of `1.x` with it, and the gate and the release job count only the note of a version that has no release yet (§3.2, 1). In `CHANGELOG.md`, sections stay in version order: `1.5.1` sits below `2.0.0`.
+- **No line per minor version.** SemVer makes a minor version compatible with the one before it: a project on 1.2 takes 1.3 without a change, so one branch per major is enough.
+- **The default branch keeps its name.** Symfony names its default branch after the version in development. Here, `main` is in the install command and in the ruleset of every project that adopts the cycle, so it stays `main`, and carries the newest line.
+
+What a binary serves is ADR-008's (§3.3): every version from 1.0.0 up to its own. A 2.x binary therefore serves a project pinned to 1.x, and a 1.x release published after that binary is checked by its `SHA256SUMS` alone. Whether a 2.x binary can still read a 1.x spec is for the ADR of 2.0 to settle.
+
 ## 4. Phases
 
 Execution order: **1 → 2 → 3 → 4**. All four gate the release that ships this ADR: that release is the first one made by the cycle.
@@ -277,6 +291,8 @@ Acceptance criteria:
 
 - a pull request that touches only `README.md` reports every required check: the tests are skipped, their summaries pass, and it can merge
 - a pull request that breaks a test of the CLI fails the summary of the CLI tests and cannot merge, and so does one whose build fails
+- on a fixture with a published `2.0.0`, the release gate passes a `1.5.0` into `1.x` and refuses it into `main`; a pull request from `1.x` into `main` that brings the published `1.5.1`'s note and adds `2.0.1`'s passes, and names `2.0.1`
+- `bin/setup-release.sh` applies the ruleset to the default branch and to every `*.x` branch
 - no required check of the ruleset is the name of a matrix job
 - a pull request with a commit that has a body, a trailer, or a subject off the pattern fails the commit messages check, which names the commit and the reason; a `BREAKING CHANGE:` footer alone passes; GitHub's merge commits are not checked
 - the release gate fails a pull request into `main` in each of these cases:
@@ -305,6 +321,7 @@ Acceptance criteria:
 - *Run workflow* on a `release/**` branch with `X.Y.Z-rc.1` leaves a draft pre-release, not latest, whose note opens with the banner
 - *Run workflow* fails and creates nothing in each of these cases: run on `main`; given `X.Y.Z-rc1`; given a beta after an rc; given a taken number
 - `--fetch-known-specs` includes an immutable pre-release from 1.0.0 on and excludes a mutable one
+- a push to `1.x` that adds `changelog/1.5.0.md` leaves a draft `1.5.0`, not latest; a push to `main` that brings `1.5.1`'s note and adds `2.0.1`'s makes the draft `2.0.1` only
 
 ### Phase 3 — The guard
 
@@ -347,6 +364,7 @@ Acceptance criteria:
 - **`main` is the list of releases**: every merge commit on it is one, checked before it merged.
 - **No tag to push and no `paths` filter to satisfy**: the run that never started for 1.2.1 cannot happen again.
 - **Real pre-releases**, which a tester installs and a project pins, with the guarantees of a release.
+- **Several major versions live at once**: a project stays on 1.x, and still gets its fixes and features, while `main` moves on (§3.11).
 - **The commit convention holds** without a reviewer having to catch it.
 - **A cycle ready for several projects**: the actions carry nothing of Cortex, and move out as they are (§7).
 
@@ -361,6 +379,7 @@ Acceptance criteria:
 - **Pre-releases stay forever** in the Releases list. This is why the candidates are `rc` and never `test`.
 - **The cycle relies on GitHub** — immutable releases, rulesets, `release: published` — in every project that adopts it.
 - **A history rewrite, which this repository had on 2026-10-30, becomes impossible.** That is the point, and also the cost.
+- **A fix to an older line is two releases**: one on its line, and one on `main` when it goes up (§3.11).
 
 ### Neutral
 
@@ -379,7 +398,8 @@ Acceptance criteria:
 | **Infer the version from the repository after the merge** — the release note with no published release | Ambiguous with two waiting notes or a leftover draft, and decided too late to refuse anything. |
 | **release-please** — a Release PR, the version derived from the commit types | The version is decided by the commits rather than by the maintainer, and the note is generated, where Cortex writes a narrated note with a name and an epigraph. Its capability card stays, for projects that want it. |
 | **Keep throwaway pre-releases** | Impossible once releases are immutable, and a test release that disappears proves less than a candidate that stays. |
-| **Symfony's branch model in full** — a branch per minor version, no `main` | Maintenance branches for a project that maintains no older line. The integration branch already plays the role of Symfony's version branch while it stabilises. |
+| **Symfony's branch model in full** — a branch per minor version, the default branch named after the version in development | SemVer makes one branch per major enough (§3.11). Renaming the default branch at each major would break the install command and every project's ruleset. Symfony's model is kept where it matters: the newest line on the default branch, older ones beside it. |
+| **Fix an older line only after its next major** — a maintenance line as a later extension | The rules of the gate and of the release job would have to change during the incident that needs the fix. Written per line from the start, a line's branch is one more branch, not a redesign. |
 | **Keep the `paths` filters, and require only the workflows that always run** | A release that breaks the tests of the CLI or of the core could merge: its checks are red, and nothing stops it. That is the state from 2026-10-30 until phase 1. |
 | **Require each matrix job by its name** | The names change with the matrix, and a matrix job skipped before its matrix expands reports under another name. |
 | **Date a release by the day it is published** | The date is in `CHANGELOG.md`, which is in the spec archive of the merge commit: it is written before the merge, and the publication comes after. |
@@ -396,7 +416,7 @@ Acceptance criteria:
 2. **Agents that know the cycle.**
    - A capability card under `agents/capabilities/release/` describes the cycle.
    - The `engineering/release-automation` workflow offers it beside release-please, so that a host project's agents can set it up.
-3. **Maintenance lines.** A patch to an older line after a newer release (1.2.2 after 1.3.0) cannot go through `main`, which only moves forward. It would need a maintenance branch per line, as Symfony keeps `7.4` beside `8.2`. Not needed yet.
+3. **The first line's branch.** `1.x` is cut when 2.0.0 ships (§3.11). The ADR of 2.0 says how long 1.x lives, and whether a 2.x binary still reads a 1.x spec.
 
 ## 8. References
 
