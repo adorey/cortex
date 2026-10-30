@@ -1,5 +1,8 @@
 # Cortex
 
+> [!IMPORTANT]
+> **Cortex moved to [`xod-labs/cortex`](https://github.com/xod-labs/cortex) on 2026-10-30**, from `adorey/cortex`. The old addresses redirect, so nothing you set up stops working. [Moving to xod-labs](docs/moving-to-xod-labs.md) says what to update: your install, your clone, your scripts.
+
 <p align="center">
   <img src="assets/logo.png" alt="Cortex — AI Agent Framework" width="200" height="300" />
 </p>
@@ -159,6 +162,7 @@ cortex/
 ├── docs/
 │   ├── getting-started.md             # Step-by-step install (design-time spec)
 │   ├── migrating-to-the-binary.md     # From a git submodule or clone to the `cortex` command
+│   ├── moving-to-xod-labs.md          # Cortex moved from adorey/cortex: what to update
 │   ├── extending-layers.md            # Practical guide for overlays (the cascade)
 │   ├── creating-a-theme.md            # Guide for creating a personality theme
 │   ├── adr/                           # Architecture Decision Records (ADR-001 … ADR-008)
@@ -245,6 +249,7 @@ To move a project to another Cortex version, change `version` in `cortex.toml`, 
 **The spec (design-time)**
 - [**Getting Started**](docs/getting-started.md) — step-by-step installation guide (single project & workspace)
 - [**Moving to the `cortex` binary**](docs/migrating-to-the-binary.md) — from a git submodule or clone of Cortex, and which sync mode each AI tool needs
+- [**Moving to xod-labs**](docs/moving-to-xod-labs.md) — Cortex moved from `adorey/cortex` on 2026-10-30: what to update
 - [**Extending layers**](docs/extending-layers.md) — overlay your project's rules onto roles, capabilities, personalities, and workflows
 - [**Creating a theme**](docs/creating-a-theme.md) — customize the tone and style of agents
 
