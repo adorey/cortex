@@ -287,16 +287,11 @@ CONTRIBUTING's steps 6 and 7 say so from the next release on, ahead of phase 4.
 
 ### Phase 1 — The checks on pull requests
 
-The `commit-messages` and `release-gate` actions, wired into Cortex's workflows; the summary jobs, and the test workflows' triggers without `paths` filters (§3.10); and `bin/setup-release.sh`.
+The `commit-messages` and `release-gate` actions, wired into Cortex's workflows, with the gate's nightly re-run (§3.2) and its rules per line (§3.11); the summary jobs, and the test workflows' triggers without `paths` filters (§3.10); and `bin/setup-release.sh`.
 
 Acceptance criteria:
 
-- a pull request that touches only `README.md` reports every required check: the tests are skipped, their summaries pass, and it can merge
-- a pull request that breaks a test of the CLI fails the summary of the CLI tests and cannot merge, and so does one whose build fails
-- on a fixture with a published `2.0.0`, the release gate passes a `1.5.0` into `1.x` and refuses it into `main`; a pull request from `1.x` into `main` that brings the published `1.5.1`'s note and adds `2.0.1`'s passes, and names `2.0.1`
-- `bin/setup-release.sh` applies the ruleset to the default branch and to every `*.x` branch
-- no required check of the ruleset is the name of a matrix job
-- a pull request with a commit that has a body, a trailer, or a subject off the pattern fails the commit messages check, which names the commit and the reason; a `BREAKING CHANGE:` footer alone passes; GitHub's merge commits are not checked
+- a pull request with a commit that has a body, a trailer, a subject off the pattern or a `<subject>` over 72 characters fails the commit messages check, which names the commit and the reason; a `BREAKING CHANGE:` footer alone passes; GitHub's merge commits are not checked
 - the release gate fails a pull request into `main` in each of these cases:
   - it adds no release note, or two;
   - it adds a version that is not higher than every release by SemVer precedence, while a published `2.0.0-alpha.1` does not block a `1.4.0`;
@@ -304,14 +299,19 @@ Acceptance criteria:
   - the first section of its `CHANGELOG.md` is another version;
   - its release is dated another day than the day the gate runs, in UTC;
   - a draft is waiting
-- a pull request whose gate passed the day before turns red after the nightly re-run, and cannot merge until its date is corrected; where the repository has a merge queue, the gate's run on the merge group refuses a date of another day
 - the release gate passes a fixture's release pull request and names its version
+- a pull request whose gate passed the day before turns red after the nightly re-run, and cannot merge until its date is corrected; where the repository has a merge queue, the gate's run on the merge group refuses a date of another day
+- on a fixture with a published `2.0.0`, the release gate passes a `1.5.0` into `1.x` and refuses it into `main`; a pull request from `1.x` into `main` that brings the published `1.5.1`'s note and adds `2.0.1`'s passes, and names `2.0.1`
 - the actions' SemVer ordering agrees with `cli/cortex_cli/semver.py` on one shared table of cases, which includes the `sort -V` counter-example
+- a pull request that touches only `README.md` reports every required check: the tests are skipped, their summaries pass, and it can merge
+- a pull request that breaks a test of the CLI fails the summary of the CLI tests and cannot merge, and so does one whose build fails
+- no required check of the ruleset is the name of a matrix job
 - on a throwaway repository, `bin/setup-release.sh --check` reports every setting of §3.10 that differs and exits non-zero; after one run without `--check`, it reports none, and a second run changes nothing
+- `bin/setup-release.sh` applies the ruleset to the default branch and to every `*.x` branch
 
 ### Phase 2 — The draft
 
-The `release-version` and `release-draft` actions. The release job runs on a push to `main` and by *Run workflow* for pre-releases. The tag trigger is removed, and `--fetch-known-specs` takes the immutable pre-releases.
+The `release-version` and `release-draft` actions. The release job runs on a push to `main` or to a line's branch, and by *Run workflow* for pre-releases; a re-run recovers its own draft (§3.3). The tag trigger is removed, and `--fetch-known-specs` takes the immutable pre-releases.
 
 Acceptance criteria:
 
@@ -322,8 +322,8 @@ Acceptance criteria:
 - a version tag pushed by hand starts no release job
 - *Run workflow* on a `release/**` branch with `X.Y.Z-rc.1` leaves a draft pre-release, not latest, whose note opens with the banner
 - *Run workflow* fails and creates nothing in each of these cases: run on `main`; given `X.Y.Z-rc1`; given a beta after an rc; given a taken number
-- `--fetch-known-specs` includes an immutable pre-release from 1.0.0 on and excludes a mutable one
 - a push to `1.x` that adds `changelog/1.5.0.md` leaves a draft `1.5.0`, not latest; a push to `main` that brings `1.5.1`'s note and adds `2.0.1`'s makes the draft `2.0.1` only
+- `--fetch-known-specs` includes an immutable pre-release from 1.0.0 on and excludes a mutable one
 
 ### Phase 3 — The guard
 
