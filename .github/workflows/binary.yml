@@ -262,7 +262,7 @@ jobs:
         run: python3 cli/build.py --checksums "$RUNNER_TEMP/release-assets"
 
       # The archives, and the binaries inside them: `gh attestation verify ~/.cortex/bin/cortex
-      # --repo adorey/cortex` then checks the installed file itself.
+      # --repo xod-labs/cortex` then checks the installed file itself.
       - name: The binaries inside the archives
         run: |
           for archive in "$RUNNER_TEMP/release-assets"/cortex-linux-*.tar.gz "$RUNNER_TEMP/release-assets"/cortex-macos-*.tar.gz; do
