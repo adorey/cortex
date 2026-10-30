@@ -68,7 +68,7 @@ The one exception is that a binary also knows the spec archives of immutable pre
 The release gate is a check on every pull request into `main`, required by the ruleset (§3.10). It reads the pull request's diff against its base and the repository's releases, and it passes only when:
 
 1. the pull request adds **exactly one** release note, `changelog/X.Y.Z.md`, where `X.Y.Z` is a version with no suffix;
-2. the first section of `CHANGELOG.md` after `## [Unreleased]` is `## [X.Y.Z] - YYYY-MM-DD — <name> _(Released)_`, with the same `X.Y.Z`, and the base's `CHANGELOG.md` has no section for `X.Y.Z`;
+2. the first section of `CHANGELOG.md` after `## [Unreleased]` is `## [X.Y.Z] - YYYY-MM-DD — <name> _(Released)_`, with the same `X.Y.Z`, the base's `CHANGELOG.md` has no section for `X.Y.Z`, and `YYYY-MM-DD` is the day the gate runs, in UTC;
 3. `X.Y.Z` is higher than every release, that is every version tag without a suffix, and no tag or release — draft included — is named `X.Y.Z`. Pre-releases do not count: those of `X.Y.Z` precede it, and those of a later version — a `2.0.0-alpha.1` cut from a long-lived branch — must not block a 1.x release;
 4. no draft release is waiting: one release is in flight at a time.
 
@@ -76,11 +76,19 @@ The gate names the version in its summary. It infers nothing from the state of t
 
 Precedence follows semver.org §11, as `cli/cortex_cli/semver.py` does, never `sort -V`, which puts `1.3.0` before `1.3.0-beta.1`.
 
+**A release is dated by the day it merges, in UTC.** UTC is the time zone of GitHub's own dates and of a workflow's schedule, and it assumes nothing about where a project's maintainers are. The date cannot be the day of publication: `CHANGELOG.md` is in the spec archive, which is the merge commit's, and a draft can wait. Three dates used to drift apart — the one written, the merge's and the publication's: 1.2.1 says 2026-10-30, and was merged and published on 2026-10-29. A gate that passed the day before would let a stale date merge, so the gate runs again on the day of the merge:
+
+- **where the repository has a merge queue**, every required check, the gate included, also runs on the merge group, at the moment of merging, and that run decides. The queue takes one pull request at a time, so that a push to `main` still carries one release (§3.3);
+- **where it has none** — GitHub offers merge queues to repositories owned by an organisation — a scheduled job re-runs, just after midnight UTC every night, the gate of every open pull request into `main`. A date gone stale turns red, and the pull request cannot merge until its date is corrected.
+
+The release job also compares the date with its merge commit's (§3.3), and reports a difference as a warning in its summary. It does not fail for it: failing there would spend the version over a date.
+
 ### 3.3 The draft — what a merge into `main` produces
 
 A push to `main` runs the release job, with no `paths` filter: every push is a release.
 
 - **The version** comes from the push the same way: the release note added between the push's `before` and `after`. If there is not exactly one, the job fails and creates nothing. Such a push has bypassed the gate, which the ruleset (§3.10) makes impossible, and the failure is the alarm.
+- **The date** of the release is compared with the merge commit's, in UTC. A difference is a warning in the job's summary, not a failure (§3.2).
 - **The build** is the `binary` workflow's, at `X.Y.Z`:
   - the four targets, the CLI's suite replayed through each binary, and the glibc floor;
   - the spec archive, from `git archive` of the merge commit;
@@ -206,6 +214,7 @@ A repository's settings are not in the repository, so a script applies them. Lik
   - **no bypass, for anyone, administrators included**.
 - **Immutable releases**: on.
 - **Head branches deleted on merge**, which is what makes a stack collapse ([docs/process/adr-implementation.md](../process/adr-implementation.md) §2).
+- **The merge queue of `main`**, where the repository has one: one pull request per group, merged with a merge commit (§3.2). Where it has none, the nightly re-run of the gate is a workflow of the repository, not a setting.
 
 **A required check must report on every pull request into `main`.** GitHub waits for a required check by its name, and three things keep a name from ever being reported:
 
@@ -240,7 +249,9 @@ Acceptance criteria:
   - it adds a version that is not higher than every release by SemVer precedence, while a published `2.0.0-alpha.1` does not block a `1.4.0`;
   - it adds a version that already has a section in the base's `CHANGELOG.md`;
   - the first section of its `CHANGELOG.md` is another version;
+  - its release is dated another day than the day the gate runs, in UTC;
   - a draft is waiting
+- a pull request whose gate passed the day before turns red after the nightly re-run, and cannot merge until its date is corrected; where the repository has a merge queue, the gate's run on the merge group refuses a date of another day
 - the release gate passes a fixture's release pull request and names its version
 - the actions' SemVer ordering agrees with `cli/cortex_cli/semver.py` on one shared table of cases, which includes the `sort -V` counter-example
 - on a throwaway repository, `bin/setup-release.sh --check` reports every setting of §3.10 that differs and exits non-zero; after one run without `--check`, it reports none, and a second run changes nothing
@@ -333,6 +344,8 @@ Acceptance criteria:
 | **Symfony's branch model in full** — a branch per minor version, no `main` | Maintenance branches for a project that maintains no older line. The integration branch already plays the role of Symfony's version branch while it stabilises. |
 | **Keep the `paths` filters, and require only the workflows that always run** | A release that breaks the tests of the CLI or of the core could merge: its checks are red, and nothing stops it. That is the state from 2026-10-30 until phase 1. |
 | **Require each matrix job by its name** | The names change with the matrix, and a matrix job skipped before its matrix expands reports under another name. |
+| **Date a release by the day it is published** | The date is in `CHANGELOG.md`, which is in the spec archive of the merge commit: it is written before the merge, and the publication comes after. |
+| **Check only the format of the date, and re-run the gate by hand before merging** | One forgotten click lets a stale date merge, and several maintainers forget more. The nightly re-run, or the merge queue, turns the same click into a rule. |
 | **A tag ruleset restricting who creates version tags** | Publishing from the Releases page creates the tag as the maintainer, who would need a bypass. That contradicts "no bypass", and the gate already refuses a version whose tag exists. |
 
 ## 7. Follow-ups (out of scope for this ADR)
@@ -358,6 +371,7 @@ Acceptance criteria:
 - [`bin/setup-labels.sh`](../../bin/setup-labels.sh) — the shape `bin/setup-release.sh` follows
 - [GitHub — Immutable releases](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases) and [the announcement](https://github.blog/changelog/2025-10-28-immutable-releases-are-now-generally-available/)
 - [GitHub — Troubleshooting required status checks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks) — a workflow skipped by a `paths` filter leaves its required checks pending; a job skipped by a condition reports success
+- [GitHub — Managing a merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) — available to public repositories owned by an organisation
 - [GitHub — Events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows) — no workflow runs when a draft release is created
 - [Semantic Versioning 2.0.0, §11](https://semver.org/#spec-item-11) — precedence
 - [Symfony — The Release Process](https://symfony.com/doc/current/contributing/community/releases.html), and the tags `v7.3.0-BETA1`, `v7.3.0-RC1` and `v7.3.0` on its `7.3` branch
