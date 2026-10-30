@@ -357,3 +357,7 @@ The runtime reads the store itself. It never reads `spec` in `cortex.local.toml`
 
 Tracked as #118, #119 and #120.
 
+
+### 2026-10 — the planned records are numbered one higher
+
+ADR-009 became the release cycle on 2026-10-30, and every record planned after it moved up by one. The ADR-011 this record names is now ADR-012, the multi-provider LLM abstraction ([#40](https://github.com/adorey/cortex/issues/40)).
