@@ -184,6 +184,8 @@ This check runs on every pull request and is required on `main` (§3.10). It app
 - **have no body**, except a `BREAKING CHANGE:` footer, which CONTRIBUTING allows when it is strictly required;
 - **carry no trailer**: no `Co-Authored-By`, no `Signed-off-by`, nothing else.
 
+The grammar of the subject is not checked: no script can tell an imperative from a statement. CONTRIBUTING asked for an imperative, and the subjects of `main` are just as often statements of what the commit does — "the macOS job runs the whole suite". It now asks for what both forms share, a subject in the present tense that says what the commit does, and the review reads it.
+
 It lists every commit that fails, and why.
 
 **Pull requests are checked, not history.** A commit already on the base is never checked again. The pull request into `main` carries every commit of its integration branch, so nothing reaches `main` unchecked, even a commit merged into the integration branch past a red check.
@@ -337,7 +339,7 @@ Acceptance criteria:
 
 The phase points the documentation at the cycle:
 
-- `CONTRIBUTING.md`: the commit convention now names its check, and *Versioning & releases* replaces steps 6 and 7 with §3.1;
+- `CONTRIBUTING.md`: the commit convention names its check and asks for a `<subject>` in the present tense that says what the commit does, where it asked for an imperative (§3.8); *Versioning & releases* replaces steps 6 and 7 with §3.1;
 - `docs/process/adr-implementation.md`:
   - §2 — `main` takes merge commits only, the last pull request of a stack included;
   - §8 and §9 — the release is the merge, then the draft;
@@ -347,7 +349,7 @@ It then runs `bin/setup-release.sh` on this repository and publishes the release
 
 Acceptance criteria:
 
-- `bin/setup-release.sh --check adorey/cortex` reports no drift, and reports it again once the ruleset is disabled
+- `bin/setup-release.sh --check` on this repository reports no drift, and reports it again once the ruleset is disabled
 - a direct push to `main` is refused, with an administrator's token too
 - a release candidate of the release that ships this ADR is published from the integration branch through phases 2 and 3, installed by `install.sh <version>` on a clean machine, and pinned and synced by a throwaway project
 - the release that ships this ADR is made by the cycle: its draft is built from the merge, published from the Releases page, and its guard is green; `releases/latest/download/SHA256SUMS` answers `200` throughout
