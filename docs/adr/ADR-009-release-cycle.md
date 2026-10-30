@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-10-30 (proposed)
 - **Authors:** Cortex maintainers (initiated by the maintainer, drafted by @Oolon)
-- **Affects:** `.github/workflows/binary.yml` and the release jobs, new composite actions under `.github/actions/`, `cli/build.py` (the spec archives a binary knows), a new `bin/setup-release.sh`, the repository's settings (the ruleset of `main`, immutable releases), `CONTRIBUTING.md` (the commit convention, versioning & releases), `docs/process/adr-implementation.md` (§2, §8, §9)
+- **Affects:** `.github/workflows/` (`binary.yml` and the release jobs, the triggers of the test workflows), new composite actions under `.github/actions/`, `cli/build.py` (the spec archives a binary knows), a new `bin/setup-release.sh`, the repository's settings (the ruleset of `main`, immutable releases), `CONTRIBUTING.md` (the commit convention, versioning & releases), `docs/process/adr-implementation.md` (§2, §8, §9)
 - **Relates to:** [ADR-008](ADR-008-cortex-binary.md) — §3.1 (how a release is made), §3.3 (the spec archives a binary knows) and the amendments of its §9 on pre-releases, which this ADR replaces; ADR-008 records it in its own amendments when this ADR is implemented
 
 ---
@@ -26,7 +26,10 @@ GitHub has offered **immutable releases** since 2025-10-28. Once a release is pu
 
 Four more things shape the decision:
 
-- **`main` is meant to receive releases only, and nothing enforces it.** CONTRIBUTING's stack model merges everything into an integration branch, then that branch into `main`, once. But the ruleset of `main` lets an administrator bypass it, every merge method is allowed, and a push to `main` without a release is simply a `0.0.0-dev.N` build.
+- **`main` is meant to receive releases only, and nothing enforced it.** CONTRIBUTING's stack model merges everything into an integration branch, then that branch into `main`, once. But the ruleset of `main` let an administrator bypass it, and every merge method was allowed.
+  - On 2026-10-30, after the rewrite below, the maintainer applied by hand most of what §3.10 makes a script own: no bypass, merge commits only, the head branch up to date before it merges, head branches deleted on merge, and immutable releases.
+  - A push to `main` without a release is still a `0.0.0-dev.N` build.
+  - The tests are still not required: their workflows have a `paths` filter, so a pull request that touches none of those paths never reports them (§3.10).
 - **Pre-releases are throwaway** (ADR-008 §9). `X.Y.Z-something` tests the release workflow, and is then deleted or built again under its tag. The maintainer wants real ones — alpha, beta and release candidates, which a tester installs and a project pins.
 - **The commit convention is not checked.** Eight commits written after the rule (2026-06-03) broke it: one with a `Co-Authored-By` trailer, one more with a body, six with no `type(scope):`. On 2026-10-30 their messages were rewritten on `main`:
   - every tree is unchanged, and the release tags 0.6.0 to 1.2.1 moved to the rewritten commits;
@@ -198,10 +201,25 @@ A repository's settings are not in the repository, so a script applies them. Lik
   - changes through a pull request only;
   - no force push and no deletion;
   - merge commits only;
-  - required checks: the release gate, the commit messages, and the builds that already gate a pull request into `main`;
+  - required checks: the release gate, the commit messages, and the summary job of every workflow that gates a pull request into `main` — the repository checks, the builds and the tests;
+  - the head branch up to date with `main` before it merges, so that the commit checked is the commit released;
   - **no bypass, for anyone, administrators included**.
 - **Immutable releases**: on.
 - **Head branches deleted on merge**, which is what makes a stack collapse ([docs/process/adr-implementation.md](../process/adr-implementation.md) §2).
+
+**A required check must report on every pull request into `main`.** GitHub waits for a required check by its name, and three things keep a name from ever being reported:
+
+- a workflow that a `paths` filter does not start: its checks stay pending, and the pull request cannot merge;
+- a matrix job skipped before its matrix expands, because a job it needs failed: it reports under its unexpanded name, as `glibc 2.28 (${{ matrix.target }})` did when a build failed;
+- a matrix that changes, which renames its jobs.
+
+So every workflow that gates `main`:
+
+- runs on every pull request, with no `paths` filter;
+- starts with a job that reads the changed files, and skips the jobs that no changed file concerns, which GitHub counts as passing;
+- ends with one summary job. It runs whatever happened before it (`if: always()`), fails when a job it needs failed or was cancelled, and passes when they all passed or were skipped.
+
+The ruleset requires the summary jobs, by names that no matrix changes.
 
 ## 4. Phases
 
@@ -209,10 +227,13 @@ Execution order: **1 → 2 → 3 → 4**. All four gate the release that ships t
 
 ### Phase 1 — The checks on pull requests
 
-The `commit-messages` and `release-gate` actions, wired into Cortex's workflows, and `bin/setup-release.sh`.
+The `commit-messages` and `release-gate` actions, wired into Cortex's workflows; the summary jobs, and the test workflows' triggers without `paths` filters (§3.10); and `bin/setup-release.sh`.
 
 Acceptance criteria:
 
+- a pull request that touches only `README.md` reports every required check: the tests are skipped, their summaries pass, and it can merge
+- a pull request that breaks a test of the CLI fails the summary of the CLI tests and cannot merge, and so does one whose build fails
+- no required check of the ruleset is the name of a matrix job
 - a pull request with a commit that has a body, a trailer, or a subject off the pattern fails the commit messages check, which names the commit and the reason; a `BREAKING CHANGE:` footer alone passes; GitHub's merge commits are not checked
 - the release gate fails a pull request into `main` in each of these cases:
   - it adds no release note, or two;
@@ -287,6 +308,7 @@ Acceptance criteria:
 - **Nobody can push to `main` or bypass a check, administrators included.** An urgent fix is a patch release through a pull request, its checks included.
 - **A waiting draft blocks the next merge into `main`**: publish it or discard it first.
 - **The draft comes a quarter of an hour after the merge**, and the Windows build is most of that time.
+- **Every workflow starts on every pull request**, a documentation one included. A first job reads the changed files and skips the rest, at the cost of a few seconds of runner.
 - **Pre-releases stay forever** in the Releases list. This is why the candidates are `rc` and never `test`.
 - **The cycle relies on GitHub** — immutable releases, rulesets, `release: published` — in every project that adopts it.
 - **A history rewrite, which this repository had on 2026-10-30, becomes impossible.** That is the point, and also the cost.
@@ -309,6 +331,8 @@ Acceptance criteria:
 | **release-please** — a Release PR, the version derived from the commit types | The version is decided by the commits rather than by the maintainer, and the note is generated, where Cortex writes a narrated note with a name and an epigraph. Its capability card stays, for projects that want it. |
 | **Keep throwaway pre-releases** | Impossible once releases are immutable, and a test release that disappears proves less than a candidate that stays. |
 | **Symfony's branch model in full** — a branch per minor version, no `main` | Maintenance branches for a project that maintains no older line. The integration branch already plays the role of Symfony's version branch while it stabilises. |
+| **Keep the `paths` filters, and require only the workflows that always run** | A release that breaks the tests of the CLI or of the core could merge: its checks are red, and nothing stops it. That is the state from 2026-10-30 until phase 1. |
+| **Require each matrix job by its name** | The names change with the matrix, and a matrix job skipped before its matrix expands reports under another name. |
 | **A tag ruleset restricting who creates version tags** | Publishing from the Releases page creates the tag as the maintainer, who would need a bypass. That contradicts "no bypass", and the gate already refuses a version whose tag exists. |
 
 ## 7. Follow-ups (out of scope for this ADR)
@@ -328,10 +352,12 @@ Acceptance criteria:
 - [CONTRIBUTING.md — Commit message convention](../../CONTRIBUTING.md#commit-message-convention) and [Versioning & releases](../../CONTRIBUTING.md#-versioning--releases)
 - [docs/process/adr-implementation.md](../process/adr-implementation.md) — §2 (merge commits in a stack), §8 (gates), §9 (closing an ADR)
 - [`.github/workflows/binary.yml`](../../.github/workflows/binary.yml) — the build and the publish job this ADR reshapes
+- [`cli-tests.yml`](../../.github/workflows/cli-tests.yml), [`core-tests.yml`](../../.github/workflows/core-tests.yml) and [`runtime-tests.yml`](../../.github/workflows/runtime-tests.yml) — the `paths` filters phase 1 replaces
 - [`cli/build.py`](../../cli/build.py) — `--fetch-known-specs`
 - [`cli/cortex_cli/semver.py`](../../cli/cortex_cli/semver.py) — SemVer precedence, pre-releases included
 - [`bin/setup-labels.sh`](../../bin/setup-labels.sh) — the shape `bin/setup-release.sh` follows
 - [GitHub — Immutable releases](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases) and [the announcement](https://github.blog/changelog/2025-10-28-immutable-releases-are-now-generally-available/)
+- [GitHub — Troubleshooting required status checks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks) — a workflow skipped by a `paths` filter leaves its required checks pending; a job skipped by a condition reports success
 - [GitHub — Events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows) — no workflow runs when a draft release is created
 - [Semantic Versioning 2.0.0, §11](https://semver.org/#spec-item-11) — precedence
 - [Symfony — The Release Process](https://symfony.com/doc/current/contributing/community/releases.html), and the tags `v7.3.0-BETA1`, `v7.3.0-RC1` and `v7.3.0` on its `7.3` branch
