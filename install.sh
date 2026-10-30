@@ -3,9 +3,9 @@
 # Cortex — install.sh: the one-line install on Linux and macOS (ADR-008 §3.2)
 # ============================================================================
 #
-#   curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- 1.0.0
-#   curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- --name cortex
+#   curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh -s -- 1.0.0
+#   curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh -s -- --name cortex
 #
 # Downloads the release asset of this machine — the latest release, or the version given —
 # checks it against the release's SHA256SUMS and stops on a mismatch, then installs the
@@ -18,7 +18,7 @@
 # Environment:
 #   CORTEX_HOME           where Cortex lives on this machine (default: ~/.cortex)
 #   CORTEX_RELEASES_URL   where the releases are downloaded from (default: the GitHub
-#                         releases of adorey/cortex) — a mirror serving the same layout,
+#                         releases of xod-labs/cortex) — a mirror serving the same layout,
 #                         latest/download/ASSET and download/VERSION/ASSET, over https;
 #                         http only to this machine (127.0.0.1, localhost), for tests
 #
@@ -27,7 +27,7 @@
 
 set -eu
 
-RELEASES_URL="${CORTEX_RELEASES_URL:-https://github.com/adorey/cortex/releases}"
+RELEASES_URL="${CORTEX_RELEASES_URL:-https://github.com/xod-labs/cortex/releases}"
 CORTEX_HOME="${CORTEX_HOME:-$HOME/.cortex}"
 VERSION=""
 NAME=""

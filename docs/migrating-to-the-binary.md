@@ -5,11 +5,11 @@ From Cortex 1.0.0 a project no longer holds a copy of the spec. It holds a `cort
 ## 1. Install the binary — once per machine
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh     # Linux, macOS
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh     # Linux, macOS
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1 | iex          # Windows
+irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1 | iex          # Windows
 ```
 
 - **Where it goes.** The command lands in `~/.cortex/bin` (`%USERPROFILE%\.cortex\bin`). `install.ps1` adds that directory to your user `PATH`; `install.sh` prints the line to add to your shell profile.
@@ -92,7 +92,7 @@ Where CI ran `./cortex/bin/validate-overlays.sh --strict`, it installs the binar
 ```bash
 version="$(LC_ALL=C tr -d '\357\273\277' < cortex.toml | sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*[\"']\([^\"']*\)[\"'].*/\\1/p" | head -n 1)"
 [ -n "$version" ] || { echo "cortex.toml pins no version" >&2; exit 1; }
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- "$version"
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh -s -- "$version"
 export PATH="$HOME/.cortex/bin:$PATH"
 cortex sync && cortex validate --strict
 ```
@@ -103,7 +103,7 @@ On a Windows runner, in PowerShell:
 $pinned = Select-String -Path cortex.toml -Pattern '^\s*version\s*=\s*["'']([^"'']+)["'']' | Select-Object -First 1
 if (-not $pinned) { throw "cortex.toml pins no version" }
 $version = $pinned.Matches[0].Groups[1].Value
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1))) -Version $version
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1))) -Version $version
 $env:Path = "$env:USERPROFILE\.cortex\bin;$env:Path"
 cortex sync; if ($LASTEXITCODE) { exit $LASTEXITCODE }
 cortex validate --strict; if ($LASTEXITCODE) { exit $LASTEXITCODE }

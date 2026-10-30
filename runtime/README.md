@@ -65,7 +65,7 @@ the team (`agents/`), developer (root) and service tiers of `project-overview.md
 - **They leave the machine.** The whole view goes to the model provider with every model call,
   the developer's untracked notes included.
 - **They cost.** 44 to 66 KB of prompt on a real workspace, on every model call; the API backend
-  marks the system prompt cacheable. Making the view optional is [#89](https://github.com/adorey/cortex/issues/89).
+  marks the system prompt cacheable. Making the view optional is [#89](https://github.com/xod-labs/cortex/issues/89).
 - **A service is a folder of the workspace** — relative, never climbing out of it, never
   `agents/`; any other `service` is refused, `422`.
 

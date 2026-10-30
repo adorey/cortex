@@ -1,5 +1,8 @@
 # Cortex
 
+> [!IMPORTANT]
+> **Cortex moved to [`xod-labs/cortex`](https://github.com/xod-labs/cortex) on 2026-10-30**, from `adorey/cortex`. The old addresses redirect, so nothing you set up stops working. [Moving to xod-labs](docs/moving-to-xod-labs.md) says what to update: your install, your clone, your scripts.
+
 <p align="center">
   <img src="assets/logo.png" alt="Cortex — AI Agent Framework" width="200" height="300" />
 </p>
@@ -159,6 +162,7 @@ cortex/
 ├── docs/
 │   ├── getting-started.md             # Step-by-step install (design-time spec)
 │   ├── migrating-to-the-binary.md     # From a git submodule or clone to the `cortex` command
+│   ├── moving-to-xod-labs.md          # Cortex moved from adorey/cortex: what to update
 │   ├── extending-layers.md            # Practical guide for overlays (the cascade)
 │   ├── creating-a-theme.md            # Guide for creating a personality theme
 │   ├── adr/                           # Architecture Decision Records (ADR-001 … ADR-008)
@@ -178,12 +182,12 @@ Cortex is one command, `cortex`, installed once per machine. It needs no Python 
 ### 1. Install the `cortex` command (once per machine)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh              # Linux, macOS
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- 1.0.0  # a given version
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh              # Linux, macOS
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh -s -- 1.0.0  # a given version
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1 | iex                    # Windows PowerShell
+irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1 | iex                    # Windows PowerShell
 ```
 
 The binary goes into `~/.cortex/bin` (`%USERPROFILE%\.cortex\bin` on Windows): `install.ps1` adds that directory to your user `PATH`, `install.sh` prints the line to add to your shell profile. When another `cortex` command comes first on `PATH`, the scripts install it as `cortex-ai` instead; `--name cortex` (`-Name cortex` for `install.ps1`) forces the name. Running a script again upgrades the binary. Built for Linux x86_64 and aarch64 (glibc 2.28 or later), macOS on Apple silicon and Windows x86_64.
@@ -245,6 +249,7 @@ To move a project to another Cortex version, change `version` in `cortex.toml`, 
 **The spec (design-time)**
 - [**Getting Started**](docs/getting-started.md) — step-by-step installation guide (single project & workspace)
 - [**Moving to the `cortex` binary**](docs/migrating-to-the-binary.md) — from a git submodule or clone of Cortex, and which sync mode each AI tool needs
+- [**Moving to xod-labs**](docs/moving-to-xod-labs.md) — Cortex moved from `adorey/cortex` on 2026-10-30: what to update
 - [**Extending layers**](docs/extending-layers.md) — overlay your project's rules onto roles, capabilities, personalities, and workflows
 - [**Creating a theme**](docs/creating-a-theme.md) — customize the tone and style of agents
 
