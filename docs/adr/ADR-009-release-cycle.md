@@ -39,7 +39,7 @@ Four more things shape the decision:
 
 ## 2. Decision
 
-**Every merge into `main` is a release, and nothing else reaches `main`. The version is the release note the pull request adds, checked before it may merge. CI builds the merge and leaves it as a draft release with every asset on it. The maintainer publishes it from the Releases page, and GitHub creates the tag then. A published release is immutable. Pre-releases — alpha, beta, release candidates — are versions too, cut by hand from the integration branch through the same draft. The cycle is written once, as composite actions in this repository, which Cortex calls first and other projects pin by a release.**
+**Every merge into `main` is a release, and nothing else reaches `main`. The version is the release note the pull request adds, checked before it may merge. CI builds the merge and leaves it as a draft release with every asset on it. The maintainer publishes it from the Releases page, and GitHub creates the tag then. A published release is immutable. Pre-releases — alpha, beta, release candidates — are versions too, cut by hand from the integration branch through the same draft. The cycle is written as composite actions in this repository, which Cortex calls by path, and which carry nothing of Cortex, so that they move out as they are when a second project adopts the cycle.**
 
 For the maintainer, a release becomes: merge the release pull request, wait for the draft, press *Publish release*. Nobody pushes a version tag.
 
@@ -138,7 +138,6 @@ Consequences:
 - **GitHub enforces what the publish job's script enforced** — a published release is never uploaded to again — and it does so for tags as well.
 - **The recovery of 2026-10-29 no longer exists.** Deleting the release, keeping the tag and building again cannot happen. A mistake costs a version number.
 - **Releases published before the switch stay mutable** — 1.2.1 and older: GitHub applies the setting to releases published after it.
-- **A project can pin the composite actions (§3.9) by a release tag of Cortex.** An immutable tag is as fixed as a commit SHA.
 
 ### 3.7 Pre-releases
 
@@ -188,7 +187,7 @@ It lists every commit that fails, and why.
 
 **Pull requests are checked, not history.** A commit already on the base is never checked again. The pull request into `main` carries every commit of its integration branch, so nothing reaches `main` unchecked, even a commit merged into the integration branch past a red check.
 
-### 3.9 One cycle, several projects — composite actions
+### 3.9 The cycle as composite actions
 
 The logic of §3.2 to §3.8 lives in composite actions under `.github/actions/`. Each one has its script beside it, standard library Python only, like `cortex_core`, and its tests:
 
@@ -202,7 +201,17 @@ The logic of §3.2 to §3.8 lives in composite actions under `.github/actions/`.
 
 **Inputs fit the actions to another project**: where its changelog and its notes are, its commit pattern, and the assets a release must carry. What a project builds stays its own: Cortex builds its binaries, another project a container image or a chart.
 
-**Cortex calls them first**, from its own workflows and by path (`./.github/actions/…`), so the release that ships them is released through them. **Another project pins them by a release of Cortex**, for example `uses: adorey/cortex/.github/actions/release-gate@<version>`, which immutability makes as fixed as a commit (§3.6).
+**Cortex calls them by path**, from its own workflows (`./.github/actions/…`), so the release that ships them is released through them.
+
+**They stay in this repository until a second project adopts the cycle** (§7). Pinned by a release of Cortex, they would tie two versions together:
+
+- a fix to an action would need a release of Cortex, its note, its name and its build;
+- an incompatible change to an action's inputs would ask for a major version of Cortex, whose spec had not changed;
+- the version a project pins would say nothing about the actions it gets.
+
+So they are written to be moved: no path, name or setting of Cortex inside them, everything through their inputs.
+
+**Called by path, an action runs as the pull request has it.** A pull request can therefore loosen the gate that checks it, as it can any workflow file. Its review covers that, and a change to `.github/` is read as such.
 
 ### 3.10 The repository's settings — `bin/setup-release.sh`
 
@@ -316,7 +325,7 @@ Acceptance criteria:
 - **No tag to push and no `paths` filter to satisfy**: the run that never started for 1.2.1 cannot happen again.
 - **Real pre-releases**, which a tester installs and a project pins, with the guarantees of a release.
 - **The commit convention holds** without a reviewer having to catch it.
-- **One cycle for several projects**, pinned by an immutable release.
+- **A cycle ready for several projects**: the actions carry nothing of Cortex, and move out as they are (§7).
 
 ### Negative
 
@@ -357,7 +366,8 @@ Acceptance criteria:
 
 1. **The cycle in the maintainer's other projects**:
    - a few repositories first, the rest once the cycle is proven;
-   - each runs `bin/setup-release.sh`, calls the actions pinned by the release that ships this ADR, and builds its own assets;
+   - when the first of them adopts it, the actions move to a repository of their own, with its own versions and its own release note. Cortex then pins them by a release of that repository, as every other project does;
+   - each project runs `bin/setup-release.sh`, which moves with them, pins the actions, and builds its own assets;
    - one issue per repository.
 2. **Agents that know the cycle.**
    - A capability card under `agents/capabilities/release/` describes the cycle.
