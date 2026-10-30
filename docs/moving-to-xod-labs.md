@@ -59,12 +59,10 @@ From 1.2.2 on, the attestations name the new repository:
 gh attestation verify ~/.cortex/bin/cortex --repo xod-labs/cortex
 ```
 
-An attestation keeps the repository it was made in. Those of 1.0.0 to 1.2.1 name `adorey/cortex`, and GitHub lists them under the account `adorey`, not under the repository any more. Fetch the attestation first, then verify the file against it:
+An attestation keeps the repository it was made in. Those of 1.0.0 to 1.2.1 name `adorey/cortex`, and GitHub lists them under the account `adorey`, not under the repository any more: `--repo adorey/cortex` no longer finds them. Verify them by their owner, pinned to the workflow that signed them:
 
 ```bash
-digest=$(sha256sum ~/.cortex/bin/cortex | cut -d' ' -f1)     # shasum -a 256 on macOS
-gh api "users/adorey/attestations/sha256:$digest" --jq '.attestations[].bundle' > cortex.jsonl
-gh attestation verify ~/.cortex/bin/cortex --bundle cortex.jsonl --repo adorey/cortex
+gh attestation verify ~/.cortex/bin/cortex --owner adorey --signer-workflow adorey/cortex/.github/workflows/binary.yml
 ```
 
 ## Questions
