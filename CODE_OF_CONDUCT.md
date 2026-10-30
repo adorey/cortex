@@ -39,7 +39,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement by contacting the maintainer
 [@adorey](https://github.com/adorey), or by opening a
-[private report](https://github.com/adorey/cortex/security/advisories/new) if you would
+[private report](https://github.com/xod-labs/cortex/security/advisories/new) if you would
 rather the exchange stay confidential. All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.

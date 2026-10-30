@@ -106,7 +106,7 @@ sub-issue can, which is what makes the board readable as a changelog afterwards.
 GraphQL mutation — both node ids first, then one call per child:
 
 ```bash
-nid() { gh api graphql -f query="query{repository(owner:\"adorey\",name:\"cortex\"){issue(number:$1){id}}}" \
+nid() { gh api graphql -f query="query{repository(owner:\"xod-labs\",name:\"cortex\"){issue(number:$1){id}}}" \
         --jq '.data.repository.issue.id'; }
 
 gh api graphql -H "GraphQL-Features: sub_issues" \

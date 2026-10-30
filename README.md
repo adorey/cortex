@@ -178,12 +178,12 @@ Cortex is one command, `cortex`, installed once per machine. It needs no Python 
 ### 1. Install the `cortex` command (once per machine)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh              # Linux, macOS
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- 1.0.0  # a given version
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh              # Linux, macOS
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh -s -- 1.0.0  # a given version
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1 | iex                    # Windows PowerShell
+irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1 | iex                    # Windows PowerShell
 ```
 
 The binary goes into `~/.cortex/bin` (`%USERPROFILE%\.cortex\bin` on Windows): `install.ps1` adds that directory to your user `PATH`, `install.sh` prints the line to add to your shell profile. When another `cortex` command comes first on `PATH`, the scripts install it as `cortex-ai` instead; `--name cortex` (`-Name cortex` for `install.ps1`) forces the name. Running a script again upgrades the binary. Built for Linux x86_64 and aarch64 (glibc 2.28 or later), macOS on Apple silicon and Windows x86_64.
