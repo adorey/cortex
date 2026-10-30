@@ -53,7 +53,7 @@ jobs:
         include:
           - { target: linux-x86_64, runner: ubuntu-latest, container: "almalinux:8" }
           - { target: linux-aarch64, runner: ubuntu-24.04-arm, container: "almalinux:8" }
-          - { target: macos-arm64, runner: macos-14, container: "" }
+          - { target: macos-arm64, runner: macos-latest, container: "" }
           - { target: windows-x86_64, runner: windows-latest, container: "" }
     defaults:
       run:
@@ -262,7 +262,7 @@ jobs:
         run: python3 cli/build.py --checksums "$RUNNER_TEMP/release-assets"
 
       # The archives, and the binaries inside them: `gh attestation verify ~/.cortex/bin/cortex
-      # --repo adorey/cortex` then checks the installed file itself.
+      # --repo xod-labs/cortex` then checks the installed file itself.
       - name: The binaries inside the archives
         run: |
           for archive in "$RUNNER_TEMP/release-assets"/cortex-linux-*.tar.gz "$RUNNER_TEMP/release-assets"/cortex-macos-*.tar.gz; do
