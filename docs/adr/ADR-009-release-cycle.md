@@ -126,7 +126,7 @@ The guard repairs item 5 only, because immutability locks everything else. On an
 
 ### 3.6 Immutable releases
 
-The switch (phase 4) turns them on for the repository. From then on, a published release:
+The maintainer turned them on for this repository on 2026-10-30, ahead of the switch (phase 4), and `bin/setup-release.sh` keeps them on. From then on, a published release:
 
 - **cannot change its assets**: none can be added, changed or deleted;
 - **keeps its tag**: the tag cannot be moved or deleted while the release exists, and a deleted release's tag name is never used again;
@@ -137,7 +137,7 @@ Consequences:
 
 - **GitHub enforces what the publish job's script enforced** — a published release is never uploaded to again — and it does so for tags as well.
 - **The recovery of 2026-10-29 no longer exists.** Deleting the release, keeping the tag and building again cannot happen. A mistake costs a version number.
-- **Releases published before the switch stay mutable** — 1.2.1 and older: GitHub applies the setting to releases published after it.
+- **Releases published before 2026-10-30 stay mutable** — 1.2.1 and older: GitHub applies the setting to releases published after it.
 
 ### 3.7 Pre-releases
 
@@ -180,6 +180,7 @@ It then makes the same build and the same draft as a release (§3.3), marked as 
 This check runs on every pull request and is required on `main` (§3.10). It applies to every commit of the pull request, from the base to the head, merge commits excluded, because GitHub writes those. Each commit must:
 
 - **have a subject that matches the repository's pattern.** For Cortex that is CONTRIBUTING's `<gitmoji> <type>(<scope>): <subject>`: the gitmoji a single emoji, the type one of the mapping table's, and an optional `#<issue>` before the subject for ADR work;
+- **keep its `<subject>` within 72 characters**, as CONTRIBUTING says: the part after `<type>(<scope>): `, without the `#<issue>`. The gitmoji, the type and the scope do not count;
 - **have no body**, except a `BREAKING CHANGE:` footer, which CONTRIBUTING allows when it is strictly required;
 - **carry no trailer**: no `Co-Authored-By`, no `Signed-off-by`, nothing else.
 
@@ -260,6 +261,13 @@ Disabling the ruleset touches no release: immutability is a setting of its own.
 ## 4. Phases
 
 Execution order: **1 → 2 → 3 → 4**. All four gate the release that ships this ADR: that release is the first one made by the cycle.
+
+**Until phase 4 ships, a release is still made by its tag** (ADR-008 §3.1, CONTRIBUTING's steps 6 and 7), and immutable releases make two mistakes final:
+
+- **nothing is published from the Releases page.** A release published there has no assets, and being immutable, it can no longer get them: the recovery of 2026-10-29 is gone, and the version is spent;
+- **no `X.Y.Z-something` tag is pushed to try the workflow.** The pre-release it makes stays forever.
+
+CONTRIBUTING's steps 6 and 7 say so from the next release on, ahead of phase 4.
 
 ### Phase 1 — The checks on pull requests
 
@@ -347,6 +355,7 @@ Acceptance criteria:
 - **A mistake after publication costs a version number.** The release can be deleted, but its tag name is never reused.
 - **Nobody can push to `main` or bypass a check, administrators included.** An urgent fix is a patch release through a pull request, its checks included. The one way around it is to disable the ruleset by the procedure of §3.10, which leaves an issue behind, and a drift `--check` reports until it is undone.
 - **A waiting draft blocks the next merge into `main`**: publish it or discard it first.
+- **A fix to the documentation is a release too.** A typo in the README reaches `main` only as a patch, with its note, its name, its epigraph and a quarter of an hour of build.
 - **The draft comes a quarter of an hour after the merge**, and the Windows build is most of that time.
 - **Every workflow starts on every pull request**, a documentation one included. A first job reads the changed files and skips the rest, at the cost of a few seconds of runner.
 - **Pre-releases stay forever** in the Releases list. This is why the candidates are `rc` and never `test`.
