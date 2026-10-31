@@ -3,7 +3,8 @@
 - **A push** to the default branch, or to a line's branch ``N.x``, releases the version whose note
   it adds between ``before`` and ``after``, of a version with no release yet. Not exactly one: the
   push bypassed the gate, and the job fails, creating nothing. On ``N.x``, the version is ``N``'s,
-  and never ``latest``.
+  and never ``latest``. Its date in the changelog is compared with the commit's day, in UTC: a
+  difference is a warning, never a failure, which would spend the version over a date.
 - **A run started by hand** cuts a pre-release, ``X.Y.Z-(alpha|beta|rc).N``, from a ``release/**``
   branch. ``X.Y.Z`` is higher than every release of its major version — and than every release,
   while no ``X.x`` branch exists — the pre-release higher than every pre-release of ``X.Y.Z``, its
@@ -20,6 +21,7 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -30,7 +32,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from changelog import note_version, section_text  # noqa: E402
+from changelog import DEFAULT_SECTION, first_after_unreleased, note_version, section_text  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
 from semver import Version, highest, is_prerelease, is_release  # noqa: E402
 
@@ -150,6 +152,20 @@ def body(plan: Plan, note: Optional[str], unreleased: Optional[str]) -> str:
     return banner(plan.version) + ("\n" + text if text.strip() else "")
 
 
+def date_warning(changelog: str, section: "re.Pattern[str]", version: str, committed: str, sha: str) -> Optional[str]:
+    """Why ``version``'s date in the changelog is not the day, in UTC, its commit was made
+    (``committed``, ISO 8601); None when it is, or when the first section is not ``version``'s."""
+    heading = first_after_unreleased(changelog)
+    match = section.fullmatch(heading) if heading else None
+    if match is None or match.group("version") != version:
+        return None
+    day = dt.datetime.fromisoformat(committed).astimezone(dt.timezone.utc).date().isoformat()
+    if match.group("date") == day:
+        return None
+    return (f"{version} is dated {match.group('date')}, and the commit it releases, {sha[:12]}, was made on {day} "
+            f"(UTC): the release goes on, since failing would spend the version over a date")
+
+
 # The repository, through git and the API.
 
 def git(*args: str) -> str:
@@ -186,6 +202,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--version", default="", help="the pre-release asked for, by a run started by hand")
     parser.add_argument("--changelog", default="CHANGELOG.md")
     parser.add_argument("--notes", default="changelog")
+    parser.add_argument("--section", default=DEFAULT_SECTION)
     parser.add_argument("--body-file", required=True, help="where the release's body is written")
     parser.add_argument("--repository", default=os.environ.get("GITHUB_REPOSITORY"))
     parser.add_argument("--default-branch", help="for tests: the API's otherwise")
@@ -210,6 +227,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         note = show(args.sha, f"{args.notes.rstrip('/')}/{Version(plan.version).release}.md")
         changelog = show(args.sha, args.changelog) or ""
         text = body(plan, note, section_text(changelog, "Unreleased"))
+        warning = (date_warning(changelog, re.compile(args.section), plan.version,
+                                git("show", "-s", "--format=%cI", args.sha).strip(), args.sha)
+                   if args.event == "push" else None)
     except Refused as why:
         print(f"::error title=release version::{why}")
         _summary(f"No release: {why}.")
@@ -220,12 +240,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 2
 
     Path(args.body_file).write_text(text, encoding="utf-8")
+    if warning:
+        print(f"::warning title=release version::{warning}")
     kind = "pre-release" if plan.prerelease else "release"
     own = f"; the draft {plan.own_draft} a failed run left is made again" if plan.own_draft else ""
     print(f"This run makes the {kind} {plan.version}, from {plan.target[:12]}, "
           f"{'the latest' if plan.latest else 'not the latest'}{own}.")
     _summary(f"This run makes the **{kind} {plan.version}**, from `{plan.target[:12]}`, "
-             f"{'the latest' if plan.latest else 'not the latest'}{own}.")
+             f"{'the latest' if plan.latest else 'not the latest'}{own}."
+             + (f"\n\n**Warning:** {warning}." if warning else ""))
     output = os.environ.get("GITHUB_OUTPUT")
     if output:
         with open(output, "a", encoding="utf-8") as fh:

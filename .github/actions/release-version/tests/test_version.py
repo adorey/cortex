@@ -11,9 +11,11 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import version as rv  # noqa: E402
+from changelog import DEFAULT_SECTION  # noqa: E402
 
 AFTER = "a" * 40
 OTHER = "b" * 40
@@ -172,9 +174,10 @@ class HistoryTests(unittest.TestCase):
         (self.repo / name).parent.mkdir(parents=True, exist_ok=True)
         (self.repo / name).write_text(text, encoding="utf-8")
 
-    def commit(self):
+    def commit(self, date=None):
         self.git("add", "-A")
-        self.git("commit", "-q", "-m", "change")
+        env = dict(os.environ, GIT_COMMITTER_DATE=date) if date else None
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-m", "change"], check=True, capture_output=True, env=env)
 
     def head(self):
         return self.git("rev-parse", "HEAD").strip()
@@ -214,6 +217,29 @@ class HistoryTests(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertIn(said, out)
 
+    def release_dated(self, date, committed):
+        self.write("CHANGELOG.md", f"# Changelog\n\n## [Unreleased]\n\n## [1.4.0] - {date} — Y _(Released)_\n\n"
+                                   "## [1.3.0] - 2026-11-01 — X _(Released)_\n")
+        self.write("changelog/1.4.0.md", "# 1.4.0")
+        self.commit(date=committed)
+        return self.run_version("--event", "push", "--ref", "main", "--before", self.before, "--sha", self.head())
+
+    def test_a_date_other_than_the_commits_is_a_warning_and_no_failure(self):
+        summary = self.out / "summary.md"
+        with mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+            code, out, outputs = self.release_dated("2026-10-29", "2026-10-31T23:30:00+01:00")
+        self.assertEqual((code, outputs.get("version")), (0, "1.4.0"), out)
+        warning = (f"1.4.0 is dated 2026-10-29, and the commit it releases, {self.head()[:12]}, "
+                   "was made on 2026-10-31 (UTC)")
+        self.assertIn(f"::warning title=release version::{warning}", out)
+        self.assertIn(f"**Warning:** {warning}", summary.read_text(encoding="utf-8"))
+
+    def test_the_commits_day_is_taken_in_utc(self):
+        # 00:30 in Paris on 1 November is still 31 October in UTC.
+        code, out, _ = self.release_dated("2026-10-31", "2026-11-01T00:30:00+01:00")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("::warning", out)
+
     def test_a_push_with_no_note_fails(self):
         self.write("README.md", "x")
         self.commit()
@@ -235,6 +261,13 @@ class HistoryTests(unittest.TestCase):
         body = (self.out / "body.md").read_text(encoding="utf-8")
         self.assertIn("A pre-release of 1.4.0", body)
         self.assertTrue(body.endswith("### Added\n- a thing"))
+
+
+class ActionTests(unittest.TestCase):
+    def test_the_action_reads_the_section_the_lib_does(self):
+        action = (Path(__file__).resolve().parents[1] / "action.yml").read_text(encoding="utf-8")
+        line = next(l for l in action.splitlines() if l.strip().startswith("default: '## "))
+        self.assertEqual(line.strip()[len("default: '"):-1].replace("''", "'"), DEFAULT_SECTION)
 
 
 if __name__ == "__main__":
