@@ -7,7 +7,19 @@ release note under [`changelog/`](changelog/).
 
 ## [Unreleased]
 
+### Added
+- **The release cycle** ([ADR-009](docs/adr/ADR-009-release-cycle.md), [#187](https://github.com/xod-labs/cortex/issues/187)). Every merge into `main` is a release:
+  - the `release gate` checks the pull request before it merges — one new version, its note, its section dated the day it merges in UTC, again on the merge queue and each night;
+  - the merge is built and left as a draft with its six assets;
+  - the maintainer publishes it from the Releases page, and the `release guard` checks every publication — the provenance of each asset, `SHA256SUMS`, immutability, `latest`.
+- **Pre-releases are versions** — `X.Y.Z-alpha.N`, `-beta.N`, `-rc.N` — cut by hand from an integration branch, installed and pinned by their version (`install.sh 1.3.0-rc.1`), and never `latest` ([#203](https://github.com/xod-labs/cortex/issues/203)).
+- **An older major version lives on `N.x`** and releases through the same cycle, never as `latest` ([#204](https://github.com/xod-labs/cortex/issues/204)).
+- **`bin/setup-release.sh`** applies the settings the cycle relies on, and checks them with `--check`: the ruleset, the merge queue, immutable releases ([#199](https://github.com/xod-labs/cortex/issues/199)).
+
 ### Changed
+- **A binary knows the spec archives of immutable pre-releases**, and checks a pinned pre-release against them ([#205](https://github.com/xod-labs/cortex/issues/205)).
+- **No release is made from a tag**: a tag pushed by hand starts nothing ([#202](https://github.com/xod-labs/cortex/issues/202)).
+- **Commit messages are checked** on every pull request, and a subject is written in the present tense, saying what the commit does ([#192](https://github.com/xod-labs/cortex/issues/192)).
 - **The history of `main` was rewritten on 2026-10-30.** Eight commit messages written after the commit convention of 2026-06-03 broke it, and now follow it. Every tree is unchanged, and the tags 0.6.0 to 1.2.1 moved to the rewritten commits. The previous history stays on GitHub at `refs/archive/pre-rewrite-2026-10-30`, since the attestations and the spec archives of 1.0.0 to 1.2.1 name its commits. A clone made before then must fetch again: `git fetch --force --tags origin`, then `git reset --hard origin/main` on `main`. The installed binaries and the published assets are unchanged. [ADR-009](docs/adr/ADR-009-release-cycle.md) makes it the last rewrite: once releases are immutable, their tags no longer move.
 
 ## [1.2.2] - 2026-10-31 — On Display _(Released)_
