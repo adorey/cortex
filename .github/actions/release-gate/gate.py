@@ -14,7 +14,12 @@ releases. It passes only when:
    included, is named after it. Pre-releases do not count;
 4. no draft release is waiting: one release is in flight at a time.
 
-The name of the pull request's branch does not matter. Standard library only.
+The name of the pull request's branch does not matter. A fork's pull request runs with a read-only
+token, to which GitHub lists no draft: rule 4, and rule 3's check of a draft's name, pass blind
+there. They are not refused for it: where the repository has a merge queue, its run, with the
+repository's token, checks them again — the nightly re-run keeps the fork's token — and the
+cycle's releases come from the repository's own branches (ADR-009 §9).
+Standard library only.
 """
 
 from __future__ import annotations
@@ -71,7 +76,11 @@ def decide(added: Sequence[str], head_changelog: str, base_changelog: str, base_
 
     # 1. Exactly one new release note.
     if not new:
-        return Verdict(None, [f"it adds no release note of a version with no release yet: {notes}/X.Y.Z.md"])
+        # Name what took each note's version: a release, or a tag pushed by hand, which spends it too.
+        taken = "; ".join(f"{v} is already released" if v in published else f"{v} already has a tag, with no release"
+                          for v in sorted(set(added), key=Version))
+        return Verdict(None, [f"it adds no release note of a version with no release yet: {notes}/X.Y.Z.md"
+                              + (f" — {taken}" if taken else "")])
     if len(new) > 1:
         listed = ", ".join(f"{notes}/{v}.md" for v in new)
         return Verdict(None, [f"it adds {len(new)} release notes, {listed}: one release at a time"])

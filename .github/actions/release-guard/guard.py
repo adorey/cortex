@@ -3,12 +3,16 @@
 For releases and pre-releases alike:
 
 1. the tag is a version: ``X.Y.Z`` or ``X.Y.Z-(alpha|beta|rc).N``;
-2. the build provenance of every asset names the tag's commit — ``gh attestation verify``, signed
-   by the workflow that built it;
+2. the build provenance of every asset names the tag's commit — its attestations, read through the
+   API, then ``gh attestation verify``, signed by the workflow that built it. The API failing to
+   answer is no finding: the guard stops, and says nothing of the release. ``gh`` still fetches its
+   trust root over the network, and a failure there reads as one;
 3. the assets expected are there, no other, and ``SHA256SUMS`` matches them;
 4. the release is immutable;
-5. ``latest`` is the highest version without a suffix — among the releases that pass: a release
-   that fails its guard never stays ``latest``, or ``releases/latest/download/…`` would serve it.
+5. ``latest`` is the highest version without a suffix — among the releases that carry every asset
+   expected and are not marked pre-release: a release that fails its guard leaves ``latest`` to the
+   highest of them, or says none is left, since ``releases/latest/download/…`` would serve it; one
+   that misses an asset never becomes it again.
 
 It repairs item 5 only, since immutability locks everything else: when an older line, a
 pre-release or a release that fails took ``latest``, it moves it. On any other failure it fails, and opens one issue
@@ -20,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -50,9 +55,22 @@ def tag_commit(github: GitHub, tag: str) -> str:
     return ref["sha"]
 
 
-def gh_verify(path: Path, repository: str, commit: str, signer: str) -> Optional[str]:
-    """None when ``path``'s provenance names ``commit`` and ``signer``; why not otherwise."""
-    out = subprocess.run(["gh", "attestation", "verify", str(path), "--repo", repository,
+def attestations(github: GitHub, path: Path) -> List[Dict[str, Any]]:
+    """The attestations of ``path``'s digest, none when it has none. Any other failure of the API is
+    a GitHubError: the guard cannot tell, so it stops, and fails no release for it."""
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        return github.get(github.repo(f"/attestations/sha256:{digest}")).get("attestations") or []
+    except GitHubError as error:
+        if error.status == 404:
+            return []
+        raise
+
+
+def gh_verify(path: Path, bundle: Path, repository: str, commit: str, signer: str) -> Optional[str]:
+    """None when ``path``'s provenance, in the attestations of ``bundle``, names ``commit`` and
+    ``signer``; why not otherwise."""
+    out = subprocess.run(["gh", "attestation", "verify", str(path), "--bundle", str(bundle), "--repo", repository,
                           "--source-digest", commit, "--signer-workflow", signer], capture_output=True, text=True)
     if out.returncode == 0:
         return None
@@ -61,7 +79,7 @@ def gh_verify(path: Path, repository: str, commit: str, signer: str) -> Optional
 
 
 def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], signer: str, workdir: Path,
-          verify: Callable[[Path, str, str, str], Optional[str]] = gh_verify) -> Report:
+          verify: Callable[[Path, Path, str, str, str], Optional[str]] = gh_verify) -> Report:
     tag = release["tag_name"]
     report = Report(tag)
 
@@ -109,11 +127,21 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
     try:
         commit = tag_commit(github, tag)
     except GitHubError as error:
+        if error.status != 404:
+            raise   # the API in trouble says nothing of the release
         report.findings.append(f"the tag {tag} cannot be read: {error}")
     else:
         failed = []
+        bundles = workdir / ".attestations"
+        bundles.mkdir()
         for name, path in sorted(files.items()):
-            why = verify(path, github.repository, commit, signer)
+            found = [a["bundle"] for a in attestations(github, path) if a.get("bundle")]
+            if not found:
+                failed.append(f"{name} (no attestation)")
+                continue
+            bundle = bundles / f"{name}.jsonl"
+            bundle.write_text("".join(json.dumps(b) + "\n" for b in found), encoding="utf-8")
+            why = verify(path, bundle, github.repository, commit, signer)
             if why:
                 failed.append(f"{name} ({why})")
         if failed:
@@ -130,25 +158,34 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
     return report
 
 
-def keep_latest(github: GitHub, report: Report) -> None:
-    """5. ``latest`` on the highest version without a suffix that passes — the one thing the guard
-    repairs. Deleting a release that was ``latest`` leaves none at all: GitHub does not move it."""
+def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None:
+    """5. ``latest`` on the highest version without a suffix that carries every asset expected — the
+    one thing the guard repairs. A release missing one stays out, whichever guard runs: it cannot
+    pass. GitHub makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves
+    none at all: GitHub does not move it."""
     failing = report.tag if report.findings else None
+    # Chosen by their assets, not by a guard of their own: 1.0.0 to 1.2.2 are signed by binary.yml, not
+    # release.yml, and would fail one, so `latest` could never come back to them. A release with every
+    # asset that fails any other check — provenance, SHA256SUMS, an extra asset, immutability — could
+    # take `latest` back until it is deleted: its issue says so (ADR-009 §9).
     published = [r for r in github.releases() if not r.get("draft") and is_release(r.get("tag_name"))
-                 and r.get("tag_name") != failing]
+                 and r.get("tag_name") != failing and not r.get("prerelease")
+                 and set(expected) <= {a["name"] for a in r.get("assets", [])}]
     top = highest(Version(r["tag_name"]) for r in published)
-    if top is None:
-        return
     try:
         current = github.get(github.repo("/releases/latest"))["tag_name"]
     except GitHubError:
         current = None
+    if top is None:
+        if failing and failing == current:
+            report.findings.append(f"latest stays on {failing}: no other release carries every asset expected")
+        return
     if current == str(top):
-        report.passed.append(f"latest is {top}, the highest version" + (" that passes" if failing else ""))
+        report.passed.append(f"latest is {top}, the highest version" + (" with every asset expected" if failing else ""))
         return
     target = next(r for r in published if r["tag_name"] == str(top))
     github.request("PATCH", github.repo(f"/releases/{target['id']}"), body={"make_latest": "true"})
-    why = f"the highest version that passes, while {failing} fails" if failing == current else "the highest version"
+    why = f"the highest version with every asset expected, while {failing} fails" if failing and failing == current else "the highest version"
     report.repaired.append(f"latest was {current or 'none'}; it is {top} again, {why}")
 
 
@@ -163,14 +200,17 @@ def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional
             + "\n**It cannot be repaired.** A published release is immutable: it can only be deleted, and its "
               f"version is spent — {report.tag} can never be used again. The next patch ships what this one "
               "should have, through the release cycle.\n\n"
-              f"The guard keeps `latest` off {report.tag}. If you delete it, check that `latest` still names a "
+              f"The guard moves `latest` off {report.tag} when it holds it, to the highest `X.Y.Z` release, not "
+              "marked pre-release, that carries every asset expected, if there is one: its run says whether it "
+              f"could. A later guard gives `latest` only to such a release: {report.tag}, if it is one, could take "
+              "it back until it is deleted. If you delete it, check that `latest` still names a "
               "release: GitHub does not move it when the latest release is deleted.\n")
     issue = github.request("POST", github.repo("/issues"), body={"title": title, "body": body, "labels": [label]})
     return issue.get("html_url")
 
 
 def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
-         verify: Callable[[Path, str, str, str], Optional[str]] = gh_verify) -> int:
+         verify: Callable[[Path, Path, str, str, str], Optional[str]] = gh_verify) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--tag", required=True)
     parser.add_argument("--expected", default="", help="the names of the assets, one per line")
@@ -187,8 +227,12 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
             return 2
         with tempfile.TemporaryDirectory(prefix="release-guard-") as tmp:
             report = check(github, release, expected, args.signer_workflow, Path(tmp), verify)
-        keep_latest(github, report)
-        issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
+        # Both writes are tried, whatever the other does: `latest` moved off a release whose issue
+        # cannot be opened, and the issue opened while `latest` cannot move.
+        try:
+            keep_latest(github, report, expected)
+        finally:
+            issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
     except GitHubError as error:
         print(f"::error title=release guard::{error}")
         return 2
