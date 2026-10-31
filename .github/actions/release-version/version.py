@@ -124,11 +124,11 @@ def for_dispatch(version: str, ref: str, sha: str, state: State) -> Plan:
         top_all = highest(releases)
         if top_all is not None and not release > top_all:
             raise Refused(f"{release} is not higher than {top_all}, and no {release.major}.x branch exists to release it on")
+    if version in state.tags:
+        raise Refused(f"the tag {version} already exists")
     earlier = highest(v for v in (Version.parse(t) for t in state.tags) if v is not None and v.pre and v.release == release)
     if earlier is not None and not candidate > earlier:
         raise Refused(f"{version} is not higher than {earlier}, already cut for {release}")
-    if version in state.tags:
-        raise Refused(f"the tag {version} already exists")
     own = _own_or_refuse(state, version, sha)
     waiting = sorted(r.get("name") or r.get("tag_name") for r in state.releases
                      if r.get("draft") and r.get("id") != own)

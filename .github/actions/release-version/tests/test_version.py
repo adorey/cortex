@@ -102,7 +102,7 @@ class DispatchTests(unittest.TestCase):
             ("1.3.0-rc1", "release/x", self.STATE, "'1.3.0-rc1' is no pre-release as one is cut"),
             ("1.3.0-alpha.1", "release/x", self.STATE, "1.3.0-alpha.1 is not higher than 1.3.0-beta.1, already cut for 1.3.0"),
             ("1.2.2-rc.1", "release/x", self.STATE, "1.2.2 is not higher than 1.2.2, the highest release of 1.x"),
-            ("1.3.0-beta.1", "release/x", self.STATE, "is not higher than 1.3.0-beta.1"),
+            ("1.3.0-beta.1", "release/x", self.STATE, "the tag 1.3.0-beta.1 already exists"),
         ]
         for version, ref, repo, message in cases:
             with self.subTest(version=version, ref=ref):
