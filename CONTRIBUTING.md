@@ -236,10 +236,10 @@ The `commit messages` check reads every commit a pull request brings, merge comm
 | 👷 | `ci` | CI pipeline changes |
 | 📦 | `build` | Build system / dependencies |
 | ⏪ | `revert` | Revert a previous commit |
-| 💥 | (any) | Mark a breaking change — use **in addition** to the type's emoji, or in the footer with `BREAKING CHANGE:` |
+| 💥 | (any) | Mark a breaking change — **instead of** the type's emoji, since a commit carries one, with `!` after the scope; or in the footer with `BREAKING CHANGE:` |
 | 🚧 | `chore(wip)` | Work in progress (avoid on `main` — for draft PRs only) |
 | 🔥 | `chore` *(removal)* | Remove dead code or deprecated files |
-| 🚀 | `chore(release)` | Release tag / version bump |
+| 🚀 | `chore(release)` | Release / version bump |
 
 > **Keep it simple:** if you're hesitating between two emojis, pick the one that matches the Conventional Commits type. The mapping above is the source of truth. Don't invent new emojis.
 
