@@ -1,8 +1,9 @@
 name: release guard
 description: >-
   What a published release is checked against (ADR-009 §3.5): a version tag, the provenance of every
-  asset naming the tag's commit, the assets expected and SHA256SUMS over them, and immutability.
-  A failure opens one issue: the release cannot be repaired, only deleted, and its version is spent.
+  asset naming the tag's commit, the assets expected and SHA256SUMS over them, immutability, and
+  `latest` on the highest version — the one thing it repairs. Anything else fails, and opens one
+  issue: the release cannot be repaired, only deleted, and its version is spent.
 
 inputs:
   tag:
@@ -18,7 +19,7 @@ inputs:
     description: The label of the issue it opens.
     default: type:infra
   token:
-    description: "A token that opens issues: `contents: read`, `issues: write`, `attestations: read`."
+    description: "A token that moves `latest` and opens issues: `contents: write`, `issues: write`, `attestations: read`."
     default: ${{ github.token }}
 
 runs:

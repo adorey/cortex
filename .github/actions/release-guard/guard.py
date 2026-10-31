@@ -6,11 +6,13 @@ For releases and pre-releases alike:
 2. the build provenance of every asset names the tag's commit — ``gh attestation verify``, signed
    by the workflow that built it;
 3. the assets expected are there, no other, and ``SHA256SUMS`` matches them;
-4. the release is immutable.
+4. the release is immutable;
+5. ``latest`` is the highest version without a suffix.
 
-On any failure it fails, and opens one issue naming what it found and the only fix: the release
-cannot be repaired, only deleted, and its version is spent; the next patch ships what it should
-have. Standard library only, and ``gh``.
+It repairs item 5 only, since immutability locks everything else: when an older line or a
+pre-release took ``latest``, it moves it back. On any other failure it fails, and opens one issue
+naming what it found and the only fix: the release cannot be repaired, only deleted, and its
+version is spent; the next patch ships what it should have. Standard library only, and ``gh``.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from github import GitHub, GitHubError, quote  # noqa: E402
-from semver import is_prerelease, is_release  # noqa: E402
+from semver import Version, highest, is_prerelease, is_release  # noqa: E402
 
 SUMS = "SHA256SUMS"
 
@@ -36,6 +38,7 @@ SUMS = "SHA256SUMS"
 class Report:
     tag: str
     findings: List[str] = field(default_factory=list)
+    repaired: List[str] = field(default_factory=list)
     passed: List[str] = field(default_factory=list)
 
 
@@ -126,6 +129,24 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
     return report
 
 
+def keep_latest(github: GitHub, report: Report) -> None:
+    """5. ``latest`` on the highest version without a suffix — the one thing the guard repairs."""
+    published = [r for r in github.releases() if not r.get("draft") and is_release(r.get("tag_name"))]
+    top = highest(Version(r["tag_name"]) for r in published)
+    if top is None:
+        return
+    try:
+        current = github.get(github.repo("/releases/latest"))["tag_name"]
+    except GitHubError:
+        current = None
+    if current == str(top):
+        report.passed.append(f"latest is {top}, the highest version")
+        return
+    target = next(r for r in published if r["tag_name"] == str(top))
+    github.request("PATCH", github.repo(f"/releases/{target['id']}"), body={"make_latest": "true"})
+    report.repaired.append(f"latest was {current or 'none'}; it is {top} again, the highest version")
+
+
 def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional[str]:
     """One issue per release: none is opened when one is open already."""
     title = f"Release {report.tag} failed its guard"
@@ -159,17 +180,20 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
             return 2
         with tempfile.TemporaryDirectory(prefix="release-guard-") as tmp:
             report = check(github, release, expected, args.signer_workflow, Path(tmp), verify)
+        keep_latest(github, report)
         issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
     except GitHubError as error:
         print(f"::error title=release guard::{error}")
         return 2
 
-    lines = [f"- ✓ {p}" for p in report.passed] + [f"- ✗ {f}" for f in report.findings]
+    lines = [f"- ✓ {p}" for p in report.passed] + [f"- ↺ {r}" for r in report.repaired] + [f"- ✗ {f}" for f in report.findings]
     verdict = (f"{args.tag} passes its guard." if not report.findings
                else f"{args.tag} fails its guard: it cannot be repaired, only deleted, and its version is spent. {issue or ''}")
     print(verdict + "\n" + "\n".join(lines))
     for finding in report.findings:
         print(f"::error title=release guard::{finding}")
+    for repair in report.repaired:
+        print(f"::notice title=release guard::{repair}")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as fh:

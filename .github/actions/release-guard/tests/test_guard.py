@@ -1,4 +1,5 @@
-"""The guard, against a fake GitHub (ADR-009 §3.5): what passes, and what fails and opens one issue."""
+"""The guard, against a fake GitHub (ADR-009 §3.5): what passes, what fails and opens one issue,
+and the one thing it repairs, `latest`."""
 
 import copy
 import hashlib
@@ -104,13 +105,14 @@ class PassingTests(unittest.TestCase):
         self.assertIn("1.4.0 passes its guard.", out)
         for line in ("the tag 1.4.0 is a version", "the 6 assets expected are there", "SHA256SUMS matches the assets",
                      f"the provenance of every asset names {COMMIT[:12]}, signed by {SIGNER}",
-                     "the release is immutable"):
+                     "the release is immutable", "latest is 1.4.0, the highest version"):
             self.assertIn(f"✓ {line}", out)
-        self.assertEqual(github.issues, [])
+        self.assertEqual((github.issues, github.patched), ([], []))
 
-    def test_a_pre_release_passes(self):
+    def test_a_pre_release_passes_and_leaves_latest_alone(self):
         github = FakeGitHub([release("1.4.0-rc.1", 1), release("1.3.0", 2)], latest="1.3.0")
         self.assertEqual(run(github, "1.4.0-rc.1")[0], 0)
+        self.assertEqual(github.latest, "1.3.0")
 
 
 class FailingTests(unittest.TestCase):
@@ -154,6 +156,26 @@ class FailingTests(unittest.TestCase):
         run(github, "1.4.0")
         run(github, "1.4.0")
         self.assertEqual(len(github.issues), 1)
+
+
+class LatestTests(unittest.TestCase):
+    def test_latest_on_an_older_line_moves_back_to_the_highest(self):
+        # 1.5.1 of the 1.x line published with "Set as the latest release" ticked.
+        github = FakeGitHub([release("1.5.1", 1), release("2.0.0", 2)], latest="1.5.1")
+        code, out = run(github, "1.5.1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual((github.latest, github.patched), ("2.0.0", [(2, {"make_latest": "true"})]))
+        self.assertIn("↺ latest was 1.5.1; it is 2.0.0 again, the highest version", out)
+
+    def test_latest_on_a_pre_release_moves_back(self):
+        github = FakeGitHub([release("2.1.0-rc.1", 1), release("2.0.0", 2)], latest="2.1.0-rc.1")
+        self.assertEqual(run(github, "2.1.0-rc.1")[0], 0)
+        self.assertEqual(github.latest, "2.0.0")
+
+    def test_latest_is_repaired_even_when_the_release_fails(self):
+        github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")
+        self.assertEqual(run(github, "1.5.1")[0], 1)
+        self.assertEqual(github.latest, "2.0.0")
 
 
 class GhVerifyTests(unittest.TestCase):

@@ -1,8 +1,9 @@
 name: release guard
 
 # Every publication is checked (ADR-009 §3.5): the tag, the provenance of each asset, the six assets
-# and SHA256SUMS, and immutability. A failure it reports in an issue, since an immutable release
-# cannot be repaired, only deleted.
+# and SHA256SUMS, immutability, and `latest`. The guard moves `latest` back to the highest version
+# when an older line or a pre-release took it; anything else it reports in an issue, since an
+# immutable release cannot be repaired, only deleted.
 #
 # A published release runs the workflow of the default branch. A release published before this
 # workflow reached it — the release candidate of the cycle itself — is checked by *Run workflow*,
@@ -18,7 +19,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write        # move `latest` back
   issues: write          # report what cannot be repaired
   attestations: read     # the provenance of the assets
 
