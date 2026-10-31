@@ -106,6 +106,13 @@ class HistoryTests(unittest.TestCase):
             with self.subTest(base=base):
                 self.assertEqual(self.run_changes(base)[0], "run=true")
 
+    def test_a_path_out_of_ascii_matches_as_it_is_named(self):
+        self.git("config", "core.quotePath", "true")   # git's default, whatever this machine's
+        self.commit({"cli/caf\u00e9.py": "x"})
+        run, out = self.run_changes(self.base)
+        self.assertEqual(run, "run=true")
+        self.assertIn("cli/caf\u00e9.py first", out)
+
     def test_comments_and_blank_lines_in_paths(self):
         self.commit({"install.sh": "x"})
         self.assertEqual(self.run_changes(self.base, "# the scripts\n\ninstall.sh\n")[0], "run=true")
