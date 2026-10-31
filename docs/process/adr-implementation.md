@@ -64,8 +64,9 @@ collapses one level at a time without manual edits.
   commits, so every branch above it loses its base and has to be rebuilt by hand. GitHub's
   *Rebase and merge* does the same — it always creates new commits — so it is only safe if every
   branch above is then restacked by hand. A merge commit keeps the commits the next branch is built
-  on. Squashing is fine again for the last pull request of a stack, and for any standalone pull
-  request.
+  on. **`main` takes merge commits only**, the last pull request of a stack included: the ruleset
+  allows nothing else ([ADR-009 §3.10](../adr/ADR-009-release-cycle.md#310-the-repositorys-settings--binsetup-releasesh)),
+  and a squash would drop from `main` the commits a pre-release is tagged on.
 - **Delete the branch once its pull request is merged.** That deletion is what makes GitHub
   retarget the child pull request onto the merged one's base; with automatic deletion off, the
   stack does not collapse until someone clicks *Delete branch*.
@@ -241,26 +242,40 @@ stack, including the last one into `main`.
 - **ADR gate.** An ADR may declare a subset of its phases as mandatory before a release. Nothing
   that depends on the gate starts until those phases have merged into the release branch. Their
   tasks carry `gate:blocking`.
-- **Release gate.** A phase's pull request runs the tests from source. The `binary` workflow —
+- **Build gate.** A phase's pull request runs the tests from source. The `binary` workflow —
   the four targets built, the suite replayed through each binary, the glibc floor — runs where
-  code integrates: on a push to a `release/**` branch, on every pull request into `main`, on
-  `main` and on a tag. So the stack merges **into its release branch**, never around it into
-  `main`; the binaries go green there, and only then does the final pull request open (§9). It
-  builds them once more, on what `main` will be. A phase that needs the build before that runs
-  the workflow by hand on its branch (*Run workflow*).
+  code integrates: on a push to a `release/**` branch, on every pull request into `main` or a
+  line's branch `N.x`, on the merge group, and when the `release` workflow builds a release. So
+  the stack merges **into its release branch**, never around it into `main`; the binaries go
+  green there, and only then does the final pull request open (§9). It builds them once more, on
+  what `main` will be. A phase that needs the build before that runs the workflow by hand on its
+  branch (*Run workflow*).
+- **Release gate** (ADR-009 §3.2). Every pull request into `main` is a release: the `release
+  gate` check passes only when it adds one new version, its note and its section dated the day it
+  merges, in UTC. It runs on the pull request, on the merge group, and again each night.
 
 ## 9. Closing an ADR
 
-1. Final pull request: `release/adr-NNN-slug` → `main`, opened once the `binary` workflow is
+1. `release/X.Y.Z` — `changelog/X.Y.Z.md` and the `CHANGELOG.md` section, dated the day the final
+   pull request will merge, in UTC — stacked last, so the note describes only what its branch
+   contains. The ADR status becomes `Implemented` there, with an amendment entry recording what
+   changed during implementation. An ADR is appended to, never rewritten. If the final pull
+   request slips to another day, one commit on the integration branch, which the final pull
+   request carries, corrects the three dates: the `CHANGELOG.md` section's — the gate refuses any
+   other day — and the ADR's implemented date, in its header and in `docs/adr/README.md`.
+2. A release that changes the release pipeline publishes a release candidate from the release
+   branch first: *Run workflow* on the `release` workflow, `X.Y.Z-rc.1`, then *Publish release*
+   (ADR-009 §3.7).
+3. Final pull request: `release/adr-NNN-slug` → `main`, opened once the `binary` workflow is
    green on the release branch (§8), describing the whole decision and carrying **every**
-   `Closes #NN` line, one per issue (§6). It merges when its own run is green.
-2. The ADR status becomes `Implemented`, with an amendment entry recording what changed during
-   implementation. An ADR is appended to, never rewritten.
-3. `release/X.Y.Z` — `changelog/X.Y.Z.md` and the `CHANGELOG.md` section — stacked last, so the
-   note describes only what its branch contains.
-4. Every issue delivered is closed — by the final pull request's keywords, or by hand against
+   `Closes #NN` line, one per issue (§6). The `release gate` names its version. It merges through
+   the merge queue, with a merge commit, when its checks are green.
+4. **The merge is the release.** The draft `X.Y.Z` appears on the Releases page about a quarter of
+   an hour later, with its assets; the maintainer reads it and presses *Publish release*, and the
+   `release guard` checks it. Nobody pushes a tag.
+5. Every issue delivered is closed — by the final pull request's keywords, or by hand against
    the lists.
-5. Phase branches are deleted; the milestone closes on its own once every issue is closed; the
+6. Phase branches are deleted; the milestone closes on its own once every issue is closed; the
    epic closes with it.
-6. An issue delivered only in part stays **open**, with a comment saying what shipped and which
+7. An issue delivered only in part stays **open**, with a comment saying what shipped and which
    criterion remains.

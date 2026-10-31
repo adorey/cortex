@@ -25,7 +25,8 @@ read from their ``SHA256SUMS``; the second embeds that table in the binary, whic
 spec archive of those versions that changed since (§3.3).
 
 The version is stamped into the binary for the duration of the build, in ``cortex_cli/_stamp.py``:
-the release's, from the tag, or a pre-release — ``0.0.0-dev.N`` — for a build of no release.
+the release's, as the release workflow names it (ADR-009 §3.3), or a pre-release — ``0.0.0-dev.N`` —
+for a build of no release.
 """
 
 from __future__ import annotations

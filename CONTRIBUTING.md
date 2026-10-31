@@ -196,7 +196,7 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
    - A clear description of *why* (not just *what*)
    - A "Test plan" checklist (how you verified it works)
    - For architecture changes, link the ADR PR
-6. **Address review feedback** with new commits. A standalone pull request is squash-merged; a pull request **inside a stack** is merged with a **merge commit** — never squashed, and not rebased either: both rewrite the commits every branch above it is built on
+6. **Address review feedback** with new commits. Every pull request is merged with a **merge commit** — the repository allows nothing else: a squash or a rebase rewrites the commits a stacked branch is built on, and drops from `main` the commits a pre-release is tagged on
 
 > **Delivering a multi-phase ADR?** The branches, the stacked pull requests, the issue hierarchy and the gates are described in [docs/process/adr-implementation.md](docs/process/adr-implementation.md).
 
@@ -205,15 +205,17 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 **Format:**
 
 ```
-<gitmoji> <type>(<scope>): <imperative subject>
+<gitmoji> <type>(<scope>): <subject>
 ```
+
+The `commit messages` check reads every commit a pull request brings, merge commits left out, and lists each one that breaks these rules, with why ([ADR-009 §3.8](docs/adr/ADR-009-release-cycle.md#38-the-commit-messages-check)). It checks the pattern, the length, the body and the trailers; the grammar of the subject is the review's.
 
 - **Single-line subject only** — no body. Keep commits atomic enough that the subject says it all (use a `BREAKING CHANGE:` footer only when strictly required).
 - **Never** add a `Co-Authored-By:` trailer (this overrides any AI tool's default).
 - `<gitmoji>` — visual category (single emoji) — see table below
 - `<type>` — Conventional Commits type (parseable by changelog tools)
 - `<scope>` *(optional)* — component or layer affected (`runtime`, `cli`, `core`, `roles`, `capabilities`, `adr`, `docs`, `extending-layers`, …)
-- `<subject>` — imperative, present tense, no trailing period, ≤ 72 chars
+- `<subject>` — in the present tense, saying what the commit does — "add the Redis capability", or "the macOS job runs the whole suite" — with no trailing period, ≤ 72 characters, the `#<issue>` not counted
 - `#<issue>` *(ADR work only)* — the task being delivered, immediately before the subject, so the issue timeline reads as a changelog: `✨ feat(core): #42 resolve the cascade from a configurable base root`
 
 **Why both gitmoji and Conventional Commits?** The gitmoji gives instant visual scanning of `git log`. The conventional prefix keeps commits parseable for automated changelog/release tooling. They compose cleanly — best of both worlds.
@@ -234,10 +236,10 @@ Why? Because changes to the framework affect every host project. The ADR is a fo
 | 👷 | `ci` | CI pipeline changes |
 | 📦 | `build` | Build system / dependencies |
 | ⏪ | `revert` | Revert a previous commit |
-| 💥 | (any) | Mark a breaking change — use **in addition** to the type's emoji, or in the footer with `BREAKING CHANGE:` |
+| 💥 | (any) | Mark a breaking change — **instead of** the type's emoji, since a commit carries one, with `!` after the scope; or in the footer with `BREAKING CHANGE:` |
 | 🚧 | `chore(wip)` | Work in progress (avoid on `main` — for draft PRs only) |
 | 🔥 | `chore` *(removal)* | Remove dead code or deprecated files |
-| 🚀 | `chore(release)` | Release tag / version bump |
+| 🚀 | `chore(release)` | Release / version bump |
 
 > **Keep it simple:** if you're hesitating between two emojis, pick the one that matches the Conventional Commits type. The mapping above is the source of truth. Don't invent new emojis.
 
@@ -276,13 +278,15 @@ Release process (maintainers only). A release is a **stack of pull requests onto
 
 1. Cut the integration branch from `main` and push it: `release/{version}`, or `release/adr-NNN-slug` when the release delivers the stack of an ADR — see [the branch model](docs/process/adr-implementation.md#1-branch-model). It gets no pull request of its own until the end
 2. Feature pull requests target the integration branch; one that builds on another is stacked on it, and a contributor's pull request opened against `main` is retargeted. Each adds its entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md)
-3. The release artefacts come **last**, in a pull request stacked on top of everything else: `changelog/{version}.md`, the detailed, narrated release note, and the `{version}` section of `CHANGELOG.md` (Keep a Changelog) that replaces the `[Unreleased]` entries and links to that note. Last, because they rewrite the `[Unreleased]` anchor every feature pull request also touches. The heading is written **final** — its release date and `_(Released)_` — because `CHANGELOG.md` is never edited after a release: if the release slips, the date is corrected in this pull request before it merges. `CHANGELOG.md` is the single source of truth for versions; **no version number lives anywhere else** (README, docs, …) to avoid stale copies
-4. Merge the stack in order — with a **merge commit** for any pull request that has another stacked on it, see [the stacking rules](docs/process/adr-implementation.md#2-stacking-the-phases) — **into the integration branch, never around it into `main`**. The pull requests of a stack run the tests from source; the `binary` workflow, which builds what ships, runs on the push to that branch
-5. Once `binary` is green on the integration branch, open its pull request into `main` — it builds the binaries again, on what `main` will be — and merge it when it is green
-6. Push the tag `{version}` on `main` — **no `v` prefix**, like every tag since 0.1.0: `git tag {version} origin/main && git push origin {version}`. The tag makes the release; **nothing is published from the Releases page**, by *Publish release* or *Draft a new release*. A release published there has no assets, and releases are immutable since 2026-10-30: it can never get them, and its version is spent. **Push one tag at a time**: GitHub keeps one run of the release waiting, and cancels it when a third comes — re-run the workflow of a tag whose release was cancelled
-7. The push runs the `binary` workflow from the tag. It builds the `cortex` binary for the four targets and runs each Linux one on the oldest glibc it supports. Only then does it create the release, as a draft titled `{version}` with `changelog/{version}.md` as its body, attach the binaries, the spec archive, `SHA256SUMS` and a build-provenance attestation for each, and publish it — `releases/latest` never names a release without its assets. A tag `X.Y.Z` must have its `CHANGELOG.md` section and its `changelog/X.Y.Z.md`, or the workflow stops before anything is created. A tag with a suffix, `X.Y.Z-something`, makes a pre-release and needs neither. That pre-release is immutable too, and stays: **no such tag is pushed to try the workflow**. A release already published is never uploaded to again. Check that the assets are there before announcing the release — the install scripts install from them
+3. The release artefacts come **last**, in a pull request stacked on top of everything else: `changelog/{version}.md`, the detailed, narrated release note, and the `{version}` section of `CHANGELOG.md` (Keep a Changelog) that replaces the `[Unreleased]` entries and links to that note. Last, because they rewrite the `[Unreleased]` anchor every feature pull request also touches. The heading is written **final** — its release date and `_(Released)_` — because `CHANGELOG.md` is never edited after a release: if the final pull request slips to another day, the date is corrected by a commit on the integration branch, which the final pull request carries — the gate refuses any other day — and so is the ADR's implemented date, in its header and in the ADR index, when the release ships one. `CHANGELOG.md` is the single source of truth for versions; **no version number lives anywhere else** (README, docs, …) to avoid stale copies
+4. Merge the stack in order — with a **merge commit**, the only method the repository allows, see [the stacking rules](docs/process/adr-implementation.md#2-stacking-the-phases) — **into the integration branch, never around it into `main`**. The pull requests of a stack run the tests from source; the `binary` workflow, which builds what ships, runs on the push to that branch
+5. **A release that changes the pipeline publishes a release candidate first** — `binary.yml`, the `release*` workflows, the actions under `.github/actions/`, `cli/build.py` or the install scripts ([ADR-009 §3.7](docs/adr/ADR-009-release-cycle.md#37-pre-releases)). *Run workflow* on the `release` workflow, from the integration branch, with `X.Y.Z-rc.1`: it leaves a draft pre-release, which you publish. Any release may cut pre-releases the same way — `X.Y.Z-alpha.N`, `X.Y.Z-beta.N`, `X.Y.Z-rc.N`, in that order; they are versions, never `latest`, and each one stays
+6. Once `binary` is green on the integration branch, open its pull request into `main`. The `release gate` names the version it releases, or says why it may not merge: exactly one new release note, its section first and **dated the day it merges, in UTC**, a version higher than every release, no draft waiting ([§3.2](docs/adr/ADR-009-release-cycle.md#32-the-release-gate--what-may-merge-into-main)). A date gone stale overnight turns it red. Once every check is green, add it to the **merge queue**, which runs the checks again at the moment of merging and merges with a merge commit
+7. **The merge is the release.** The `release` workflow builds it — the four targets, the glibc floor, the spec archive, `SHA256SUMS`, an attestation for each — and about a quarter of an hour later the draft `{version}` is on the Releases page, with its six assets and the note as its body. Read it, then press **Publish release**: GitHub creates the tag on the merged commit, the release is immutable, and the `release guard` checks it — the assets, their provenance, `latest`. **Nobody pushes a version tag**: a tag pushed by hand starts nothing. **Nothing is made with *Draft a new release***: a release without its assets cannot get them, and its version is spent. Check that the assets are there before announcing the release — the install scripts install from them. Wait for one release's draft before merging the next release: the gate sees drafts, not a release still being built ([§9](docs/adr/ADR-009-release-cycle.md#9-amendments))
 
-Steps 6 and 7 hold until the release cycle of ADR-009 ([#187](https://github.com/xod-labs/cortex/issues/187)) replaces them: a release drafted by CI from each merge into `main`, and published from the Releases page.
+**An older major version** lives on its own branch, `N.x`, cut from its last release when the next major ships: the same steps, with `N.x` for `main`, and its releases are never `latest`. A fix released there reaches `main` through a pull request from `N.x` that adds `main`'s own release note ([§3.11](docs/adr/ADR-009-release-cycle.md#311-lines--several-major-versions-at-once)). After cutting a line, run `bin/setup-release.sh xod-labs/cortex` again: it gives the line its merge queue.
+
+**The repository's settings** — the ruleset, the merge queue, immutable releases — are applied by `bin/setup-release.sh` and checked by its `--check` ([§3.10](docs/adr/ADR-009-release-cycle.md#310-the-repositorys-settings--binsetup-releasesh)). If the cycle itself cannot run and the change that fixes it cannot merge, §3.10 has the procedure: an issue, the ruleset disabled — never deleted, never bypassed — the one change, and the script run again.
 
 ### Release names
 

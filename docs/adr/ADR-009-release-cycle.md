@@ -511,3 +511,13 @@ Each case of the phases' criteria ran there:
 - a release made by hand failed its guard, opened one issue, and lost `latest`.
 
 The repository was deleted after the run.
+
+### Phase 4 — the switch
+
+- **The candidate of the release that ships this ADR is cut after the merge, and before the publication** (§3.7, and phase 4's third criterion). *Run workflow* starts only a workflow that the default branch has, and `release.yml` reaches `main` with the final merge: until then, GitHub answers 404 for it. A candidate published from the integration branch before the pull request into `main` is therefore impossible for the release that brings the cycle, and only for that one. `1.3.0` goes this way:
+  1. the final pull request merges, and `release.yml` drafts `1.3.0`;
+  2. that draft is deleted. It has no tag, so `1.3.0` is not spent. *Run workflow* refuses a pre-release while a draft waits;
+  3. `1.3.0-rc.1` is cut by *Run workflow* from the integration branch, restored, then published and checked by its guard. It is installed by `install.sh 1.3.0-rc.1` on a clean machine, and pinned and synced by a throwaway project;
+  4. the run of the merge is run again, drafts `1.3.0`, and `1.3.0` is published.
+
+  The first publication of the new pipeline is a pre-release, as §3.7 wants, and it holds the very tree `1.3.0` ships. A defect it finds is fixed in `1.3.1`: `main` already has `1.3.0`'s section, so `1.3.0` would never be published. Every later release cuts its candidates before its pull request into `main`, as §3.7 says.
