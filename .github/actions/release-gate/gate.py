@@ -12,7 +12,11 @@ releases. It passes only when:
 3. the version is higher than every release of the line it merges into — into ``N.x``, every
    ``N.*.*`` release, its major ``N``; otherwise every release — and no tag or release, draft
    included, is named after it. Pre-releases do not count;
-4. no draft release is waiting: one release is in flight at a time.
+4. no draft release is waiting: one release is in flight at a time. A merge's draft appears about
+   a quarter of an hour after it, once its assets are built: a release pull request merged in that
+   window passes this rule, and two drafts then wait. Releases are hours apart, so the rule does
+   not wait for a run in progress; the maintainer waits for the draft before merging the next
+   release (ADR-009 §9).
 
 The name of the pull request's branch does not matter. A fork's pull request runs with a read-only
 token, to which GitHub lists no draft: rule 4, and rule 3's check of a draft's name, pass blind
