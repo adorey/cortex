@@ -153,7 +153,7 @@ def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None
         return
     target = next(r for r in published if r["tag_name"] == str(top))
     github.request("PATCH", github.repo(f"/releases/{target['id']}"), body={"make_latest": "true"})
-    why = f"the highest version that passes, while {failing} fails" if failing == current else "the highest version"
+    why = f"the highest version that passes, while {failing} fails" if failing and failing == current else "the highest version"
     report.repaired.append(f"latest was {current or 'none'}; it is {top} again, {why}")
 
 

@@ -205,6 +205,13 @@ class LatestTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual((github.latest, github.patched), ("2.0.0", []))
 
+    def test_no_latest_at_all_is_repaired(self):
+        # The latest release was deleted, and GitHub left none: the next guard names none, not None.
+        github = FakeGitHub([release("2.0.1", 1), release("2.0.0", 2)], latest=None)
+        code, out = run(github, "2.0.1")
+        self.assertEqual((code, github.latest), (0, "2.0.1"), out)
+        self.assertIn("↺ latest was none; it is 2.0.1 again, the highest version\n", out)
+
     def test_latest_is_repaired_even_when_the_release_fails(self):
         github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")
         self.assertEqual(run(github, "1.5.1")[0], 1)
