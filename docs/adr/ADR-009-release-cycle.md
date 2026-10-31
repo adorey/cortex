@@ -458,3 +458,20 @@ Acceptance criteria:
   - `actions tests`, `commit messages` and `release gate`.
 
   None is a matrix job's name.
+
+### Phase 2 — the draft
+
+- **The release job is a workflow of its own, `release.yml`**, and `binary.yml` only builds. `release.yml` calls it (`workflow_call`) with the version to stamp, so pull requests, integration branches and releases share one definition of the build. `release.yml` runs:
+  - on a push to `main` or to `N.x`, with no `paths` filter;
+  - by *Run workflow*, with the pre-release's version.
+
+  No workflow starts on a tag any more: `binary.yml` lost its tag trigger and its publish job, and a test checks every workflow for it.
+- **A push with no `before`** — the first push of a branch — makes no release: nothing says what it adds.
+- **The draft action takes a directory and the names it must hold.** It checks them before it creates anything, uploads them, then reads them back by name and size. The version action writes the body.
+- **`make_latest` is set on the draft**:
+  - `true` for the highest release of the default branch;
+  - `false` for a line's release and for a pre-release.
+
+  The guard (phase 3) still puts `latest` right, whatever was ticked when publishing.
+- **A pre-release's body opens with a GitHub `[!WARNING]` alert** naming the release it prepares.
+- **The version job asks for `contents: write`**, like the gate: it must see drafts.
