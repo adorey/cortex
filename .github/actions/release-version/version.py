@@ -86,6 +86,10 @@ def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, st
     published = {r["tag_name"] for r in state.releases if not r.get("draft")}
     released = set(state.tags) | published
     new = sorted({v for v in added if v not in released}, key=Version)
+    if not new and added:
+        # A re-run once the release is published: its note is the push's, and nothing is left to do.
+        raise Refused(f"{', '.join(sorted(set(added), key=Version))} is already released: a re-run changes nothing, "
+                      f"and a new commit is a new version")
     if len(new) != 1:
         what = "no release note" if not new else f"{len(new)} release notes ({', '.join(new)})"
         raise Refused(f"the push adds {what} of a version with no release yet: it bypassed the gate, "

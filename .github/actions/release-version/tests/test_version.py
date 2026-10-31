@@ -42,9 +42,10 @@ class PushTests(unittest.TestCase):
                 with self.assertRaisesRegex(rv.Refused, re.escape(f"the push adds {what} of a version with no release yet")):
                     rv.for_push(added, "main", "main", AFTER, self.STATE)
 
-    def test_a_published_version_fails(self):
-        # Its note was added again: already released, it is no new version.
-        with self.assertRaisesRegex(rv.Refused, "no release note"):
+    def test_a_re_run_once_the_release_is_published_changes_nothing(self):
+        # The push's note is 1.3.0's, published since: found by the end-to-end run, which said
+        # "it bypassed the gate" here.
+        with self.assertRaisesRegex(rv.Refused, "1.3.0 is already released: a re-run changes nothing"):
             rv.for_push(["1.3.0"], "main", "main", AFTER, self.STATE)
 
     def test_a_draft_of_another_commit_fails(self):
