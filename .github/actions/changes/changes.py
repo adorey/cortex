@@ -60,7 +60,8 @@ def changed(base: str, head: str) -> Optional[List[str]]:
         merge_base = git("merge-base", base, head).strip()
     except subprocess.CalledProcessError:
         return None    # a base git does not have, after a force push: compare with nothing
-    return [line for line in git("diff", "--name-only", "--no-renames", merge_base, head).split("\n") if line]
+    # A path out of ASCII as it is named: git otherwise quotes it, "cli/caf\303\251.py", and no glob matches.
+    return [line for line in git("-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", merge_base, head).split("\n") if line]
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

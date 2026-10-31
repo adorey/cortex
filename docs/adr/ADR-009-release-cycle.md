@@ -457,7 +457,10 @@ Acceptance criteria:
   - `builds`, for `binary.yml`;
   - `actions tests`, `commit messages` and `release gate`.
 
-  None is a matrix job's name.
+  None is a matrix job's name. A test reads the workflows: each summary runs whatever happened, needs every job a pull request runs, and fails on a failure or a cancellation.
+- **Another ruleset that requires checks is reported, and left.** GitHub requires the checks of every ruleset. Cortex's `Block default`, made by hand before the cycle, requires thirteen, ten of them matrix jobs' names. `bin/setup-release.sh` reports such a ruleset and exits non-zero, but removes nobody's ruleset: the maintainer removes it by hand, with the run that applies the settings.
+- **A fork's pull request does not see the drafts.** Its token is read-only, and GitHub lists drafts only to a token with push access: rule 4, and rule 3's check of a draft's name, pass blind on it. The merge queue's run uses the repository's token and sees them, so on Cortex the queue decides. A repository without a queue relies on its releases being proposed from its own branches, as the cycle proposes them.
+- **A line is cut at a commit the queue tested.** The ruleset requires its checks when a branch is created too (`do_not_enforce_on_create: false`), so a new `N.x` is accepted only at a commit that carries them. The queue's merge commits do, since every check runs on the merge group. Without a queue, the merge button's commit carries no `release gate` and no `commit messages`, so cutting a line there is likely refused. This was not checked live.
 
 ### Phase 2 — the draft
 
