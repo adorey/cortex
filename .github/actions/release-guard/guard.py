@@ -14,10 +14,12 @@ For releases and pre-releases alike:
    highest of them, or says none is left, since ``releases/latest/download/…`` would serve it; one
    that misses an asset never becomes it again.
 
-It repairs item 5 only, since immutability locks everything else: when an older line, a
-pre-release or a release that fails took ``latest``, it moves it. On any other failure it fails, and opens one issue
-naming what it found and the only fix: the release cannot be repaired, only deleted, and its
-version is spent; the next patch ships what it should have. Standard library only, and ``gh``.
+It repairs what an immutable release still lets change: ``latest``, when an older line, a
+pre-release or a release that fails took it; and the pre-release box of an ``X.Y.Z`` that passes,
+ticked when it was published, since GitHub makes no pre-release ``latest``. On any other failure it
+fails, and opens one issue naming what it found and the only fix: the release cannot be repaired,
+only deleted, and its version is spent; the next patch ships what it should have. Standard library
+only, and ``gh``.
 """
 
 from __future__ import annotations
@@ -158,11 +160,24 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
     return report
 
 
+def untick_pre_release(github: GitHub, release: Dict[str, Any], report: Report) -> None:
+    """An ``X.Y.Z`` that passes, published with "Set as a pre-release" ticked: GitHub never makes it
+    ``latest``, so the default install, ``releases/latest``, never reaches it. The box stays editable
+    on an immutable release, and the guard unticks it; ``latest`` is then put right as for any
+    release. One that fails keeps it."""
+    tag = release["tag_name"]
+    if report.findings or not is_release(tag) or not release.get("prerelease"):
+        return
+    # `make_latest` false: its default, true, would make it latest whatever its version; keep_latest decides next.
+    github.request("PATCH", github.repo(f"/releases/{release['id']}"), body={"prerelease": False, "make_latest": "false"})
+    report.repaired.append(f"{tag} was marked pre-release; it is a release again, as its version says")
+
+
 def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None:
-    """5. ``latest`` on the highest version without a suffix that carries every asset expected — the
-    one thing the guard repairs. A release missing one stays out, whichever guard runs: it cannot
-    pass. GitHub makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves
-    none at all: GitHub does not move it."""
+    """5. ``latest`` on the highest version without a suffix that carries every asset expected, which
+    the guard repairs. A release missing one stays out, whichever guard runs: it cannot pass. GitHub
+    makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves none at all:
+    GitHub does not move it."""
     failing = report.tag if report.findings else None
     # Chosen by their assets, not by a guard of their own: 1.0.0 to 1.2.2 are signed by binary.yml, not
     # release.yml, and would fail one, so `latest` could never come back to them. A release with every
@@ -174,7 +189,9 @@ def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None
     top = highest(Version(r["tag_name"]) for r in published)
     try:
         current = github.get(github.repo("/releases/latest"))["tag_name"]
-    except GitHubError:
+    except GitHubError as error:
+        if error.status != 404:
+            raise   # the API in trouble: `latest` is unknown, so nothing is said of it
         current = None
     if top is None:
         if failing and failing == current:
@@ -220,6 +237,7 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
     args = parser.parse_args(argv)
     github = github or GitHub(args.repository)
     expected = [n.strip() for n in args.expected.splitlines() if n.strip()]
+    report: Optional[Report] = None
     try:
         release = next((r for r in github.releases() if r.get("tag_name") == args.tag and not r.get("draft")), None)
         if release is None:
@@ -230,14 +248,17 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
         # Both writes are tried, whatever the other does: `latest` moved off a release whose issue
         # cannot be opened, and the issue opened while `latest` cannot move.
         try:
+            untick_pre_release(github, release, report)
             keep_latest(github, report, expected)
         finally:
             issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
     except GitHubError as error:
         print(f"::error title=release guard::{error}")
+        if report is not None:   # what the guard found before the API failed, for the log
+            print(f"No verdict on {args.tag}: the guard stopped. What it found before:\n" + "\n".join(_lines(report)))
         return 2
 
-    lines = [f"- ✓ {p}" for p in report.passed] + [f"- ↺ {r}" for r in report.repaired] + [f"- ✗ {f}" for f in report.findings]
+    lines = _lines(report)
     verdict = (f"{args.tag} passes its guard." if not report.findings
                else f"{args.tag} fails its guard: it cannot be repaired, only deleted, and its version is spent. {issue or ''}")
     print(verdict + "\n" + "\n".join(lines))
@@ -250,6 +271,10 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
         with open(summary, "a", encoding="utf-8") as fh:
             fh.write(f"### Release guard\n\n{verdict}\n\n" + "\n".join(lines) + "\n")
     return 1 if report.findings else 0
+
+
+def _lines(report: Report) -> List[str]:
+    return [f"- ✓ {p}" for p in report.passed] + [f"- ↺ {r}" for r in report.repaired] + [f"- ✗ {f}" for f in report.findings]
 
 
 if __name__ == "__main__":

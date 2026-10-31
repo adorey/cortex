@@ -46,6 +46,7 @@ class FakeGitHub:
         self.issue_fails = False
         self.annotated = set()
         self.tags_fail = None
+        self.latest_fails = None
 
     def repo(self, suffix=""):
         return f"/repos/o/r{suffix}"
@@ -59,6 +60,8 @@ class FakeGitHub:
 
     def get(self, path):
         if path == "/repos/o/r/releases/latest":
+            if self.latest_fails:
+                raise self.latest_fails
             if self.latest is None:
                 raise GitHubError(404, "no latest")
             return {"tag_name": self.latest}
@@ -95,7 +98,11 @@ class FakeGitHub:
         if method == "PATCH":
             rid = int(path.rsplit("/", 1)[1])
             self.patched.append((rid, body))
-            self.latest = next(r["tag_name"] for r in self.releases_ if r["id"] == rid)
+            target = next(r for r in self.releases_ if r["id"] == rid)
+            if "prerelease" in body:
+                target["prerelease"] = body["prerelease"]
+            if body.get("make_latest") == "true":
+                self.latest = target["tag_name"]
             return {}
         if method == "POST" and path == "/repos/o/r/issues":
             if self.issue_fails:
@@ -159,7 +166,7 @@ class PassingTests(unittest.TestCase):
     def test_a_pre_release_passes_and_leaves_latest_alone(self):
         github = FakeGitHub([release("1.4.0-rc.1", 1), release("1.3.0", 2)], latest="1.3.0")
         self.assertEqual(run(github, "1.4.0-rc.1")[0], 0)
-        self.assertEqual(github.latest, "1.3.0")
+        self.assertEqual((github.latest, github.patched), ("1.3.0", []))   # its box stays ticked
 
 
 class FailingTests(unittest.TestCase):
@@ -212,6 +219,7 @@ class FailingTests(unittest.TestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("::error title=release guard::HTTP 503", out)
         self.assertEqual((github.issues, github.patched, github.latest), ([], [], "2.0.0"))
+        self.assertNotIn("What it found before", out)   # check() did not return: what it found is not printed
 
     def test_a_tag_that_does_not_exist(self):
         github = FakeGitHub([release("1.4.0", 1)], "1.4.0", tags={"1.3.0": COMMIT})
@@ -273,13 +281,27 @@ class LatestTests(unittest.TestCase):
                 self.assertEqual(github.latest, "2.0.1")
                 self.assertIn("✓ latest is 2.0.1, the highest version", out)
 
-    def test_a_release_marked_pre_release_is_never_made_latest(self):
+    def test_another_release_marked_pre_release_is_never_made_latest(self):
         # GitHub makes no pre-release latest: a 2.1.0 published with "Set as a pre-release" ticked is
-        # passed over.
+        # passed over by the guard of another release, which repairs only its own.
+        github = FakeGitHub([release("2.1.0", 1, prerelease=True), release("2.0.0", 2), release("1.9.1", 3)], latest="2.0.0")
+        code, out = run(github, "1.9.1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual((github.latest, github.patched), ("2.0.0", []))
+
+    def test_a_release_marked_pre_release_that_passes_is_unticked_then_made_latest(self):
         github = FakeGitHub([release("2.1.0", 1, prerelease=True), release("2.0.0", 2)], latest="2.0.0")
         code, out = run(github, "2.1.0")
         self.assertEqual(code, 0, out)
-        self.assertEqual((github.latest, github.patched), ("2.0.0", []))
+        self.assertEqual(github.patched, [(1, {"prerelease": False, "make_latest": "false"}), (1, {"make_latest": "true"})])
+        self.assertEqual(github.latest, "2.1.0")
+        self.assertIn("↺ 2.1.0 was marked pre-release; it is a release again, as its version says", out)
+
+    def test_a_release_marked_pre_release_that_fails_keeps_its_box(self):
+        github = FakeGitHub([release("2.1.0", 1, immutable=False, prerelease=True), release("2.0.0", 2)], latest="2.0.0")
+        code, out = run(github, "2.1.0")
+        self.assertEqual(code, 1, out)
+        self.assertEqual([body for _, body in github.patched if "prerelease" in body], [])
 
     def test_no_latest_at_all_is_repaired(self):
         # The latest release was deleted, and GitHub left none: the next guard names none, not None.
@@ -309,6 +331,23 @@ class LatestTests(unittest.TestCase):
         self.assertEqual((code, github.latest, github.patched), (1, "4.0.0", []))
         self.assertIn("✗ latest stays on 4.0.0: no other release carries every asset expected", out)
         self.assertIn("latest stays on 4.0.0", github.issues[0]["body"])
+
+    def test_latest_that_cannot_be_read_stops_the_guard(self):
+        # A 503 is no "no latest": the guard says nothing of `latest`, and moves nothing.
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        github.latest_fails = GitHubError(503, "Service Unavailable")
+        code, out = run(github, "4.0.0")
+        self.assertEqual((code, github.patched), (2, []))
+        self.assertIn("::error title=release guard::HTTP 503", out)
+
+    def test_what_was_found_is_printed_when_the_guard_stops(self):
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        github.issue_fails = True
+        code, out = run(github, "4.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertIn("No verdict on 4.0.0: the guard stopped. What it found before:", out)
+        self.assertIn("- ✗ assets missing", out)
+        self.assertIn("- ↺ latest was 4.0.0; it is 3.0.1 again", out)
 
     def test_latest_is_repaired_even_when_the_release_fails(self):
         github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")

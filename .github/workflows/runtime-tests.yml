@@ -7,7 +7,7 @@ on:
   merge_group:
 
 # A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
-# branch or a tag, a run in progress is never cut short.
+# branch or a line's branch, a run in progress is never cut short.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

@@ -2,8 +2,9 @@ name: release guard
 description: >-
   What a published release is checked against (ADR-009 §3.5): a version tag, the provenance of every
   asset naming the tag's commit, the assets expected and SHA256SUMS over them, immutability, and
-  `latest` on the highest version — the one thing it repairs. Anything else fails, and opens one
-  issue: the release cannot be repaired, only deleted, and its version is spent.
+  `latest` on the highest version. It repairs `latest`, and the pre-release box of an X.Y.Z that
+  passes. Anything else fails, and opens one issue: the release cannot be repaired, only deleted,
+  and its version is spent.
 
 inputs:
   tag:
