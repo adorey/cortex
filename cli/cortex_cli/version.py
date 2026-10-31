@@ -1,4 +1,4 @@
-"""The version of the command — the release's, stamped at build time from the tag (ADR-008 §3.1).
+"""The version of the command — the release's, stamped at build time (ADR-008 §3.1, ADR-009 §3.3).
 
 ``cli/build.py`` writes ``_stamp.py`` for the duration of a build. A source checkout has none:
 it is no release, and says so — unless its tests name the version it stands for, with

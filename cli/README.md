@@ -25,4 +25,5 @@ checks each binary it builds.
 ## Version
 
 `cortex --version` prints the version of the release the binary was built from, stamped by the
-build from the tag. A source checkout is no release, and prints `0.0.0-dev`.
+build with the version the release workflow names (ADR-009 §3.3). A source checkout is no release,
+and prints `0.0.0-dev`.
