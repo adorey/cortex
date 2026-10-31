@@ -165,12 +165,14 @@ def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None
                  and r.get("tag_name") != failing and not r.get("prerelease")
                  and set(expected) <= {a["name"] for a in r.get("assets", [])}]
     top = highest(Version(r["tag_name"]) for r in published)
-    if top is None:
-        return
     try:
         current = github.get(github.repo("/releases/latest"))["tag_name"]
     except GitHubError:
         current = None
+    if top is None:
+        if failing and failing == current:
+            report.findings.append(f"latest stays on {failing}: no other release carries every asset expected")
+        return
     if current == str(top):
         report.passed.append(f"latest is {top}, the highest version" + (" that passes" if failing else ""))
         return
@@ -191,7 +193,8 @@ def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional
             + "\n**It cannot be repaired.** A published release is immutable: it can only be deleted, and its "
               f"version is spent — {report.tag} can never be used again. The next patch ships what this one "
               "should have, through the release cycle.\n\n"
-              f"The guard keeps `latest` off {report.tag}. A later guard does too only while {report.tag} misses "
+              f"The guard moves `latest` off {report.tag} to the highest release that carries every asset expected, "
+              f"when there is one. A later guard keeps it off only while {report.tag} misses "
               "an asset expected: one that has them all could take `latest` back, until it is deleted. If you "
               "delete it, check that `latest` still names a release: GitHub does not move it when the latest "
               "release is deleted.\n")
@@ -217,8 +220,12 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
             return 2
         with tempfile.TemporaryDirectory(prefix="release-guard-") as tmp:
             report = check(github, release, expected, args.signer_workflow, Path(tmp), verify)
-        keep_latest(github, report, expected)
-        issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
+        # Both writes are tried, whatever the other does: `latest` moved off a release whose issue
+        # cannot be opened, and the issue opened while `latest` cannot move.
+        try:
+            keep_latest(github, report, expected)
+        finally:
+            issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
     except GitHubError as error:
         print(f"::error title=release guard::{error}")
         return 2

@@ -40,6 +40,8 @@ class FakeGitHub:
         self.attestations_fail = attestations_fail
         self.issues = []
         self.patched = []
+        self.patch_fails = False
+        self.issue_fails = False
 
     def repo(self, suffix=""):
         return f"/repos/o/r{suffix}"
@@ -75,12 +77,16 @@ class FakeGitHub:
         return iter(self.issues)
 
     def request(self, method, path, body=None, **_):
+        if method == "PATCH" and self.patch_fails:
+            raise GitHubError(502, "Bad Gateway")
         if method == "PATCH":
             rid = int(path.rsplit("/", 1)[1])
             self.patched.append((rid, body))
             self.latest = next(r["tag_name"] for r in self.releases_ if r["id"] == rid)
             return {}
         if method == "POST" and path == "/repos/o/r/issues":
+            if self.issue_fails:
+                raise GitHubError(502, "Bad Gateway")
             issue = dict(body, html_url=f"https://github.com/o/r/issues/{len(self.issues) + 1}")
             self.issues.append(issue)
             return issue
@@ -240,6 +246,28 @@ class LatestTests(unittest.TestCase):
         code, out = run(github, "2.0.1")
         self.assertEqual((code, github.latest), (0, "2.0.1"), out)
         self.assertIn("↺ latest was none; it is 2.0.1 again, the highest version\n", out)
+
+    def test_the_issue_is_opened_even_when_latest_cannot_move(self):
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        github.patch_fails = True
+        code, out = run(github, "4.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertEqual([i["title"] for i in github.issues], ["Release 4.0.0 failed its guard"])
+
+    def test_latest_moves_even_when_the_issue_cannot_be_opened(self):
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        github.issue_fails = True
+        code, out = run(github, "4.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertEqual((github.issues, github.latest), ([], "3.0.1"))
+
+    def test_no_release_left_to_take_latest_is_said(self):
+        # 3.0.1's assets are named otherwise: no release is left to move `latest` to.
+        github = FakeGitHub([release("4.0.0", 1, immutable=False), release("3.0.1", 2, {"old.tar.gz": b"x"})], latest="4.0.0")
+        code, out = run(github, "4.0.0")
+        self.assertEqual((code, github.latest, github.patched), (1, "4.0.0", []))
+        self.assertIn("✗ latest stays on 4.0.0: no other release carries every asset expected", out)
+        self.assertIn("latest stays on 4.0.0", github.issues[0]["body"])
 
     def test_latest_is_repaired_even_when_the_release_fails(self):
         github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")
