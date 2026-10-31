@@ -1,15 +1,17 @@
-"""The release gate (ADR-009 §3.2): the version a pull request into the default branch adds — or
-why it may not merge.
+"""The release gate (ADR-009 §3.2): the version a pull request into the default branch, or into a
+line's branch ``N.x``, adds — or why it may not merge.
 
 It reads the pull request's diff against its base, the two changelogs and the repository's tags and
 releases. It passes only when:
 
 1. the pull request adds exactly one release note of a version that has no release yet,
-   ``<notes>/X.Y.Z.md``, ``X.Y.Z`` with no suffix. Notes of versions already released do not count;
+   ``<notes>/X.Y.Z.md``, ``X.Y.Z`` with no suffix. Notes of versions already released — a fix
+   carried up from an older line brings them — do not count;
 2. the first section of the changelog after ``[Unreleased]`` is that version's, released, dated
    the day the gate runs, in UTC; the base's changelog has no section for it;
-3. the version is higher than every release, and no tag or release, draft included, is named
-   after it. Pre-releases do not count;
+3. the version is higher than every release of the line it merges into — into ``N.x``, every
+   ``N.*.*`` release, its major ``N``; otherwise every release — and no tag or release, draft
+   included, is named after it. Pre-releases do not count;
 4. no draft release is waiting: one release is in flight at a time.
 
 The name of the pull request's branch does not matter. Standard library only.
@@ -33,6 +35,9 @@ from changelog import DEFAULT_SECTION, first_after_unreleased, has_section, note
 from github import GitHub, GitHubError  # noqa: E402
 from semver import Version, highest, is_release  # noqa: E402
 
+LINE = re.compile(r"(0|[1-9][0-9]*)\.x")
+
+
 @dataclass
 class State:
     """The repository's tags and releases, drafts included."""
@@ -48,6 +53,12 @@ class Verdict:
     @property
     def passed(self) -> bool:
         return self.version is not None and not self.errors
+
+
+def line_of(base_ref: str) -> Optional[int]:
+    """``N`` for a line's branch ``N.x``; None for the default branch."""
+    match = LINE.fullmatch(base_ref)
+    return int(match.group(1)) if match else None
 
 
 def decide(added: Sequence[str], head_changelog: str, base_changelog: str, base_ref: str, state: State,
@@ -84,10 +95,17 @@ def decide(added: Sequence[str], head_changelog: str, base_changelog: str, base_
     if has_section(base_changelog, version):
         errors.append(f"the base's {changelog} already has a section for {version}: that version is spent")
 
-    # 3. Higher than every release, and a name nothing has taken.
-    top = highest(Version(t) for t in state.tags if is_release(t))
+    # 3. Higher than every release of its line, and a name nothing has taken.
+    line = line_of(base_ref)
+    releases = [Version(t) for t in state.tags if is_release(t)]
+    if line is not None:
+        if candidate.major != line:
+            errors.append(f"{version} is not a version of the {line}.x line")
+        releases = [r for r in releases if r.major == line]
+    top = highest(releases)
     if top is not None and not candidate > top:
-        errors.append(f"{version} is not higher than {top}, the highest release of {base_ref}")
+        where = f"the {line}.x line" if line is not None else base_ref
+        errors.append(f"{version} is not higher than {top}, the highest release of {where}")
     for release in state.releases:
         if release.get("tag_name") == version or release.get("name") == version:
             kind = "a draft" if release.get("draft") else "a release"
@@ -156,7 +174,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--base", required=True, help="the base's commit")
     parser.add_argument("--head", required=True, help="the pull request's or the merge group's head")
-    parser.add_argument("--base-ref", required=True, help="the branch it merges into")
+    parser.add_argument("--base-ref", required=True, help="the branch it merges into: main, or N.x")
     parser.add_argument("--changelog", default="CHANGELOG.md")
     parser.add_argument("--notes", default="changelog")
     parser.add_argument("--section", default=DEFAULT_SECTION)

@@ -1,13 +1,13 @@
 name: release gate
 
-# What may merge into main (ADR-009 §3.2): every merge there is a release, so a pull request passes
-# only when it adds exactly one new version, its release note and its CHANGELOG.md section — first,
-# dated the day it merges in UTC — higher than every release, with no draft waiting. The summary
-# names the version.
+# What may merge into main, or into a line's branch N.x (ADR-009 §3.2, §3.11): every merge there is
+# a release, so a pull request passes only when it adds exactly one new version, its release note
+# and its CHANGELOG.md section — first, dated the day it merges in UTC — higher than every release
+# of its line, with no draft waiting. The summary names the version.
 on:
   pull_request:
-    branches: [main]
-    # `edited`: a pull request retargeted onto main is checked against its new base.
+    branches: [main, "[0-9]+.x"]
+    # `edited`: a pull request retargeted onto main or a line is checked against its new base.
     types: [opened, synchronize, reopened, edited]
 
 concurrency:

@@ -1,4 +1,4 @@
-"""The release gate, rule by rule (ADR-009 §3.2) — on fixtures, then on a real history."""
+"""The release gate, rule by rule (ADR-009 §3.2, §3.11) — on fixtures, then on a real history."""
 
 import datetime as dt
 import io
@@ -129,6 +129,47 @@ class VersionTests(unittest.TestCase):
     def test_a_draft_waiting_fails(self):
         verdict = decide(["1.4.0"], HEAD, BASE, repo=state("1.2.2", "1.3.0", drafts=["1.3.1"]))
         self.assertEqual(verdict.errors, ["a draft is waiting, 1.3.1: publish it or delete it — one release is in flight at a time"])
+
+
+class LineTests(unittest.TestCase):
+    """A fixture with a published 2.0.0 on main and 1.x beside it (ADR-009 §3.11)."""
+
+    REPO = state("1.4.0", "1.5.1", "2.0.0", "2.0.0-alpha.1")
+    ONE_BASE = changelog(("1.5.1", "2026-11-01"), ("1.4.0", "2026-10-01"))
+    ONE_HEAD = changelog(("1.6.0", "2026-11-03"), ("1.5.1", "2026-11-01"), ("1.4.0", "2026-10-01"))
+
+    def test_a_minor_of_the_line_passes_into_its_branch(self):
+        verdict = decide(["1.6.0"], self.ONE_HEAD, self.ONE_BASE, "1.x", self.REPO)
+        self.assertTrue(verdict.passed, verdict.errors)
+        self.assertEqual(verdict.version, "1.6.0")
+
+    def test_the_same_into_main_fails(self):
+        verdict = decide(["1.6.0"], self.ONE_HEAD, self.ONE_BASE, "main", self.REPO)
+        self.assertEqual(verdict.errors, ["1.6.0 is not higher than 2.0.0, the highest release of main"])
+
+    def test_another_major_into_a_line_fails(self):
+        head = changelog(("2.1.0", "2026-11-03"), ("1.5.1", "2026-11-01"))
+        self.assertIn("2.1.0 is not a version of the 1.x line", decide(["2.1.0"], head, self.ONE_BASE, "1.x", self.REPO).errors)
+
+    def test_a_version_below_the_line_fails(self):
+        head = changelog(("1.5.0", "2026-11-03"), ("1.5.1", "2026-11-01"))
+        self.assertIn("1.5.0 is not higher than 1.5.1, the highest release of the 1.x line",
+                      decide(["1.5.0"], head, self.ONE_BASE, "1.x", self.REPO).errors)
+
+    def test_a_fix_carried_up_from_the_line_passes_into_main(self):
+        # The pull request from 1.x into main brings 1.5.1's note, released, and adds 2.0.1's.
+        base = changelog(("2.0.0", "2026-10-20"), ("1.4.0", "2026-10-01"))
+        head = changelog(("2.0.1", "2026-11-03"), ("2.0.0", "2026-10-20"), ("1.5.1", "2026-11-01"), ("1.4.0", "2026-10-01"))
+        verdict = decide(["1.5.1", "2.0.1"], head, base, "main", self.REPO)
+        self.assertTrue(verdict.passed, verdict.errors)
+        self.assertEqual(verdict.version, "2.0.1")
+
+    def test_a_line_number_is_a_branch_name_only(self):
+        self.assertEqual(gate.line_of("1.x"), 1)
+        self.assertEqual(gate.line_of("12.x"), 12)
+        for ref in ("main", "release/1.x", "1.2.x", "01.x", "x"):
+            with self.subTest(ref=ref):
+                self.assertIsNone(gate.line_of(ref))
 
 
 class ActionTests(unittest.TestCase):
