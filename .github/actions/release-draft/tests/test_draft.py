@@ -1,5 +1,6 @@
 """The draft: created last, never rebuilt from another commit, its own made again (ADR-009 §3.3)."""
 
+import http.client
 import io
 import shutil
 import sys
@@ -18,10 +19,11 @@ SIX = ["SHA256SUMS", "cortex-linux-aarch64.tar.gz", "cortex-linux-x86_64.tar.gz"
 
 
 class FakeGitHub:
-    def __init__(self, releases=(), fail_upload_after=None):
+    def __init__(self, releases=(), fail_upload_after=None, upload_error=None):
         self.releases_ = {r["id"]: dict(r, assets=list(r.get("assets", []))) for r in releases}
         self.calls = []
         self.fail_upload_after = fail_upload_after
+        self.upload_error = upload_error or GitHubError(502, "upload cut")
         self.uploads = 0
 
     def repo(self, suffix=""):
@@ -46,7 +48,7 @@ class FakeGitHub:
             return self.releases_[rid]
         if method == "POST" and url:
             if self.fail_upload_after is not None and self.uploads >= self.fail_upload_after:
-                raise GitHubError(502, "upload cut")
+                raise self.upload_error
             self.uploads += 1
             rid = int(url.split("https://uploads/")[1].split("/")[0])
             self.releases_[rid]["assets"].append({"name": url.split("name=")[1], "size": len(data)})
@@ -110,17 +112,22 @@ class DraftTests(unittest.TestCase):
         self.assertIn("a draft 1.4.0 of another commit", out)
 
     def test_a_run_cut_while_uploading_then_its_re_run_leave_one_complete_draft(self):
-        github = FakeGitHub(fail_upload_after=3)
-        code, out = self.run_draft(github)
-        self.assertEqual(code, 2)
-        (half,) = github.releases()
-        self.assertEqual((half["draft"], len(half["assets"])), (True, 3))
-        github.fail_upload_after = None
-        code, out = self.run_draft(github)
-        self.assertEqual(code, 0, out)
-        self.assertIn("left by a run that failed, is made again", out)
-        (release,) = github.releases()
-        self.assertEqual(sorted(a["name"] for a in release["assets"]), SIX)
+        # GitHub answering an error, or the connection cut under the upload.
+        for error in (GitHubError(502, "upload cut"), ConnectionResetError(104, "Connection reset by peer"),
+                      http.client.IncompleteRead(b"")):
+            with self.subTest(error=type(error).__name__):
+                github = FakeGitHub(fail_upload_after=3, upload_error=error)
+                code, out = self.run_draft(github)
+                self.assertEqual(code, 1)
+                self.assertIn("the draft 1.4.0 holds at least 3 of 6 assets: do not publish it — run the job again", out)
+                (half,) = github.releases()
+                self.assertEqual((half["draft"], len(half["assets"])), (True, 3))
+                github.fail_upload_after = None
+                code, out = self.run_draft(github)
+                self.assertEqual(code, 0, out)
+                self.assertIn("left by a run that failed, is made again", out)
+                (release,) = github.releases()
+                self.assertEqual(sorted(a["name"] for a in release["assets"]), SIX)
 
 
 if __name__ == "__main__":

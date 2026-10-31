@@ -11,9 +11,11 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import version as rv  # noqa: E402
+from changelog import DEFAULT_SECTION  # noqa: E402
 
 AFTER = "a" * 40
 OTHER = "b" * 40
@@ -46,7 +48,7 @@ class PushTests(unittest.TestCase):
         # The push's note is 1.3.0's, published since: found by the end-to-end run, which said
         # "it bypassed the gate" here.
         with self.assertRaisesRegex(rv.Refused, "1.3.0 is already released: a re-run changes nothing"):
-            rv.for_push(["1.3.0"], "main", "main", AFTER, self.STATE)
+            rv.for_push(["1.3.0"], "main", "main", AFTER, self.STATE, attempt=2)
 
     def test_a_draft_of_another_commit_fails(self):
         repo = state("1.3.0", drafts=[release("1.4.0", draft=True, target=OTHER)])
@@ -73,6 +75,14 @@ class LineTests(unittest.TestCase):
         with self.assertRaisesRegex(rv.Refused, "2.1.0 is not a version of the 1.x line"):
             rv.for_push(["2.1.0"], "1.x", "main", AFTER, self.STATE)
 
+    def test_a_first_run_whose_notes_are_all_released_bypassed_the_gate(self):
+        # A carry-up from 1.x with no note of its own, or a tag pushed by hand before the merge: no
+        # re-run, so the alarm stands.
+        with self.assertRaisesRegex(rv.Refused, "the push adds no release note of a version with no release yet: it bypassed the gate"):
+            rv.for_push(["1.5.1"], "main", "main", AFTER, self.STATE)
+        with self.assertRaisesRegex(rv.Refused, "1.5.1 is already released: a re-run changes nothing"):
+            rv.for_push(["1.5.1"], "main", "main", AFTER, self.STATE, attempt=2)
+
     def test_a_carry_up_makes_the_draft_of_the_new_version_only(self):
         # The merge from 1.x brings 1.5.1's note, published, and adds 2.0.1's.
         plan = rv.for_push(["1.5.1", "2.0.1"], "main", "main", AFTER, self.STATE)
@@ -92,7 +102,7 @@ class DispatchTests(unittest.TestCase):
             ("1.3.0-rc1", "release/x", self.STATE, "'1.3.0-rc1' is no pre-release as one is cut"),
             ("1.3.0-alpha.1", "release/x", self.STATE, "1.3.0-alpha.1 is not higher than 1.3.0-beta.1, already cut for 1.3.0"),
             ("1.2.2-rc.1", "release/x", self.STATE, "1.2.2 is not higher than 1.2.2, the highest release of 1.x"),
-            ("1.3.0-beta.1", "release/x", self.STATE, "is not higher than 1.3.0-beta.1"),
+            ("1.3.0-beta.1", "release/x", self.STATE, "the tag 1.3.0-beta.1 already exists"),
         ]
         for version, ref, repo, message in cases:
             with self.subTest(version=version, ref=ref):
@@ -164,9 +174,10 @@ class HistoryTests(unittest.TestCase):
         (self.repo / name).parent.mkdir(parents=True, exist_ok=True)
         (self.repo / name).write_text(text, encoding="utf-8")
 
-    def commit(self):
+    def commit(self, date=None):
         self.git("add", "-A")
-        self.git("commit", "-q", "-m", "change")
+        env = dict(os.environ, GIT_COMMITTER_DATE=date) if date else None
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-m", "change"], check=True, capture_output=True, env=env)
 
     def head(self):
         return self.git("rev-parse", "HEAD").strip()
@@ -195,6 +206,40 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual((outputs["version"], outputs["prerelease"], outputs["latest"]), ("1.4.0", "false", "true"))
         self.assertEqual((self.out / "body.md").read_text(encoding="utf-8"), "# 1.4.0, the note")
 
+    def test_the_run_attempt_says_whether_a_released_note_is_a_re_run(self):
+        self.write("changelog/1.4.0.md", "# 1.4.0")
+        self.commit()
+        (self.out / "state.json").write_text(json.dumps({"tags": ["1.3.0", "1.4.0"], "releases": [release("1.3.0"), release("1.4.0")],
+                                                          "branches": ["main"]}), encoding="utf-8")
+        for attempt, said in (("1", "it bypassed the gate"), ("2", "1.4.0 is already released: a re-run changes nothing")):
+            with self.subTest(attempt=attempt), mock.patch.dict(os.environ, {"GITHUB_RUN_ATTEMPT": attempt}):
+                code, out, _ = self.run_version("--event", "push", "--ref", "main", "--before", self.before, "--sha", self.head())
+                self.assertEqual(code, 1)
+                self.assertIn(said, out)
+
+    def release_dated(self, date, committed):
+        self.write("CHANGELOG.md", f"# Changelog\n\n## [Unreleased]\n\n## [1.4.0] - {date} — Y _(Released)_\n\n"
+                                   "## [1.3.0] - 2026-11-01 — X _(Released)_\n")
+        self.write("changelog/1.4.0.md", "# 1.4.0")
+        self.commit(date=committed)
+        return self.run_version("--event", "push", "--ref", "main", "--before", self.before, "--sha", self.head())
+
+    def test_a_date_other_than_the_commits_is_a_warning_and_no_failure(self):
+        summary = self.out / "summary.md"
+        with mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+            code, out, outputs = self.release_dated("2026-10-29", "2026-10-31T23:30:00+01:00")
+        self.assertEqual((code, outputs.get("version")), (0, "1.4.0"), out)
+        warning = (f"1.4.0 is dated 2026-10-29, and the commit it releases, {self.head()[:12]}, "
+                   "was made on 2026-10-31 (UTC)")
+        self.assertIn(f"::warning title=release version::{warning}", out)
+        self.assertIn(f"**Warning:** {warning}", summary.read_text(encoding="utf-8"))
+
+    def test_the_commits_day_is_taken_in_utc(self):
+        # 00:30 in Paris on 1 November is still 31 October in UTC.
+        code, out, _ = self.release_dated("2026-10-31", "2026-11-01T00:30:00+01:00")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("::warning", out)
+
     def test_a_push_with_no_note_fails(self):
         self.write("README.md", "x")
         self.commit()
@@ -216,6 +261,13 @@ class HistoryTests(unittest.TestCase):
         body = (self.out / "body.md").read_text(encoding="utf-8")
         self.assertIn("A pre-release of 1.4.0", body)
         self.assertTrue(body.endswith("### Added\n- a thing"))
+
+
+class ActionTests(unittest.TestCase):
+    def test_the_action_reads_the_section_the_lib_does(self):
+        action = (Path(__file__).resolve().parents[1] / "action.yml").read_text(encoding="utf-8")
+        line = next(l for l in action.splitlines() if l.strip().startswith("default: '## "))
+        self.assertEqual(line.strip()[len("default: '"):-1].replace("''", "'"), DEFAULT_SECTION)
 
 
 if __name__ == "__main__":

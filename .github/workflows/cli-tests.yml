@@ -46,6 +46,7 @@ jobs:
             docs/**
             install.sh
             install.ps1
+            .github/actions/lib/tests/semver-cases.json
             .github/workflows/cli-tests.yml
 
   test:

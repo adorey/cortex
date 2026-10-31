@@ -131,7 +131,9 @@ class SetupReleaseTests(unittest.TestCase):
         code, out = run(gh)
         self.assertIn("No merge queue: GitHub offers it to repositories of organisations.", out)
         self.assertEqual(list(self.rulesets(gh)), ["release cycle"])
-        self.assertEqual(run(gh, "--check")[0], 0)
+        code, out = run(gh, "--check")
+        self.assertEqual(code, 0)
+        self.assertIn("No merge queue: GitHub offers it to repositories of organisations.", out)
 
     def test_no_required_check_is_a_matrix_job(self):
         for name in sr.DEFAULT_CHECKS:
@@ -147,6 +149,33 @@ class SetupReleaseTests(unittest.TestCase):
         for check in sr.DEFAULT_CHECKS:
             with self.subTest(check=check):
                 self.assertIn(check, names)
+
+    def test_each_required_check_of_several_jobs_fails_when_one_of_them_does(self):
+        # A summary runs whatever happened, needs every job a pull request runs — a job of a tag's
+        # push only is none — and fails on a failure or a cancellation (§3.10). Read as text: the
+        # runner's Python has no YAML parser.
+        summaries = set()
+        for path in sorted((BIN.parent / ".github" / "workflows").glob("*.yml")):
+            block = path.read_text(encoding="utf-8").split("\njobs:\n", 1)[1]
+            parts = re.split(r"(?m)^  ([A-Za-z0-9_-]+):\s*\n", block)
+            jobs = dict(zip(parts[1::2], parts[2::2]))
+
+            def key(job, name):
+                match = re.search(rf"(?m)^    {name}: (.+?)\s*$", job)
+                return match.group(1) if match else ""
+
+            for job_id, job in jobs.items():
+                if key(job, "name") not in sr.DEFAULT_CHECKS or len(jobs) == 1:
+                    continue
+                summaries.add(key(job, "name"))
+                others = {other for other, text in jobs.items()
+                          if other != job_id and "github.event_name == 'push'" not in key(text, "if")}
+                with self.subTest(workflow=path.name, check=key(job, "name")):
+                    self.assertEqual(key(job, "if"), "always()")
+                    self.assertEqual(set(re.findall(r"[A-Za-z0-9_-]+", key(job, "needs"))), others)
+                    self.assertRegex(job, r"(?m)^          \[ \"\$\{\{ contains\(needs\.\*\.result, 'failure'\) \|\| "
+                                          r"contains\(needs\.\*\.result, 'cancelled'\) \}\}\" = false \]$")
+        self.assertEqual(summaries, {"builds", "cli tests", "core tests", "repo checks", "runtime tests"})
 
     def test_a_disabled_or_loosened_ruleset_is_drift(self):
         gh = FakeGh()
@@ -171,6 +200,38 @@ class SetupReleaseTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertIn(expected, out)
         self.assertEqual(run(gh)[0], 0)
+        self.assertEqual(run(gh, "--check")[0], 0)
+
+    def test_another_ruleset_that_requires_checks_is_reported_and_left(self):
+        # Cortex's own, made by hand before the cycle: matrix jobs, required of main.
+        block = {"id": 7, "name": "Block default", "target": "branch", "enforcement": "active", "bypass_actors": [],
+                 "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+                 "rules": [{"type": "non_fast_forward"}, {"type": "required_status_checks", "parameters": {
+                     "required_status_checks": [{"context": "English-only"}, {"context": "build (linux-x86_64)"}]}}]}
+        def ruleset(id, name, include, checks=("ci",), enforcement="active", target="branch"):
+            rules = [{"type": "non_fast_forward"}] + ([{"type": "required_status_checks", "parameters": {
+                "required_status_checks": [{"context": c} for c in checks]}}] if checks else [])
+            return {"id": id, "name": name, "target": target, "enforcement": enforcement,
+                    "conditions": {"ref_name": {"include": include, "exclude": []}}, "rules": rules}
+        left = [ruleset(8, "tags", ["~ALL"], target="tag"), ruleset(9, "disabled", ["~DEFAULT_BRANCH"], enforcement="disabled"),
+                ruleset(10, "no checks", ["~DEFAULT_BRANCH"], checks=()), ruleset(11, "features", ["refs/heads/feature/*"])]
+        reported = [ruleset(12, "every branch", ["~ALL"]), ruleset(13, "lines", ["refs/heads/*.x"])]
+        gh = FakeGh(rulesets=[block, *left, *reported], branches=["main", "1.x"])
+        code, out = run(gh)
+        self.assertEqual(code, 1)
+        for name in ("Block default", "every branch", "lines"):
+            self.assertIn(f"! the ruleset {name!r}, which the cycle does not set: left to you", out)
+        for name in ("tags", "disabled", "no checks", "features"):
+            self.assertNotIn(f"{name!r}", out)
+        self.assertIn(7, gh.rulesets)
+        self.assertNotIn(("DELETE", "repos/o/r/rulesets/7"), gh.writes)
+        code, out = run(gh, "--check")
+        self.assertEqual(code, 1)
+        self.assertIn("✗ the ruleset 'Block default', which the cycle does not set\n"
+                      "    it requires 2 check(s) of its own — English-only, build (linux-x86_64)", out)
+        self.assertIn("3 setting(s) differ.", out)
+        for id in (7, 12, 13):
+            del gh.rulesets[id]
         self.assertEqual(run(gh, "--check")[0], 0)
 
     def test_another_repositorys_checks(self):
