@@ -4,6 +4,7 @@ and the one thing it repairs, `latest`."""
 import copy
 import hashlib
 import io
+import json
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -31,10 +32,12 @@ def assets(drop=(), corrupt=()):
 class FakeGitHub:
     repository = "o/r"
 
-    def __init__(self, releases, latest, tags=None):
+    def __init__(self, releases, latest, tags=None, unattested=(), attestations_fail=None):
         self.releases_ = releases
         self.latest = latest
         self.tags = tags or {r["tag_name"]: COMMIT for r in releases}
+        self.unattested = {hashlib.sha256(data).hexdigest() for data in unattested}
+        self.attestations_fail = attestations_fail
         self.issues = []
         self.patched = []
 
@@ -53,6 +56,13 @@ class FakeGitHub:
             if self.latest is None:
                 raise GitHubError(404, "no latest")
             return {"tag_name": self.latest}
+        if path.startswith("/repos/o/r/attestations/sha256:"):
+            digest = path.rsplit(":", 1)[1]
+            if self.attestations_fail:
+                raise self.attestations_fail
+            if digest in self.unattested:
+                raise GitHubError(404, "Not Found")
+            return {"attestations": [{"bundle": {"digest": digest}, "repository_id": 1}]}
         if path.startswith("/repos/o/r/git/ref/tags/"):
             tag = path.rsplit("/", 1)[1]
             if tag not in self.tags:
@@ -85,8 +95,13 @@ def release(tag, rid, files=None, immutable=True, prerelease=None, draft=False):
 
 
 def verify_names(commit):
-    """A verifier that passes the assets whose provenance names ``commit``."""
-    return lambda path, repo, wanted, signer: None if wanted == commit and signer == SIGNER else "no attestation matches"
+    """A verifier that passes the assets whose provenance names ``commit``, given the bundle the API
+    returned for them."""
+    def verify(path, bundle, repo, wanted, signer):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert json.loads(bundle.read_text(encoding="utf-8")) == {"digest": digest}, bundle
+        return None if wanted == commit and signer == SIGNER else "no attestation matches"
+    return verify
 
 
 def run(github, tag, verify=None):
@@ -150,6 +165,20 @@ class FailingTests(unittest.TestCase):
 
     def test_a_tag_that_is_no_version(self):
         self.assert_fails(FakeGitHub([release("nightly", 1)], None), "nightly", "the tag 'nightly' is no version")
+
+    def test_an_asset_with_no_attestation(self):
+        github = FakeGitHub([release("1.4.0", 1)], "1.4.0", unattested=[assets()["cortex-spec.tar.gz"]])
+        self.assert_fails(github, "1.4.0", f"the provenance does not name the tag's commit {COMMIT[:12]}, signed by "
+                                           f"{SIGNER}: cortex-spec.tar.gz (no attestation)")
+
+    def test_attestations_the_api_cannot_return_fail_no_release(self):
+        # An API in trouble says nothing of the release: no finding, no issue, latest left alone.
+        github = FakeGitHub([release("2.0.0", 1), release("1.9.0", 2)], "2.0.0",
+                            attestations_fail=GitHubError(503, "Service Unavailable"))
+        code, out = run(github, "2.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertIn("::error title=release guard::HTTP 503", out)
+        self.assertEqual((github.issues, github.patched, github.latest), ([], [], "2.0.0"))
 
     def test_one_issue_per_release(self):
         github = FakeGitHub([release("1.4.0", 1, immutable=False)], "1.4.0")
@@ -228,10 +257,10 @@ class GhVerifyTests(unittest.TestCase):
         real = guard.subprocess.run
         guard.subprocess.run = lambda args, **_: calls.append(args) or Done()
         try:
-            why = guard.gh_verify(Path("/x/a.tar.gz"), "o/r", COMMIT, SIGNER)
+            why = guard.gh_verify(Path("/x/a.tar.gz"), Path("/x/a.jsonl"), "o/r", COMMIT, SIGNER)
         finally:
             guard.subprocess.run = real
-        self.assertEqual(calls[0], ["gh", "attestation", "verify", "/x/a.tar.gz", "--repo", "o/r",
+        self.assertEqual(calls[0], ["gh", "attestation", "verify", "/x/a.tar.gz", "--bundle", "/x/a.jsonl", "--repo", "o/r",
                                     "--source-digest", COMMIT, "--signer-workflow", SIGNER])
         self.assertEqual(why, "no attestation names the commit")
 

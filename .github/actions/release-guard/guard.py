@@ -3,8 +3,9 @@
 For releases and pre-releases alike:
 
 1. the tag is a version: ``X.Y.Z`` or ``X.Y.Z-(alpha|beta|rc).N``;
-2. the build provenance of every asset names the tag's commit — ``gh attestation verify``, signed
-   by the workflow that built it;
+2. the build provenance of every asset names the tag's commit — its attestations, read through the
+   API, then ``gh attestation verify``, signed by the workflow that built it. An API that cannot
+   answer is no finding: the guard stops, and says nothing of the release;
 3. the assets expected are there, no other, and ``SHA256SUMS`` matches them;
 4. the release is immutable;
 5. ``latest`` is the highest version without a suffix — among the releases that carry every asset
@@ -22,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -52,9 +54,22 @@ def tag_commit(github: GitHub, tag: str) -> str:
     return ref["sha"]
 
 
-def gh_verify(path: Path, repository: str, commit: str, signer: str) -> Optional[str]:
-    """None when ``path``'s provenance names ``commit`` and ``signer``; why not otherwise."""
-    out = subprocess.run(["gh", "attestation", "verify", str(path), "--repo", repository,
+def attestations(github: GitHub, path: Path) -> List[Dict[str, Any]]:
+    """The attestations of ``path``'s digest, none when it has none. Any other failure of the API is
+    a GitHubError: the guard cannot tell, so it stops, and fails no release for it."""
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        return github.get(github.repo(f"/attestations/sha256:{digest}")).get("attestations") or []
+    except GitHubError as error:
+        if error.status == 404:
+            return []
+        raise
+
+
+def gh_verify(path: Path, bundle: Path, repository: str, commit: str, signer: str) -> Optional[str]:
+    """None when ``path``'s provenance, in the attestations of ``bundle``, names ``commit`` and
+    ``signer``; why not otherwise."""
+    out = subprocess.run(["gh", "attestation", "verify", str(path), "--bundle", str(bundle), "--repo", repository,
                           "--source-digest", commit, "--signer-workflow", signer], capture_output=True, text=True)
     if out.returncode == 0:
         return None
@@ -63,7 +78,7 @@ def gh_verify(path: Path, repository: str, commit: str, signer: str) -> Optional
 
 
 def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], signer: str, workdir: Path,
-          verify: Callable[[Path, str, str, str], Optional[str]] = gh_verify) -> Report:
+          verify: Callable[[Path, Path, str, str, str], Optional[str]] = gh_verify) -> Report:
     tag = release["tag_name"]
     report = Report(tag)
 
@@ -114,8 +129,16 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
         report.findings.append(f"the tag {tag} cannot be read: {error}")
     else:
         failed = []
+        bundles = workdir / ".attestations"
+        bundles.mkdir()
         for name, path in sorted(files.items()):
-            why = verify(path, github.repository, commit, signer)
+            found = [a["bundle"] for a in attestations(github, path) if a.get("bundle")]
+            if not found:
+                failed.append(f"{name} (no attestation)")
+                continue
+            bundle = bundles / f"{name}.jsonl"
+            bundle.write_text("".join(json.dumps(b) + "\n" for b in found), encoding="utf-8")
+            why = verify(path, bundle, github.repository, commit, signer)
             if why:
                 failed.append(f"{name} ({why})")
         if failed:
@@ -177,7 +200,7 @@ def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional
 
 
 def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
-         verify: Callable[[Path, str, str, str], Optional[str]] = gh_verify) -> int:
+         verify: Callable[[Path, Path, str, str, str], Optional[str]] = gh_verify) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--tag", required=True)
     parser.add_argument("--expected", default="", help="the names of the assets, one per line")
