@@ -42,6 +42,7 @@ class FakeGitHub:
         self.patched = []
         self.patch_fails = False
         self.issue_fails = False
+        self.annotated = set()
 
     def repo(self, suffix=""):
         return f"/repos/o/r{suffix}"
@@ -69,7 +70,11 @@ class FakeGitHub:
             tag = path.rsplit("/", 1)[1]
             if tag not in self.tags:
                 raise GitHubError(404, "no such ref")
+            if tag in self.annotated:
+                return {"object": {"type": "tag", "sha": f"t-{tag}"}}
             return {"object": {"type": "commit", "sha": self.tags[tag]}}
+        if path.startswith("/repos/o/r/git/tags/t-"):
+            return {"object": {"type": "commit", "sha": self.tags[path.rsplit("/t-", 1)[1]]}}
         raise AssertionError(path)
 
     def paginate(self, path):
@@ -129,6 +134,12 @@ class PassingTests(unittest.TestCase):
                      "the release is immutable", "latest is 1.4.0, the highest version"):
             self.assertIn(f"✓ {line}", out)
         self.assertEqual((github.issues, github.patched), ([], []))
+
+    def test_an_annotated_tag_is_followed_to_its_commit(self):
+        github = FakeGitHub([release("1.4.0", 1)], latest="1.4.0")
+        github.annotated.add("1.4.0")
+        self.assertEqual(guard.tag_commit(github, "1.4.0"), COMMIT)
+        self.assertEqual(run(github, "1.4.0")[0], 0)
 
     def test_a_pre_release_passes_and_leaves_latest_alone(self):
         github = FakeGitHub([release("1.4.0-rc.1", 1), release("1.3.0", 2)], latest="1.3.0")
