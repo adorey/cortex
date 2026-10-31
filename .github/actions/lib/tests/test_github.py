@@ -48,11 +48,22 @@ def answer(handler, code, body=b"", location=None):
     handler.wfile.write(body)
 
 
+def cut_short(handler, code):
+    """An answer whose body stops after 4 of the 100 bytes it announced."""
+    handler.send_response(code)
+    handler.send_header("Content-Length", "100")
+    handler.end_headers()
+    handler.wfile.write(b"half")
+    handler.close_connection = True
+
+
 class DownloadTests(unittest.TestCase):
     def setUp(self):
         def storage(handler):
             if handler.path.startswith("/broken"):
                 answer(handler, 500, b"the storage is down")
+            elif handler.path.startswith("/hangup"):
+                handler.close_connection = True   # no answer at all
             elif handler.headers.get("Authorization"):
                 answer(handler, 400, b"the storage refuses a token")
             else:
@@ -65,6 +76,8 @@ class DownloadTests(unittest.TestCase):
                 answer(handler, 200, ASSET)
             elif handler.path.endswith("/broken"):
                 answer(handler, 302, location=f"{self.storage.url}/broken?sig=secret")
+            elif handler.path.endswith("/hangup"):
+                answer(handler, 302, location=f"{self.storage.url}/hangup?sig=secret")
             else:
                 answer(handler, 302, location=f"{self.storage.url}/blob?sig=x")
 
@@ -100,6 +113,12 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(raised.exception.status, 500)
         self.assertNotIn("secret", str(raised.exception))
 
+    def test_the_storage_hanging_up_is_no_answer_that_keeps_its_signature_out(self):
+        with self.assertRaises(GitHubError) as raised:
+            self.github.download(f"{self.api.url}/repos/o/r/releases/assets/hangup")
+        self.assertIsNone(raised.exception.status)
+        self.assertNotIn("secret", str(raised.exception))
+
 
 class NoAnswerTests(unittest.TestCase):
     """A network error is a GitHubError with no status: the API said nothing an action may act on."""
@@ -121,6 +140,17 @@ class NoAnswerTests(unittest.TestCase):
         with self.assertRaises(GitHubError) as raised:
             GitHub("o/r", token="T", api=server.url).get("/repos/o/r/releases")
         self.assertIsNone(raised.exception.status)
+
+
+    def test_an_answer_cut_short(self):
+        # A success whose body stops is no answer; an error whose body stops keeps its status.
+        for code, status in ((200, None), (502, 502)):
+            with self.subTest(code=code):
+                server = Server(lambda handler, code=code: cut_short(handler, code))
+                self.addCleanup(server.close)
+                with self.assertRaises(GitHubError) as raised:
+                    GitHub("o/r", token="T", api=server.url).get("/repos/o/r/releases")
+                self.assertEqual(raised.exception.status, status)
 
 
 if __name__ == "__main__":

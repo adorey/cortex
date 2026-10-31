@@ -48,7 +48,10 @@ class GitHub:
             with urllib.request.urlopen(request, timeout=60) as response:
                 raw = response.read()
         except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", "replace")
+            try:
+                detail = error.read().decode("utf-8", "replace")
+            except (OSError, http.client.HTTPException):   # its body cut short: the status still says it
+                detail = str(error.reason)
             try:
                 detail = json.loads(detail).get("message", detail)
             except ValueError:
