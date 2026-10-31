@@ -200,6 +200,38 @@ class SetupReleaseTests(unittest.TestCase):
         self.assertEqual(run(gh)[0], 0)
         self.assertEqual(run(gh, "--check")[0], 0)
 
+    def test_another_ruleset_that_requires_checks_is_reported_and_left(self):
+        # Cortex's own, made by hand before the cycle: matrix jobs, required of main.
+        block = {"id": 7, "name": "Block default", "target": "branch", "enforcement": "active", "bypass_actors": [],
+                 "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+                 "rules": [{"type": "non_fast_forward"}, {"type": "required_status_checks", "parameters": {
+                     "required_status_checks": [{"context": "English-only"}, {"context": "build (linux-x86_64)"}]}}]}
+        def ruleset(id, name, include, checks=("ci",), enforcement="active", target="branch"):
+            rules = [{"type": "non_fast_forward"}] + ([{"type": "required_status_checks", "parameters": {
+                "required_status_checks": [{"context": c} for c in checks]}}] if checks else [])
+            return {"id": id, "name": name, "target": target, "enforcement": enforcement,
+                    "conditions": {"ref_name": {"include": include, "exclude": []}}, "rules": rules}
+        left = [ruleset(8, "tags", ["~ALL"], target="tag"), ruleset(9, "disabled", ["~DEFAULT_BRANCH"], enforcement="disabled"),
+                ruleset(10, "no checks", ["~DEFAULT_BRANCH"], checks=()), ruleset(11, "features", ["refs/heads/feature/*"])]
+        reported = [ruleset(12, "every branch", ["~ALL"]), ruleset(13, "lines", ["refs/heads/*.x"])]
+        gh = FakeGh(rulesets=[block, *left, *reported], branches=["main", "1.x"])
+        code, out = run(gh)
+        self.assertEqual(code, 1)
+        for name in ("Block default", "every branch", "lines"):
+            self.assertIn(f"! the ruleset {name!r}, which the cycle does not set: left to you", out)
+        for name in ("tags", "disabled", "no checks", "features"):
+            self.assertNotIn(f"{name!r}", out)
+        self.assertIn(7, gh.rulesets)
+        self.assertNotIn(("DELETE", "repos/o/r/rulesets/7"), gh.writes)
+        code, out = run(gh, "--check")
+        self.assertEqual(code, 1)
+        self.assertIn("✗ the ruleset 'Block default', which the cycle does not set\n"
+                      "    it requires 2 check(s) of its own — English-only, build (linux-x86_64)", out)
+        self.assertIn("3 setting(s) differ.", out)
+        for id in (7, 12, 13):
+            del gh.rulesets[id]
+        self.assertEqual(run(gh, "--check")[0], 0)
+
     def test_another_repositorys_checks(self):
         gh = FakeGh()
         run(gh, "--require", "ci", "--require", "lint")

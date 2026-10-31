@@ -16,6 +16,9 @@ and `--check` reports every setting that differs, changing nothing, and exits no
   branch that exists: cutting a new line means running this script again, and `--check` says so.
 - Immutable releases: on.
 - Head branches deleted on merge.
+- No other ruleset requiring checks of the default branch or of a line's: GitHub requires the
+  checks of every ruleset, and an older one names jobs that may never report again. The script
+  reports it and leaves it: removing someone's ruleset is theirs to do, by hand.
 
 Standard library only; GitHub through `gh api`.
 """
@@ -23,6 +26,7 @@ Standard library only; GitHub through `gh api`.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import re
 import subprocess
@@ -147,7 +151,7 @@ def ruleset_drift(desired: Dict[str, Any], actual: Optional[Dict[str, Any]]) -> 
 class Setting:
     name: str
     drift: List[str]
-    apply: Callable[[], None]
+    apply: Optional[Callable[[], None]]   # None: the script reports it, and leaves it to be done by hand
 
 
 def ruleset_setting(gh: Gh, repository: str, name: str, desired: Dict[str, Any], found: List[Dict[str, Any]]) -> Setting:
@@ -163,13 +167,34 @@ def ruleset_setting(gh: Gh, repository: str, name: str, desired: Dict[str, Any],
     return Setting(name, ruleset_drift(desired, actual), apply)
 
 
+def other_rulesets(gh: Gh, repository: str, found: List[Dict[str, Any]], default: str, lines: Sequence[str]) -> List[Setting]:
+    """Every other active ruleset that requires checks of the default branch or of a line's."""
+    refs = [f"refs/heads/{b}" for b in [default, "0.x", *lines]]
+    result = []
+    for summary in found:
+        if summary.get("name") in (RULESET, QUEUE_RULESET) or summary.get("target", "branch") != "branch":
+            continue
+        ruleset = gh.api(f"repos/{repository}/rulesets/{summary['id']}")
+        if ruleset.get("target", "branch") != "branch":
+            continue
+        include = ruleset.get("conditions", {}).get("ref_name", {}).get("include", [])
+        on_cycle = any(p in ("~DEFAULT_BRANCH", "~ALL") or any(fnmatch.fnmatchcase(r, p) for r in refs) for p in include)
+        checks = [c.get("context") for rule in ruleset.get("rules", []) if rule.get("type") == "required_status_checks"
+                  for c in rule.get("parameters", {}).get("required_status_checks", [])]
+        if ruleset.get("enforcement") == "active" and on_cycle and checks:
+            result.append(Setting(f"the ruleset {ruleset.get('name')!r}, which the cycle does not set", [
+                f"it requires {len(checks)} check(s) of its own — {', '.join(checks)}: GitHub requires every "
+                "ruleset's, so remove it by hand"], None))
+    return result
+
+
 def settings(gh: Gh, repository: str, checks: Sequence[str]) -> List[Setting]:
     repo = gh.api(f"repos/{repository}")
     found = gh.api(f"repos/{repository}/rulesets?includes_parents=false") or []
     result = [ruleset_setting(gh, repository, f"the ruleset {RULESET!r}, on the default branch and *.x",
                               desired_ruleset(checks), found)]
+    lines = [b["name"] for b in gh.all(f"repos/{repository}/branches") if LINE.fullmatch(b["name"])]
     if repo.get("owner", {}).get("type") == "Organization":
-        lines = [b["name"] for b in gh.all(f"repos/{repository}/branches") if LINE.fullmatch(b["name"])]
         on = ", ".join(["the default branch"] + sorted(lines))
         result.append(ruleset_setting(gh, repository, f"the ruleset {QUEUE_RULESET!r}, on {on}",
                                       desired_queue(lines), found))
@@ -178,7 +203,7 @@ def settings(gh: Gh, repository: str, checks: Sequence[str]) -> List[Setting]:
                           lambda: gh.api(f"repos/{repository}/immutable-releases", "PUT")))
     result.append(Setting("head branches deleted on merge", [] if repo.get("delete_branch_on_merge") is True else ["they are kept"],
                           lambda: gh.api(f"repos/{repository}", "PATCH", {"delete_branch_on_merge": True})))
-    return result
+    return result + other_rulesets(gh, repository, found, repo.get("default_branch", "main"), lines)
 
 
 def main(argv: Optional[Sequence[str]] = None, gh: Optional[Gh] = None) -> int:
@@ -209,15 +234,21 @@ def main(argv: Optional[Sequence[str]] = None, gh: Optional[Gh] = None) -> int:
         return 1 if drifted else 0
     if not any(s.name.startswith(f"the ruleset {QUEUE_RULESET!r}") for s in found):
         print("No merge queue: GitHub offers it to repositories of organisations. The gate runs again each night instead.")
+    by_hand = [s for s in drifted if s.apply is None]
     for setting in drifted:
+        if setting.apply is None:
+            continue
         try:
             setting.apply()
         except GhError as error:
             print(f"setup-release: could not set {setting.name}: {error}", file=sys.stderr)
             return 2
         print(f"→ set {setting.name}")
-    print(f"{len(drifted)} setting(s) changed." if drifted else "Nothing to change.")
-    return 0
+    changed = len(drifted) - len(by_hand)
+    print(f"{changed} setting(s) changed." if changed else "Nothing to change.")
+    for setting in by_hand:
+        print(f"! {setting.name}: left to you — remove it by hand, in the repository's Settings → Rules")
+    return 1 if by_hand else 0
 
 
 if __name__ == "__main__":
