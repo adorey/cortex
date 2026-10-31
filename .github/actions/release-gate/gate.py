@@ -14,7 +14,12 @@ releases. It passes only when:
    included, is named after it. Pre-releases do not count;
 4. no draft release is waiting: one release is in flight at a time.
 
-The name of the pull request's branch does not matter. Standard library only.
+The name of the pull request's branch does not matter. A fork's pull request runs with a read-only
+token, to which GitHub lists no draft: rule 4, and rule 3's check of a draft's name, pass blind
+there. They are not refused for it: where the repository has a merge queue, its run, with the
+repository's token, checks them again — the nightly re-run keeps the fork's token — and the
+cycle's releases come from the repository's own branches (ADR-009 §9).
+Standard library only.
 """
 
 from __future__ import annotations

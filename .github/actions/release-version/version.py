@@ -91,6 +91,7 @@ def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, st
     if not new and added and attempt > 1:
         # A second attempt, once the release is published, has nothing left to do. A first one whose notes
         # are all released bypassed the gate — a carry-up with no note of its own, or a tag pushed by hand.
+        # A second attempt of such a run says re-run too: its first attempt said why, and stays in the run.
         raise Refused(f"{', '.join(sorted(set(added), key=Version))} is already released: a re-run changes nothing, "
                       f"and a new commit is a new version")
     if len(new) != 1:
@@ -219,6 +220,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.event == "push":
             added = added_between(args.before, args.sha, args.notes)
             if added is None:
+                # Red, not skipped, when a line is cut: a green run would need an output and conditions on
+                # the jobs after this one, for an event of once per major version. The message says why.
                 raise Refused("the push has no `before` to compare with: a new branch is no release")
             plan = for_push(added, args.ref, default_branch, args.sha, state,
                             attempt=int(os.environ.get("GITHUB_RUN_ATTEMPT") or 1))
