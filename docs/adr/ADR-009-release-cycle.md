@@ -1,7 +1,7 @@
 # ADR-009 — The release cycle: every merge into `main` is a release, drafted by CI, published from GitHub
 
-- **Status:** Accepted
-- **Date:** 2026-10-30 (proposed) · 2026-10-30 (accepted)
+- **Status:** Implemented
+- **Date:** 2026-10-30 (proposed) · 2026-10-30 (accepted) · 2026-10-31 (implemented, 1.3.0)
 - **Authors:** Cortex maintainers (initiated by the maintainer, drafted by @Oolon)
 - **Affects:** `.github/workflows/` (`binary.yml` and the release jobs, the triggers of the test workflows), new composite actions under `.github/actions/`, `cli/build.py` (the spec archives a binary knows), a new `bin/setup-release.sh`, the repository's settings (the ruleset of `main`, immutable releases), `CONTRIBUTING.md` (the commit convention, versioning & releases), `docs/process/adr-implementation.md` (§2, §8, §9)
 - **Relates to:** [ADR-008](ADR-008-cortex-binary.md) — §3.1 (how a release is made), §3.3 (the spec archives a binary knows) and the amendments of its §9 on pre-releases, which this ADR replaces; ADR-008 records it in its own amendments when this ADR is implemented · roadmap epic [#187](https://github.com/adorey/cortex/issues/187)
