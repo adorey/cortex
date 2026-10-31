@@ -1,5 +1,6 @@
 """``cortex.toml``, ``cortex.local.toml`` and versions — ADR-008 §3.3, §3.4."""
 
+import json
 import shutil
 import sys
 import tempfile
@@ -17,6 +18,18 @@ class VersionTests(unittest.TestCase):
         ordered = ["0.0.0-dev", "0.0.0-dev.3", "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta",
                    "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0", "1.0.1", "1.1.0", "1.10.0", "2.0.0"]
         self.assertEqual([str(v) for v in sorted(map(Version, reversed(ordered)))], ordered)
+
+    def test_the_table_the_release_actions_share(self):
+        # One table orders versions for the CLI and for the release actions (ADR-009 §3.2): two
+        # orderings that disagreed would let the gate pass a version the store refuses.
+        table = Path(__file__).resolve().parents[2] / ".github" / "actions" / "lib" / "tests" / "semver-cases.json"
+        cases = json.loads(table.read_text(encoding="utf-8"))
+        self.assertEqual([str(v) for v in sorted(map(Version, reversed(cases["ordered"])))], cases["ordered"])
+        counter = cases["sort_v_counterexample"]
+        self.assertLess(Version(counter["lower"]), Version(counter["higher"]))
+        for text in cases["invalid"]:
+            with self.subTest(text=text):
+                self.assertFalse(Version.valid(text))
 
     def test_what_is_no_version(self):
         for text in ("1.0", "v1.0.0", "01.0.0", "1.0.0+build", "1.0.0-", "1.0.0-01", "latest", "", "1.0.0 ",

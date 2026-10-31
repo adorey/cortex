@@ -1,0 +1,37 @@
+name: actions tests
+
+# The tests of the release actions (ADR-009 §3.9): standard library Python, run by the runner's own
+# python3, as the actions themselves are. They take seconds, so they run on every pull request and
+# every push, with no paths filter. One job whose name no matrix changes is its own summary (§3.10).
+on:
+  push:
+    branches: [main, "release/**", "[0-9]+.x"]
+  pull_request:
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: actions tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
+
+      - name: The tests of each action, and of their shared lib
+        run: |
+          python3 --version
+          status=0
+          for tests in .github/actions/*/tests; do
+            echo "::group::$tests"
+            python3 -m unittest discover -s "$tests" -p 'test_*.py' -v || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
