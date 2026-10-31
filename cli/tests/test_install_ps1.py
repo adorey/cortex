@@ -131,7 +131,7 @@ class InstallPs1Tests(unittest.TestCase):
         self.assertFalse(self.installed().exists())
 
     def test_a_user_part_or_a_port_that_is_no_number_is_refused(self):
-        for url in ("http://127.0.0.1:1@example.invalid", "https://user@github.com/adorey/cortex/releases",
+        for url in ("http://127.0.0.1:1@example.invalid", "https://user@github.com/xod-labs/cortex/releases",
                     "http://localhost:x/releases", "http://127.0.0.1.example.com/releases"):
             with self.subTest(url=url):
                 self.release.url, saved = url, self.release.url

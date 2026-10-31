@@ -296,7 +296,7 @@ class NetTests(unittest.TestCase):
 
     def test_a_url_holding_a_control_character(self):
         with self.assertRaises(net.DownloadError):
-            net.get("https://github.com/adorey/cortex/releases/download/1.0.0\n/SHA256SUMS", 1024)
+            net.get("https://github.com/xod-labs/cortex/releases/download/1.0.0\n/SHA256SUMS", 1024)
 
     @unittest.skipIf(os.name == "nt", "Windows gives Python its own certificate store")
     def test_an_empty_certificate_directory_holds_no_certificate(self):
@@ -316,7 +316,7 @@ class NetTests(unittest.TestCase):
     def test_github_is_reached_over_verified_https(self):
         # A release page that does not exist: a 404 proves the TLS handshake was verified.
         with self.assertRaisesRegex(net.DownloadError, "HTTP 404"):
-            net.get("https://github.com/adorey/cortex/releases/download/0.0.0-no-such-release/SHA256SUMS", 1024)
+            net.get("https://github.com/xod-labs/cortex/releases/download/0.0.0-no-such-release/SHA256SUMS", 1024)
 
 
 if __name__ == "__main__":

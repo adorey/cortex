@@ -22,15 +22,15 @@ This step-by-step guide covers installing the **design-time spec** in both modes
 
 ```bash
 # Linux, macOS
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh
 
 # A given version
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- 1.0.0
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh -s -- 1.0.0
 ```
 
 ```powershell
 # Windows PowerShell
-irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1 | iex
 ```
 
 - The binary goes into `~/.cortex/bin` (`%USERPROFILE%\.cortex\bin` on Windows). `install.ps1` adds that directory to your user `PATH`; `install.sh` prints the line to add to your shell profile.

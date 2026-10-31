@@ -10,6 +10,12 @@ release note under [`changelog/`](changelog/).
 ### Changed
 - **The history of `main` was rewritten on 2026-10-30.** Eight commit messages written after the commit convention of 2026-06-03 broke it, and now follow it. Every tree is unchanged, and the tags 0.6.0 to 1.2.1 moved to the rewritten commits. The previous history stays on GitHub at `refs/archive/pre-rewrite-2026-10-30`, since the attestations and the spec archives of 1.0.0 to 1.2.1 name its commits. A clone made before then must fetch again: `git fetch --force --tags origin`, then `git reset --hard origin/main` on `main`. The installed binaries and the published assets are unchanged. [ADR-009](docs/adr/ADR-009-release-cycle.md) makes it the last rewrite: once releases are immutable, their tags no longer move.
 
+## [1.2.2] - 2026-10-31 — On Display _(Released)_
+[Full notes](changelog/1.2.2.md)
+
+### Changed
+- **Cortex moved to [`xod-labs/cortex`](https://github.com/xod-labs/cortex)**, from `adorey/cortex` ([#214](https://github.com/xod-labs/cortex/pull/214)). The install scripts, the CLI and the documentation name the new address. The old one redirects, so the binaries of 1.0.0 to 1.2.1 keep working. [Moving to xod-labs](docs/moving-to-xod-labs.md) says what to update, and how to verify the attestations of the versions released before the move (ADR-008 §9).
+
 ## [1.2.1] - 2026-10-30 — Don't Panic _(Released)_
 [Full notes](changelog/1.2.1.md)
 

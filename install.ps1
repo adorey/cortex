@@ -2,12 +2,12 @@
 # Cortex - install.ps1: the one-line install on Windows (ADR-008, section 3.2)
 # ============================================================================
 #
-#   irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1 | iex
 #
 # With options - a version, or the command's name - run it as a script block:
 #
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1))) -Version 1.0.0
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1))) -Name cortex
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1))) -Version 1.0.0
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1))) -Name cortex
 #
 # Downloads the release asset for Windows - the latest release, or the version given - checks
 # it against the release's SHA256SUMS and stops on a mismatch, then installs `cortex.exe` into
@@ -20,7 +20,7 @@
 # Environment:
 #   CORTEX_HOME             where Cortex lives on this machine (default: %USERPROFILE%\.cortex)
 #   CORTEX_RELEASES_URL     where the releases are downloaded from (default: the GitHub
-#                           releases of adorey/cortex) - a mirror serving the same layout,
+#                           releases of xod-labs/cortex) - a mirror serving the same layout,
 #                           latest/download/ASSET and download/VERSION/ASSET, over https;
 #                           http only to this machine (127.0.0.1, localhost), for tests
 #   CORTEX_NO_MODIFY_PATH   set to 1 to leave the user's PATH as it is (-NoModifyPath)
@@ -140,7 +140,7 @@ function Install-Cortex {
     # Windows PowerShell 5.1 may not offer TLS 1.2 by default; GitHub requires it.
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-    $releases = if ($env:CORTEX_RELEASES_URL) { $env:CORTEX_RELEASES_URL } else { "https://github.com/adorey/cortex/releases" }
+    $releases = if ($env:CORTEX_RELEASES_URL) { $env:CORTEX_RELEASES_URL } else { "https://github.com/xod-labs/cortex/releases" }
     # SHA256SUMS comes from where the archive does: it proves the download whole, not its origin.
     # That origin is https - or this machine, for a test - never a plain http elsewhere.
     if (-not (Test-ReleasesUrl $releases)) {

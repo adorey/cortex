@@ -36,7 +36,7 @@ from .version import VERSION
 
 SPEC_TREES = ("agents", "templates", "docs")
 SPEC_ARCHIVE = "cortex-spec.tar.gz"
-DEFAULT_RELEASES_URL = "https://github.com/adorey/cortex/releases"
+DEFAULT_RELEASES_URL = "https://github.com/xod-labs/cortex/releases"
 # The largest spec archive and SHA256SUMS a download accepts: a version is under a megabyte.
 MAX_ARCHIVE = 64 * 1024 * 1024
 MAX_SUMS = 1024 * 1024
@@ -75,9 +75,9 @@ def known_specs() -> Dict[str, str]:
 
 def upgrade_command(version: Version) -> str:
     if os.name == "nt":
-        return ("& ([scriptblock]::Create((irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1)))"
+        return ("& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1)))"
                 f" -Version {version}")
-    return f"curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- {version}"
+    return f"curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh -s -- {version}"
 
 
 # --------------------------------------------------------------------------- #

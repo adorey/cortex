@@ -14,7 +14,7 @@ Cortex is two things with very different exposure, and this policy covers both:
 **Please do not open a public issue for a security problem.**
 
 Use GitHub's private reporting instead:
-[**Report a vulnerability**](https://github.com/adorey/cortex/security/advisories/new).
+[**Report a vulnerability**](https://github.com/xod-labs/cortex/security/advisories/new).
 It opens a confidential thread with the maintainers and lets a fix and an advisory be
 published together.
 

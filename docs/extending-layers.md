@@ -253,7 +253,7 @@ CI integration is recommended — fail the pipeline if `cortex validate --strict
 ```bash
 version="$(LC_ALL=C tr -d '\357\273\277' < cortex.toml | sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*[\"']\([^\"']*\)[\"'].*/\\1/p" | head -n 1)"
 [ -n "$version" ] || { echo "cortex.toml pins no version" >&2; exit 1; }
-curl -fsSL https://raw.githubusercontent.com/adorey/cortex/main/install.sh | sh -s -- "$version"
+curl -fsSL https://raw.githubusercontent.com/xod-labs/cortex/main/install.sh | sh -s -- "$version"
 export PATH="$HOME/.cortex/bin:$PATH"
 cortex sync
 cortex validate --strict
@@ -265,7 +265,7 @@ On a Windows runner, in PowerShell:
 $pinned = Select-String -Path cortex.toml -Pattern '^\s*version\s*=\s*["'']([^"'']+)["'']' | Select-Object -First 1
 if (-not $pinned) { throw "cortex.toml pins no version" }
 $version = $pinned.Matches[0].Groups[1].Value
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/adorey/cortex/main/install.ps1))) -Version $version
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xod-labs/cortex/main/install.ps1))) -Version $version
 $env:Path = "$env:USERPROFILE\.cortex\bin;$env:Path"
 cortex sync; if ($LASTEXITCODE) { exit $LASTEXITCODE }
 cortex validate --strict; if ($LASTEXITCODE) { exit $LASTEXITCODE }

@@ -488,3 +488,9 @@ Across it, `cortex init` writes what `setup.sh` wrote, byte for byte. The `.acti
 ### 2026-10 — the planned records are numbered one higher
 
 ADR-009 became the release cycle on 2026-10-30, and every record planned after it moved up by one. In this record, ADR-011 is now ADR-012 ([#40](https://github.com/adorey/cortex/issues/40)), and ADR-016 is now ADR-017 ([#45](https://github.com/adorey/cortex/issues/45)).
+
+### 2026-10 — the repository moves to xod-labs
+
+- **Cortex lives at `xod-labs/cortex` since 2026-10-30**, transferred from `adorey/cortex` to the GitHub organisation of xod labs. GitHub redirects the old address — the web, git, the API, `releases/download` and `releases/latest/download` — and `raw.githubusercontent.com` serves the old paths as they are. A test repository, transferred first, was read through each of them: `install.sh`, with curl and with wget, and `cortex sync` downloading a spec; on 2026-10-30, Cortex itself was, once moved. Binaries 1.0.0 to 1.2.1 keep the releases address in their code (§3.2) and print the old install command: both keep working. From 1.2.2, the scripts, the CLI and the documentation name the new address.
+- **Nothing is created at `adorey/cortex` again.** A repository or a fork there ends every redirect, and the binaries of 1.0.0 to 1.2.1 rely on one.
+- **An attestation keeps the repository it was made in** (§3.1). The certificates of 1.0.0 to 1.2.1 name `adorey/cortex`, and GitHub lists those attestations under the account `adorey`, no longer under the repository: `gh attestation verify --repo adorey/cortex` finds none of them now. They are verified by their owner, pinned to the workflow that signed them — `gh attestation verify ~/.cortex/bin/cortex --owner adorey --signer-workflow adorey/cortex/.github/workflows/binary.yml`, checked on 1.2.1's binary with gh 2.103.3 — and from 1.2.2 with `--repo xod-labs/cortex`, as [Moving to xod-labs](../moving-to-xod-labs.md#you-verify-the-attestations) says.

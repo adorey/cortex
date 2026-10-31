@@ -383,7 +383,7 @@ def leaving(path: Path) -> str:
         return (f"The submodule was removed by a commit you pulled: git no longer tracks {LINK}/, and left it {check}"
                 f"These commands change the project at {root}, so they are shown here, not run:\n\n{shown}\n"
                 "Then run the command again. The migration guide covers it: "
-                "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
+                "https://github.com/xod-labs/cortex/blob/main/docs/migrating-to-the-binary.md")
     if kind == "submodule":
         # git rm refuses without -f a submodule whose index entry is not the last commit's.
         force = "-f " if in_index(path) and _staged(path) else ""
@@ -405,7 +405,7 @@ def leaving(path: Path) -> str:
                 # A removal there could only reach another repository; the commands, only fail.
                 return (f"Cortex now lives in the store, and the submodule is to go. {stuck} Then run the command "
                         "again. The migration guide covers it: "
-                        "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
+                        "https://github.com/xod-labs/cortex/blob/main/docs/migrating-to-the-binary.md")
         if gitdir is not None:
             commands.append(_remove_command(display(gitdir)))
         shown = "".join(f"    {command}\n" for command in commands)
@@ -421,7 +421,7 @@ def leaving(path: Path) -> str:
         return (f"Cortex now lives in the store, and the submodule is to go. {own}These commands rewrite the git "
                 f"state of the project at {root}, so they are shown here, not run:\n\n{shown}\n"
                 "Then run the command again. The migration guide covers it: "
-                "https://github.com/adorey/cortex/blob/main/docs/migrating-to-the-binary.md")
+                "https://github.com/xod-labs/cortex/blob/main/docs/migrating-to-the-binary.md")
     if kind == "worktree":
         common = os.path.dirname(os.path.dirname(_gitdir(path)))       # …/.git/worktrees/<name> → …/.git
         return (f"Cortex now lives in the store, and this worktree of {display(common)} is to go. Once you have "
