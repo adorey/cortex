@@ -1,0 +1,34 @@
+name: release gate
+
+# What may merge into main (ADR-009 §3.2): every merge there is a release, so a pull request passes
+# only when it adds exactly one new version, its release note and its CHANGELOG.md section — first,
+# dated the day it merges in UTC — higher than every release, with no draft waiting. The summary
+# names the version.
+on:
+  pull_request:
+    branches: [main]
+    # `edited`: a pull request retargeted onto main is checked against its new base.
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # drafts are listed only to a token with push access; nothing here writes
+
+jobs:
+  gate:
+    name: release gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0               # the merge base, and both changelogs
+          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
+
+      - uses: ./.github/actions/release-gate
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          base-ref: ${{ github.event.pull_request.base.ref }}
