@@ -475,3 +475,34 @@ Acceptance criteria:
   The guard (phase 3) still puts `latest` right, whatever was ticked when publishing.
 - **A pre-release's body opens with a GitHub `[!WARNING]` alert** naming the release it prepares.
 - **The version job asks for `contents: write`**, like the gate: it must see drafts.
+
+### Phase 3 — the guard
+
+- **The guard verifies the provenance with `gh attestation verify`**, which every runner has. It names the tag's commit (`--source-digest`) and the workflow that signs releases (`--signer-workflow`, `release.yml`), and checks the signature itself, not only what the attestation says. The assets are downloaded by their API address, and the redirect to GitHub's storage is followed without the token, which the storage refuses.
+- **A release that fails its guard never stays `latest`** (§3.5, 5). The end-to-end run found it. A release published by hand, with no asset, is the highest version, so it took `latest`, and `releases/latest/download/SHA256SUMS` would have answered 404: the incident of 2026-10-29, which immutability no longer lets anyone undo. `latest` is the highest version that passes, and the guard moves it there.
+- **Deleting the latest release leaves no `latest` at all**: GitHub does not move it to the release before. The guard's issue says so. The deleted release's tag stays, so its version is spent, and the gate asks for a higher one.
+- **The guard also runs by *Run workflow*, with a tag.** A published release runs the workflow of the default branch, so a release published before the guard reached it — the release candidate of the cycle itself — is checked from its branch.
+- **It opens one issue per release**, labelled `type:infra`, and none if one is open already.
+
+### End to end, on a throwaway repository (2026-10-31)
+
+Before phases 1 to 3 merged, a repository of the organisation ran them, with a build that made six small assets, attested for real:
+- `bin/setup-release.sh` applied the settings, the merge queue included;
+- the gate passed on each release's pull request, then on its merge group, and named the version;
+- the queue merged with a merge commit;
+- the push left a draft with the six assets, its note as its body and the merge commit as its target, and no tag;
+- publishing it made the tag and ran the guard, which passed, signatures included.
+
+Each case of the phases' criteria ran there:
+- a re-run once published changed nothing;
+- a tag pushed by hand started no workflow;
+- `1.1.0-rc.1` was cut from a `release/**` branch, banner first;
+- the four refusals of *Run workflow* (on `main`, `-rc1`, a beta after an rc, a taken number) created nothing;
+- `1.x` was cut, `--check` reported its missing merge queue, and a run set it;
+- a release into `1.x` passed the gate for its line, and was published as `latest` on purpose; the guard moved `latest` back to `2.0.0`;
+- a carry-up from `1.x` drafted `2.0.1` only;
+- the nightly re-run re-ran the gate of an open pull request;
+- a draft waiting failed the gate, so the workflow's token sees drafts;
+- a release made by hand failed its guard, opened one issue, and lost `latest`.
+
+The repository was deleted after the run.
