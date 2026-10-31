@@ -4,6 +4,7 @@ and the one thing it repairs, `latest`."""
 import copy
 import hashlib
 import io
+import json
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -17,6 +18,8 @@ COMMIT = "c" * 40
 SIX = ["SHA256SUMS", "cortex-linux-aarch64.tar.gz", "cortex-linux-x86_64.tar.gz", "cortex-macos-arm64.tar.gz",
        "cortex-spec.tar.gz", "cortex-windows-x86_64.zip"]
 SIGNER = "o/r/.github/workflows/release.yml"
+RELEASE_PREDICATE = "https://in-toto.io/attestation/release/v0.2"
+PROVENANCE = "https://slsa.dev/provenance/v1"
 
 
 def assets(drop=(), corrupt=()):
@@ -31,12 +34,18 @@ def assets(drop=(), corrupt=()):
 class FakeGitHub:
     repository = "o/r"
 
-    def __init__(self, releases, latest, tags=None):
+    def __init__(self, releases, latest, tags=None, unattested=(), attestations_fail=None):
         self.releases_ = releases
         self.latest = latest
         self.tags = tags or {r["tag_name"]: COMMIT for r in releases}
+        self.unattested = {hashlib.sha256(data).hexdigest() for data in unattested}
+        self.attestations_fail = attestations_fail
         self.issues = []
         self.patched = []
+        self.patch_fails = False
+        self.issue_fails = False
+        self.annotated = set()
+        self.tags_fail = None
 
     def repo(self, suffix=""):
         return f"/repos/o/r{suffix}"
@@ -53,11 +62,27 @@ class FakeGitHub:
             if self.latest is None:
                 raise GitHubError(404, "no latest")
             return {"tag_name": self.latest}
+        if path.startswith("/repos/o/r/attestations/sha256:"):
+            digest = path.rsplit(":", 1)[1]
+            if self.attestations_fail:
+                raise self.attestations_fail
+            if digest in self.unattested:
+                raise GitHubError(404, "Not Found")
+            # As GitHub answers for an immutable release: its own release attestation first, then the
+            # build provenance — the one gh must be handed.
+            return {"attestations": [{"bundle": {"digest": digest, "predicate": RELEASE_PREDICATE}, "repository_id": 1},
+                                     {"bundle": {"digest": digest, "predicate": PROVENANCE}, "repository_id": 1}]}
         if path.startswith("/repos/o/r/git/ref/tags/"):
             tag = path.rsplit("/", 1)[1]
+            if self.tags_fail:
+                raise self.tags_fail
             if tag not in self.tags:
                 raise GitHubError(404, "no such ref")
+            if tag in self.annotated:
+                return {"object": {"type": "tag", "sha": f"t-{tag}"}}
             return {"object": {"type": "commit", "sha": self.tags[tag]}}
+        if path.startswith("/repos/o/r/git/tags/t-"):
+            return {"object": {"type": "commit", "sha": self.tags[path.rsplit("/t-", 1)[1]]}}
         raise AssertionError(path)
 
     def paginate(self, path):
@@ -65,12 +90,16 @@ class FakeGitHub:
         return iter(self.issues)
 
     def request(self, method, path, body=None, **_):
+        if method == "PATCH" and self.patch_fails:
+            raise GitHubError(502, "Bad Gateway")
         if method == "PATCH":
             rid = int(path.rsplit("/", 1)[1])
             self.patched.append((rid, body))
             self.latest = next(r["tag_name"] for r in self.releases_ if r["id"] == rid)
             return {}
         if method == "POST" and path == "/repos/o/r/issues":
+            if self.issue_fails:
+                raise GitHubError(502, "Bad Gateway")
             issue = dict(body, html_url=f"https://github.com/o/r/issues/{len(self.issues) + 1}")
             self.issues.append(issue)
             return issue
@@ -85,8 +114,14 @@ def release(tag, rid, files=None, immutable=True, prerelease=None, draft=False):
 
 
 def verify_names(commit):
-    """A verifier that passes the assets whose provenance names ``commit``."""
-    return lambda path, repo, wanted, signer: None if wanted == commit and signer == SIGNER else "no attestation matches"
+    """A verifier that passes the assets whose provenance names ``commit``, given every bundle the API
+    returned for them, one per line."""
+    def verify(path, bundle, repo, wanted, signer):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        lines = [json.loads(line) for line in bundle.read_text(encoding="utf-8").splitlines()]
+        assert lines == [{"digest": digest, "predicate": RELEASE_PREDICATE}, {"digest": digest, "predicate": PROVENANCE}], bundle
+        return None if wanted == commit and signer == SIGNER else "no attestation matches"
+    return verify
 
 
 def run(github, tag, verify=None):
@@ -108,6 +143,18 @@ class PassingTests(unittest.TestCase):
                      "the release is immutable", "latest is 1.4.0, the highest version"):
             self.assertIn(f"✓ {line}", out)
         self.assertEqual((github.issues, github.patched), ([], []))
+
+    def test_an_annotated_tag_is_followed_to_its_commit(self):
+        github = FakeGitHub([release("1.4.0", 1)], latest="1.4.0")
+        github.annotated.add("1.4.0")
+        self.assertEqual(guard.tag_commit(github, "1.4.0"), COMMIT)
+        self.assertEqual(run(github, "1.4.0")[0], 0)
+
+    def test_a_first_publication_as_a_pre_release_passes(self):
+        # No release yet, so no latest: nothing is left on a failing release.
+        github = FakeGitHub([release("0.1.0-rc.1", 1)], latest=None)
+        self.assertEqual(run(github, "0.1.0-rc.1")[0], 0)
+        self.assertEqual(github.issues, [])
 
     def test_a_pre_release_passes_and_leaves_latest_alone(self):
         github = FakeGitHub([release("1.4.0-rc.1", 1), release("1.3.0", 2)], latest="1.3.0")
@@ -149,7 +196,34 @@ class FailingTests(unittest.TestCase):
                           "the release is mutable: its assets could still be replaced")
 
     def test_a_tag_that_is_no_version(self):
-        self.assert_fails(FakeGitHub([release("nightly", 1)], None), "nightly", "the tag 'nightly' is no version")
+        out = self.assert_fails(FakeGitHub([release("nightly", 1)], None), "nightly", "the tag 'nightly' is no version")
+        self.assertNotIn("latest stays on", out)   # it never held latest
+
+    def test_an_asset_with_no_attestation(self):
+        github = FakeGitHub([release("1.4.0", 1)], "1.4.0", unattested=[assets()["cortex-spec.tar.gz"]])
+        self.assert_fails(github, "1.4.0", f"the provenance does not name the tag's commit {COMMIT[:12]}, signed by "
+                                           f"{SIGNER}: cortex-spec.tar.gz (no attestation)")
+
+    def test_attestations_the_api_cannot_return_fail_no_release(self):
+        # An API in trouble says nothing of the release: no finding, no issue, latest left alone.
+        github = FakeGitHub([release("2.0.0", 1), release("1.9.0", 2)], "2.0.0",
+                            attestations_fail=GitHubError(503, "Service Unavailable"))
+        code, out = run(github, "2.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertIn("::error title=release guard::HTTP 503", out)
+        self.assertEqual((github.issues, github.patched, github.latest), ([], [], "2.0.0"))
+
+    def test_a_tag_that_does_not_exist(self):
+        github = FakeGitHub([release("1.4.0", 1)], "1.4.0", tags={"1.3.0": COMMIT})
+        self.assert_fails(github, "1.4.0", "the tag 1.4.0 cannot be read: HTTP 404")
+
+    def test_a_tag_the_api_cannot_return_fails_no_release(self):
+        github = FakeGitHub([release("2.0.0", 1), release("1.9.0", 2)], "2.0.0")
+        github.tags_fail = GitHubError(500, "Internal Server Error")
+        code, out = run(github, "2.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertIn("::error title=release guard::HTTP 500", out)
+        self.assertEqual((github.issues, github.patched, github.latest), ([], [], "2.0.0"))
 
     def test_one_issue_per_release(self):
         github = FakeGitHub([release("1.4.0", 1, immutable=False)], "1.4.0")
@@ -168,9 +242,11 @@ class LatestTests(unittest.TestCase):
         self.assertIn("↺ latest was 1.5.1; it is 2.0.0 again, the highest version", out)
 
     def test_latest_on_a_pre_release_moves_back(self):
-        github = FakeGitHub([release("2.1.0-rc.1", 1), release("2.0.0", 2)], latest="2.1.0-rc.1")
-        self.assertEqual(run(github, "2.1.0-rc.1")[0], 0)
-        self.assertEqual(github.latest, "2.0.0")
+        # 2.1.0-rc.1 published without its "Set as a pre-release" box: GitHub made it latest.
+        github = FakeGitHub([release("2.1.0-rc.1", 1, prerelease=False), release("2.0.0", 2)], latest="2.1.0-rc.1")
+        code, out = run(github, "2.1.0-rc.1")
+        self.assertEqual((code, github.latest), (0, "2.0.0"), out)
+        self.assertIn("↺ latest was 2.1.0-rc.1; it is 2.0.0 again, the highest version\n", out)
 
     def test_a_release_that_fails_never_stays_latest(self):
         # Found by the end-to-end run: a 3.0.0 made by hand, with no asset, took latest as the highest
@@ -179,8 +255,60 @@ class LatestTests(unittest.TestCase):
         code, out = run(github, "4.0.0")
         self.assertEqual(code, 1)
         self.assertEqual(github.latest, "3.0.1")
-        self.assertIn("↺ latest was 4.0.0; it is 3.0.1 again, the highest version that passes, while 4.0.0 fails", out)
+        self.assertIn("↺ latest was 4.0.0; it is 3.0.1 again, the highest version with every asset expected, while 4.0.0 fails", out)
         self.assertIn("GitHub does not move it when the latest release is deleted", github.issues[0]["body"])
+
+    def test_a_release_that_failed_never_takes_latest_back(self):
+        # 3.0.0 failed its guard, which moved latest to 2.0.1; the guard of a later pre-release, or of
+        # a line's release, must not hand latest back to the highest version, 3.0.0.
+        for later in (release("3.0.1-rc.1", 3), release("1.5.2", 3)):
+            with self.subTest(later=later["tag_name"]):
+                github = FakeGitHub([release("3.0.0", 1, {}), release("2.0.1", 2)], latest="3.0.0")
+                self.assertEqual(run(github, "3.0.0")[0], 1)
+                self.assertEqual(github.latest, "2.0.1")
+                github.releases_.append(later)
+                github.tags[later["tag_name"]] = COMMIT
+                code, out = run(github, later["tag_name"])
+                self.assertEqual(code, 0, out)
+                self.assertEqual(github.latest, "2.0.1")
+                self.assertIn("✓ latest is 2.0.1, the highest version", out)
+
+    def test_a_release_marked_pre_release_is_never_made_latest(self):
+        # GitHub makes no pre-release latest: a 2.1.0 published with "Set as a pre-release" ticked is
+        # passed over.
+        github = FakeGitHub([release("2.1.0", 1, prerelease=True), release("2.0.0", 2)], latest="2.0.0")
+        code, out = run(github, "2.1.0")
+        self.assertEqual(code, 0, out)
+        self.assertEqual((github.latest, github.patched), ("2.0.0", []))
+
+    def test_no_latest_at_all_is_repaired(self):
+        # The latest release was deleted, and GitHub left none: the next guard names none, not None.
+        github = FakeGitHub([release("2.0.1", 1), release("2.0.0", 2)], latest=None)
+        code, out = run(github, "2.0.1")
+        self.assertEqual((code, github.latest), (0, "2.0.1"), out)
+        self.assertIn("↺ latest was none; it is 2.0.1 again, the highest version\n", out)
+
+    def test_the_issue_is_opened_even_when_latest_cannot_move(self):
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        github.patch_fails = True
+        code, out = run(github, "4.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertEqual([i["title"] for i in github.issues], ["Release 4.0.0 failed its guard"])
+
+    def test_latest_moves_even_when_the_issue_cannot_be_opened(self):
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        github.issue_fails = True
+        code, out = run(github, "4.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertEqual((github.issues, github.latest), ([], "3.0.1"))
+
+    def test_no_release_left_to_take_latest_is_said(self):
+        # 3.0.1's assets are named otherwise: no release is left to move `latest` to.
+        github = FakeGitHub([release("4.0.0", 1, immutable=False), release("3.0.1", 2, {"old.tar.gz": b"x"})], latest="4.0.0")
+        code, out = run(github, "4.0.0")
+        self.assertEqual((code, github.latest, github.patched), (1, "4.0.0", []))
+        self.assertIn("✗ latest stays on 4.0.0: no other release carries every asset expected", out)
+        self.assertIn("latest stays on 4.0.0", github.issues[0]["body"])
 
     def test_latest_is_repaired_even_when_the_release_fails(self):
         github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")
@@ -198,10 +326,10 @@ class GhVerifyTests(unittest.TestCase):
         real = guard.subprocess.run
         guard.subprocess.run = lambda args, **_: calls.append(args) or Done()
         try:
-            why = guard.gh_verify(Path("/x/a.tar.gz"), "o/r", COMMIT, SIGNER)
+            why = guard.gh_verify(Path("/x/a.tar.gz"), Path("/x/a.jsonl"), "o/r", COMMIT, SIGNER)
         finally:
             guard.subprocess.run = real
-        self.assertEqual(calls[0], ["gh", "attestation", "verify", "/x/a.tar.gz", "--repo", "o/r",
+        self.assertEqual(calls[0], ["gh", "attestation", "verify", "/x/a.tar.gz", "--bundle", "/x/a.jsonl", "--repo", "o/r",
                                     "--source-digest", COMMIT, "--signer-workflow", SIGNER])
         self.assertEqual(why, "no attestation names the commit")
 

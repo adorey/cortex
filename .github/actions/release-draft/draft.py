@@ -16,6 +16,7 @@ Once uploaded, the assets are read back, by name and size. Standard library only
 from __future__ import annotations
 
 import argparse
+import http.client
 import os
 import sys
 from pathlib import Path
@@ -61,9 +62,13 @@ def draft(github: GitHub, version: str, target: str, body: str, prerelease: bool
         "tag_name": version, "target_commitish": target, "name": version, "body": body, "draft": True,
         "prerelease": prerelease, "make_latest": "true" if latest else "false"})
     upload = release["upload_url"].split("{", 1)[0]
-    for path in files:
-        github.request("POST", "", data=path.read_bytes(), content_type="application/octet-stream",
-                       url=f"{upload}?name={quote(path.name)}")
+    for done, path in enumerate(files):
+        try:
+            github.request("POST", "", data=path.read_bytes(), content_type="application/octet-stream",
+                           url=f"{upload}?name={quote(path.name)}")
+        except (GitHubError, OSError, http.client.HTTPException) as error:   # an HTTP error, or the connection cut
+            raise Refused(f"the draft {version} holds at least {done} of {len(files)} assets: do not publish it — run the job "
+                          f"again: the draft is its own, and is made again ({error})")
 
     # Read back: every asset there, with its size.
     assets = {a["name"]: a["size"] for a in github.get(github.repo(f"/releases/{release['id']}/assets?per_page=100"))}

@@ -259,7 +259,10 @@ stack, including the last one into `main`.
 1. `release/X.Y.Z` — `changelog/X.Y.Z.md` and the `CHANGELOG.md` section, dated the day the final
    pull request will merge, in UTC — stacked last, so the note describes only what its branch
    contains. The ADR status becomes `Implemented` there, with an amendment entry recording what
-   changed during implementation. An ADR is appended to, never rewritten.
+   changed during implementation. An ADR is appended to, never rewritten. If the final pull
+   request slips to another day, one commit on the integration branch, which the final pull
+   request carries, corrects the three dates: the `CHANGELOG.md` section's — the gate refuses any
+   other day — and the ADR's implemented date, in its header and in `docs/adr/README.md`.
 2. A release that changes the release pipeline publishes a release candidate from the release
    branch first: *Run workflow* on the `release` workflow, `X.Y.Z-rc.1`, then *Publish release*
    (ADR-009 §3.7).
