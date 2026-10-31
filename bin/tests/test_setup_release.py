@@ -148,6 +148,33 @@ class SetupReleaseTests(unittest.TestCase):
             with self.subTest(check=check):
                 self.assertIn(check, names)
 
+    def test_each_required_check_of_several_jobs_fails_when_one_of_them_does(self):
+        # A summary runs whatever happened, needs every job a pull request runs — a job of a tag's
+        # push only is none — and fails on a failure or a cancellation (§3.10). Read as text: the
+        # runner's Python has no YAML parser.
+        summaries = set()
+        for path in sorted((BIN.parent / ".github" / "workflows").glob("*.yml")):
+            block = path.read_text(encoding="utf-8").split("\njobs:\n", 1)[1]
+            parts = re.split(r"(?m)^  ([A-Za-z0-9_-]+):\s*\n", block)
+            jobs = dict(zip(parts[1::2], parts[2::2]))
+
+            def key(job, name):
+                match = re.search(rf"(?m)^    {name}: (.+?)\s*$", job)
+                return match.group(1) if match else ""
+
+            for job_id, job in jobs.items():
+                if key(job, "name") not in sr.DEFAULT_CHECKS or len(jobs) == 1:
+                    continue
+                summaries.add(key(job, "name"))
+                others = {other for other, text in jobs.items()
+                          if other != job_id and "github.event_name == 'push'" not in key(text, "if")}
+                with self.subTest(workflow=path.name, check=key(job, "name")):
+                    self.assertEqual(key(job, "if"), "always()")
+                    self.assertEqual(set(re.findall(r"[A-Za-z0-9_-]+", key(job, "needs"))), others)
+                    self.assertRegex(job, r"(?m)^          \[ \"\$\{\{ contains\(needs\.\*\.result, 'failure'\) \|\| "
+                                          r"contains\(needs\.\*\.result, 'cancelled'\) \}\}\" = false \]$")
+        self.assertEqual(summaries, {"builds", "cli tests", "core tests", "repo checks", "runtime tests"})
+
     def test_a_disabled_or_loosened_ruleset_is_drift(self):
         gh = FakeGh()
         run(gh)
