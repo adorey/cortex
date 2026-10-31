@@ -4,11 +4,16 @@ name: release gate
 # a release, so a pull request passes only when it adds exactly one new version, its release note
 # and its CHANGELOG.md section — first, dated the day it merges in UTC — higher than every release
 # of its line, with no draft waiting. The summary names the version.
+#
+# The date is checked again on the day of the merge: on the merge group, where the queue runs every
+# required check at the moment of merging; and every night, by release-gate-nightly.yml, which
+# re-runs this workflow for every open pull request into main or a line's branch.
 on:
   pull_request:
     branches: [main, "[0-9]+.x"]
     # `edited`: a pull request retargeted onto main or a line is checked against its new base.
     types: [opened, synchronize, reopened, edited]
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -29,6 +34,6 @@ jobs:
 
       - uses: ./.github/actions/release-gate
         with:
-          base: ${{ github.event.pull_request.base.sha }}
-          head: ${{ github.event.pull_request.head.sha }}
-          base-ref: ${{ github.event.pull_request.base.ref }}
+          base: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          head: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          base-ref: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref }}
