@@ -182,6 +182,29 @@ class LatestTests(unittest.TestCase):
         self.assertIn("↺ latest was 4.0.0; it is 3.0.1 again, the highest version that passes, while 4.0.0 fails", out)
         self.assertIn("GitHub does not move it when the latest release is deleted", github.issues[0]["body"])
 
+    def test_a_release_that_failed_never_takes_latest_back(self):
+        # 3.0.0 failed its guard, which moved latest to 2.0.1; the guard of a later pre-release, or of
+        # a line's release, must not hand latest back to the highest version, 3.0.0.
+        for later in (release("3.0.1-rc.1", 3), release("1.5.2", 3)):
+            with self.subTest(later=later["tag_name"]):
+                github = FakeGitHub([release("3.0.0", 1, {}), release("2.0.1", 2)], latest="3.0.0")
+                self.assertEqual(run(github, "3.0.0")[0], 1)
+                self.assertEqual(github.latest, "2.0.1")
+                github.releases_.append(later)
+                github.tags[later["tag_name"]] = COMMIT
+                code, out = run(github, later["tag_name"])
+                self.assertEqual(code, 0, out)
+                self.assertEqual(github.latest, "2.0.1")
+                self.assertIn("✓ latest is 2.0.1, the highest version", out)
+
+    def test_a_release_marked_pre_release_is_never_made_latest(self):
+        # GitHub makes no pre-release latest: a 2.1.0 published with "Set as a pre-release" ticked is
+        # passed over.
+        github = FakeGitHub([release("2.1.0", 1, prerelease=True), release("2.0.0", 2)], latest="2.0.0")
+        code, out = run(github, "2.1.0")
+        self.assertEqual(code, 0, out)
+        self.assertEqual((github.latest, github.patched), ("2.0.0", []))
+
     def test_latest_is_repaired_even_when_the_release_fails(self):
         github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")
         self.assertEqual(run(github, "1.5.1")[0], 1)

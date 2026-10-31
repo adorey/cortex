@@ -7,8 +7,10 @@ For releases and pre-releases alike:
    by the workflow that built it;
 3. the assets expected are there, no other, and ``SHA256SUMS`` matches them;
 4. the release is immutable;
-5. ``latest`` is the highest version without a suffix — among the releases that pass: a release
-   that fails its guard never stays ``latest``, or ``releases/latest/download/…`` would serve it.
+5. ``latest`` is the highest version without a suffix — among the releases that carry every asset
+   expected and are not marked pre-release: a release that fails its guard never stays ``latest``,
+   or ``releases/latest/download/…`` would serve it, and one that misses an asset never becomes it
+   again.
 
 It repairs item 5 only, since immutability locks everything else: when an older line, a
 pre-release or a release that fails took ``latest``, it moves it. On any other failure it fails, and opens one issue
@@ -130,12 +132,15 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
     return report
 
 
-def keep_latest(github: GitHub, report: Report) -> None:
+def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None:
     """5. ``latest`` on the highest version without a suffix that passes — the one thing the guard
-    repairs. Deleting a release that was ``latest`` leaves none at all: GitHub does not move it."""
+    repairs. A release missing an asset expected stays out, whichever guard runs: an earlier one
+    failed it. GitHub makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves
+    none at all: GitHub does not move it."""
     failing = report.tag if report.findings else None
     published = [r for r in github.releases() if not r.get("draft") and is_release(r.get("tag_name"))
-                 and r.get("tag_name") != failing]
+                 and r.get("tag_name") != failing and not r.get("prerelease")
+                 and set(expected) <= {a["name"] for a in r.get("assets", [])}]
     top = highest(Version(r["tag_name"]) for r in published)
     if top is None:
         return
@@ -163,8 +168,10 @@ def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional
             + "\n**It cannot be repaired.** A published release is immutable: it can only be deleted, and its "
               f"version is spent — {report.tag} can never be used again. The next patch ships what this one "
               "should have, through the release cycle.\n\n"
-              f"The guard keeps `latest` off {report.tag}. If you delete it, check that `latest` still names a "
-              "release: GitHub does not move it when the latest release is deleted.\n")
+              f"The guard keeps `latest` off {report.tag}. A later guard does too only while {report.tag} misses "
+              "an asset expected: one that has them all could take `latest` back, until it is deleted. If you "
+              "delete it, check that `latest` still names a release: GitHub does not move it when the latest "
+              "release is deleted.\n")
     issue = github.request("POST", github.repo("/issues"), body={"title": title, "body": body, "labels": [label]})
     return issue.get("html_url")
 
@@ -187,7 +194,7 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
             return 2
         with tempfile.TemporaryDirectory(prefix="release-guard-") as tmp:
             report = check(github, release, expected, args.signer_workflow, Path(tmp), verify)
-        keep_latest(github, report)
+        keep_latest(github, report, expected)
         issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
     except GitHubError as error:
         print(f"::error title=release guard::{error}")
