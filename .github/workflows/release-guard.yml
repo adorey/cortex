@@ -1,0 +1,53 @@
+name: release guard
+
+# Every publication is checked (ADR-009 §3.5): the tag, the provenance of each asset, the six assets
+# and SHA256SUMS, immutability, and `latest`. The guard moves `latest` back to the highest version
+# when an older line or a pre-release took it, and unticks the pre-release box of an X.Y.Z that
+# passes; anything else it reports in an issue, since an immutable release cannot be repaired, only
+# deleted.
+#
+# A publication runs this workflow as its tag's commit has it: the `release` event's commit is the
+# tag's, and unlike *Run workflow* it needs no file on the default branch. *Run workflow*, with a
+# tag, checks a published release again, once this workflow is on the default branch.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The published release to check
+        required: true
+        type: string
+
+# One run per release at a time: a publication and a *Run workflow* of the same tag would each find
+# no issue open yet, and open two. A running guard is never cancelled: a run cut short checks
+# nothing. A pending one gives way to a newer run of the same tag, which checks the same.
+concurrency:
+  group: release guard ${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # move `latest` back
+  issues: write          # report what cannot be repaired
+  attestations: read     # the provenance of the assets
+
+jobs:
+  guard:
+    name: release guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
+
+      - uses: ./.github/actions/release-guard
+        with:
+          tag: ${{ github.event.release.tag_name || inputs.tag }}
+          signer-workflow: ${{ github.repository }}/.github/workflows/release.yml
+          expected: |
+            SHA256SUMS
+            cortex-linux-aarch64.tar.gz
+            cortex-linux-x86_64.tar.gz
+            cortex-macos-arm64.tar.gz
+            cortex-spec.tar.gz
+            cortex-windows-x86_64.zip

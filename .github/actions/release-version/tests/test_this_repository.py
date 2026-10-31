@@ -52,11 +52,17 @@ class PushTests(unittest.TestCase):
 @unittest.skipUnless((WORKFLOWS / "release.yml").is_file(), "not in the repository that calls the actions")
 class ThisRepositoryTests(unittest.TestCase):
     def test_no_workflow_starts_on_a_tag(self):
+        # A tag pushed by hand is a push of a tag, or a `create`. A publication is not: the guard
+        # starts on `release: published`, and only it.
         for path in sorted(WORKFLOWS.glob("*.yml")):
             block = triggers(path.read_text(encoding="utf-8"))
             with self.subTest(workflow=path.name):
                 self.assertNotRegex(block, r"(?m)^\s+tags(-ignore)?:")
-                self.assertNotRegex(block, r"(?m)^  (create|release):")
+                self.assertNotRegex(block, r"(?m)^  create:")
+                release = event_block(block, "release")
+                if release is not None:
+                    self.assertEqual(path.name, "release-guard.yml")
+                    self.assertIn("types: [published]", release)
                 self.assertFalse(push_without_branches(path.read_text(encoding="utf-8")))
 
     def test_a_merge_into_main_or_a_line_releases_whatever_it_changes(self):
