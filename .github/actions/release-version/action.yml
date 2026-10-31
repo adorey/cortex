@@ -1,0 +1,65 @@
+name: release version
+description: >-
+  The version a release job makes, or why it makes none (ADR-009 §3.3): the note a push to the
+  default branch adds. Writes the release's body.
+
+inputs:
+  event:
+    description: "`push`."
+    required: true
+  ref:
+    description: The branch, as `github.ref_name`.
+    required: true
+  sha:
+    description: The commit the job builds — the push's `after`, the branch's head.
+    required: true
+  before:
+    description: A push's `before`.
+    default: ""
+  changelog:
+    description: The changelog, relative to the repository's root.
+    default: CHANGELOG.md
+  notes:
+    description: The directory of the release notes, one `X.Y.Z.md` per version.
+    default: changelog
+  token:
+    description: >-
+      A token that lists tags, branches and releases, drafts included. GitHub lists drafts only to a
+      token with push access: the workflow's own, with `contents: write`.
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: The version made.
+    value: ${{ steps.version.outputs.version }}
+  prerelease:
+    description: "`false`: a push makes a release."
+    value: ${{ steps.version.outputs.prerelease }}
+  latest:
+    description: "`true` when the release is to be the latest: the highest version, on the default branch."
+    value: ${{ steps.version.outputs.latest }}
+  target:
+    description: The commit the release targets.
+    value: ${{ steps.version.outputs.target }}
+  body-file:
+    description: The release's body, written in the runner's temporary directory.
+    value: ${{ steps.version.outputs.body-file }}
+
+runs:
+  using: composite
+  steps:
+    # The history must be there: check out with `fetch-depth: 0`.
+    - name: The release version
+      id: version
+      shell: bash
+      env:
+        EVENT: ${{ inputs.event }}
+        REF: ${{ inputs.ref }}
+        SHA: ${{ inputs.sha }}
+        BEFORE: ${{ inputs.before }}
+        CHANGELOG: ${{ inputs.changelog }}
+        NOTES: ${{ inputs.notes }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: >-
+        python3 "$GITHUB_ACTION_PATH/version.py" --event "$EVENT" --ref "$REF" --sha "$SHA" --before "$BEFORE"
+        --changelog "$CHANGELOG" --notes "$NOTES" --body-file "$RUNNER_TEMP/release-body.md"

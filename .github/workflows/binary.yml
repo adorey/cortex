@@ -32,6 +32,12 @@ on:
     branches: [main, "[0-9]+.x"]
   merge_group:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: The version to stamp, as release-version gave it. Empty, a build of no release.
+        type: string
+        default: ""
 
 # A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
 # branch or a tag, a run in progress is never cut short.
@@ -87,10 +93,14 @@ jobs:
       # already carry — they stay the one source of versions. A pre-release — X.Y.Z-something,
       # the throwaway kind that tests this workflow — is in neither. Anything else is a build of
       # no release.
+      # Called by release.yml, the version it gives: release-version checked it (ADR-009 §3.3).
       - name: The version to stamp
         id: version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          case "$GITHUB_REF" in
+          case "${RELEASE_VERSION:+given}$GITHUB_REF" in
+            given*) version="$RELEASE_VERSION" ;;
             refs/tags/*)
               version="$GITHUB_REF_NAME"
               if printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+'; then
