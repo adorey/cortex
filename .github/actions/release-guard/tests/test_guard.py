@@ -215,6 +215,7 @@ class FailingTests(unittest.TestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("::error title=release guard::HTTP 503", out)
         self.assertEqual((github.issues, github.patched, github.latest), ([], [], "2.0.0"))
+        self.assertNotIn("What it found before", out)   # nothing was found yet
 
     def test_a_tag_that_does_not_exist(self):
         github = FakeGitHub([release("1.4.0", 1)], "1.4.0", tags={"1.3.0": COMMIT})
@@ -320,6 +321,15 @@ class LatestTests(unittest.TestCase):
         code, out = run(github, "4.0.0")
         self.assertEqual((code, github.patched), (2, []))
         self.assertIn("::error title=release guard::HTTP 503", out)
+
+    def test_what_was_found_is_printed_when_the_guard_stops(self):
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        github.issue_fails = True
+        code, out = run(github, "4.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertIn("No verdict on 4.0.0: the guard stopped. What it found before:", out)
+        self.assertIn("- ✗ assets missing", out)
+        self.assertIn("- ↺ latest was 4.0.0; it is 3.0.1 again", out)
 
     def test_latest_is_repaired_even_when_the_release_fails(self):
         github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")

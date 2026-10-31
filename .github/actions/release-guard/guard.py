@@ -222,6 +222,7 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
     args = parser.parse_args(argv)
     github = github or GitHub(args.repository)
     expected = [n.strip() for n in args.expected.splitlines() if n.strip()]
+    report: Optional[Report] = None
     try:
         release = next((r for r in github.releases() if r.get("tag_name") == args.tag and not r.get("draft")), None)
         if release is None:
@@ -237,9 +238,11 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
             issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
     except GitHubError as error:
         print(f"::error title=release guard::{error}")
+        if report is not None:   # what the guard found before the API failed, for the log
+            print(f"No verdict on {args.tag}: the guard stopped. What it found before:\n" + "\n".join(_lines(report)))
         return 2
 
-    lines = [f"- ✓ {p}" for p in report.passed] + [f"- ↺ {r}" for r in report.repaired] + [f"- ✗ {f}" for f in report.findings]
+    lines = _lines(report)
     verdict = (f"{args.tag} passes its guard." if not report.findings
                else f"{args.tag} fails its guard: it cannot be repaired, only deleted, and its version is spent. {issue or ''}")
     print(verdict + "\n" + "\n".join(lines))
@@ -252,6 +255,10 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
         with open(summary, "a", encoding="utf-8") as fh:
             fh.write(f"### Release guard\n\n{verdict}\n\n" + "\n".join(lines) + "\n")
     return 1 if report.findings else 0
+
+
+def _lines(report: Report) -> List[str]:
+    return [f"- ✓ {p}" for p in report.passed] + [f"- ↺ {r}" for r in report.repaired] + [f"- ✗ {f}" for f in report.findings]
 
 
 if __name__ == "__main__":
