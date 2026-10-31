@@ -75,7 +75,10 @@ class NotesTests(unittest.TestCase):
 
     def test_a_note_of_a_released_version_does_not_count(self):
         # Only 1.3.0's note, already released: nothing new.
-        self.assertIsNone(decide(["1.3.0"], HEAD, BASE).version)
+        verdict = decide(["1.3.0"], HEAD, BASE)
+        self.assertIsNone(verdict.version)
+        self.assertEqual(verdict.errors, [
+            "it adds no release note of a version with no release yet: changelog/X.Y.Z.md — 1.3.0 is already released"])
 
 
 class ChangelogTests(unittest.TestCase):
@@ -121,6 +124,9 @@ class VersionTests(unittest.TestCase):
         # A tag 1.4.0 without its release: the note's version counts as released, nothing is new.
         verdict = decide(["1.4.0"], HEAD, BASE, repo=state("1.2.2", "1.3.0", "1.4.0"))
         self.assertIsNone(verdict.version)
+        hand = gate.State(tags=["1.2.2", "1.3.0", "1.4.0"], releases=[release("1.2.2"), release("1.3.0")])
+        self.assertEqual(decide(["1.4.0"], HEAD, BASE, repo=hand).errors, [
+            "it adds no release note of a version with no release yet: changelog/X.Y.Z.md — 1.4.0 already has a tag, with no release"])
 
     def test_a_draft_of_the_same_name_takes_it(self):
         verdict = decide(["1.4.0"], HEAD, BASE, repo=state("1.2.2", "1.3.0", drafts=["1.4.0"]))

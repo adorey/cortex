@@ -71,7 +71,11 @@ def decide(added: Sequence[str], head_changelog: str, base_changelog: str, base_
 
     # 1. Exactly one new release note.
     if not new:
-        return Verdict(None, [f"it adds no release note of a version with no release yet: {notes}/X.Y.Z.md"])
+        # Name what took each note's version: a release, or a tag pushed by hand, which spends it too.
+        taken = "; ".join(f"{v} is already released" if v in published else f"{v} already has a tag, with no release"
+                          for v in sorted(set(added), key=Version))
+        return Verdict(None, [f"it adds no release note of a version with no release yet: {notes}/X.Y.Z.md"
+                              + (f" — {taken}" if taken else "")])
     if len(new) > 1:
         listed = ", ".join(f"{notes}/{v}.md" for v in new)
         return Verdict(None, [f"it adds {len(new)} release notes, {listed}: one release at a time"])
