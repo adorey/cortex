@@ -14,8 +14,10 @@ name: binary
 #
 # The binaries are built where code integrates, not on every pull request: the phases of a stack
 # get the tests from source, fast, and the build runs when the stack lands on its release branch,
-# on the pull request from it to main — every one, whatever it changes: it is the gate — and on
-# main, on a tag, or by hand (workflow_dispatch) on any branch.
+# on the pull request from it to main or to a line's branch N.x — every one, whatever it changes:
+# each is a release — on the merge group, which decides at the moment of merging, and on main, on
+# a tag, or by hand (workflow_dispatch) on any branch. The `builds` job is the check the ruleset
+# requires: a matrix job's name changes with its matrix, and a skipped one reports unexpanded.
 on:
   push:
     branches: [main, "release/**"]
@@ -27,7 +29,8 @@ on:
       - "install.ps1"
       - ".github/workflows/binary.yml"
   pull_request:
-    branches: [main]
+    branches: [main, "[0-9]+.x"]
+  merge_group:
   workflow_dispatch:
 
 # A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
@@ -218,6 +221,22 @@ jobs:
               if command -v python3; then echo "a python3 on the floor image: the check would prove nothing" >&2; exit 1; fi
               /b/cortex --version
               /b/cortex validate --help > /dev/null'
+
+  # The one check the ruleset requires of the builds: `build (…)` and `glibc 2.28 (…)` are matrix
+  # jobs, whose names change with their matrix, and a job skipped before its matrix expands reports
+  # as `glibc 2.28 (${{ matrix.target }})` (ADR-009 §3.10).
+  summary:
+    name: builds
+    if: always()
+    needs: [build, floor]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed, or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false ]
 
   publish:
     name: release
