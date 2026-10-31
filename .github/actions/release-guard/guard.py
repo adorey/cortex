@@ -174,7 +174,9 @@ def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None
     top = highest(Version(r["tag_name"]) for r in published)
     try:
         current = github.get(github.repo("/releases/latest"))["tag_name"]
-    except GitHubError:
+    except GitHubError as error:
+        if error.status != 404:
+            raise   # the API in trouble: `latest` is unknown, so nothing is said of it
         current = None
     if top is None:
         if failing and failing == current:

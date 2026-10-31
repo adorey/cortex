@@ -46,6 +46,7 @@ class FakeGitHub:
         self.issue_fails = False
         self.annotated = set()
         self.tags_fail = None
+        self.latest_fails = None
 
     def repo(self, suffix=""):
         return f"/repos/o/r{suffix}"
@@ -59,6 +60,8 @@ class FakeGitHub:
 
     def get(self, path):
         if path == "/repos/o/r/releases/latest":
+            if self.latest_fails:
+                raise self.latest_fails
             if self.latest is None:
                 raise GitHubError(404, "no latest")
             return {"tag_name": self.latest}
@@ -309,6 +312,14 @@ class LatestTests(unittest.TestCase):
         self.assertEqual((code, github.latest, github.patched), (1, "4.0.0", []))
         self.assertIn("✗ latest stays on 4.0.0: no other release carries every asset expected", out)
         self.assertIn("latest stays on 4.0.0", github.issues[0]["body"])
+
+    def test_latest_that_cannot_be_read_stops_the_guard(self):
+        # A 503 is no "no latest": the guard says nothing of `latest`, and moves nothing.
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        github.latest_fails = GitHubError(503, "Service Unavailable")
+        code, out = run(github, "4.0.0")
+        self.assertEqual((code, github.patched), (2, []))
+        self.assertIn("::error title=release guard::HTTP 503", out)
 
     def test_latest_is_repaired_even_when_the_release_fails(self):
         github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")
