@@ -126,6 +126,8 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
     try:
         commit = tag_commit(github, tag)
     except GitHubError as error:
+        if error.status != 404:
+            raise   # the API in trouble says nothing of the release
         report.findings.append(f"the tag {tag} cannot be read: {error}")
     else:
         failed = []

@@ -43,6 +43,7 @@ class FakeGitHub:
         self.patch_fails = False
         self.issue_fails = False
         self.annotated = set()
+        self.tags_fail = None
 
     def repo(self, suffix=""):
         return f"/repos/o/r{suffix}"
@@ -68,6 +69,8 @@ class FakeGitHub:
             return {"attestations": [{"bundle": {"digest": digest}, "repository_id": 1}]}
         if path.startswith("/repos/o/r/git/ref/tags/"):
             tag = path.rsplit("/", 1)[1]
+            if self.tags_fail:
+                raise self.tags_fail
             if tag not in self.tags:
                 raise GitHubError(404, "no such ref")
             if tag in self.annotated:
@@ -195,6 +198,18 @@ class FailingTests(unittest.TestCase):
         code, out = run(github, "2.0.0")
         self.assertEqual(code, 2, out)
         self.assertIn("::error title=release guard::HTTP 503", out)
+        self.assertEqual((github.issues, github.patched, github.latest), ([], [], "2.0.0"))
+
+    def test_a_tag_that_does_not_exist(self):
+        github = FakeGitHub([release("1.4.0", 1)], "1.4.0", tags={"1.3.0": COMMIT})
+        self.assert_fails(github, "1.4.0", "the tag 1.4.0 cannot be read: HTTP 404")
+
+    def test_a_tag_the_api_cannot_return_fails_no_release(self):
+        github = FakeGitHub([release("2.0.0", 1), release("1.9.0", 2)], "2.0.0")
+        github.tags_fail = GitHubError(500, "Internal Server Error")
+        code, out = run(github, "2.0.0")
+        self.assertEqual(code, 2, out)
+        self.assertIn("::error title=release guard::HTTP 500", out)
         self.assertEqual((github.issues, github.patched, github.latest), ([], [], "2.0.0"))
 
     def test_one_issue_per_release(self):
