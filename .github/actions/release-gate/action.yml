@@ -1,0 +1,57 @@
+name: release gate
+description: >-
+  The version a pull request into the default branch, or into a line's branch N.x, adds — or why
+  it may not merge: exactly one new release note, its changelog section first and dated today
+  (UTC), a version higher than every release of its line and taken by nothing, no draft waiting
+  (ADR-009 §3.2, §3.11).
+
+inputs:
+  base:
+    description: The base's commit — the pull request's base, or the merge group's.
+    required: true
+  head:
+    description: The pull request's head, or the merge group's.
+    required: true
+  base-ref:
+    description: The branch it merges into — the default branch, or a line's `N.x`.
+    required: true
+  changelog:
+    description: The changelog, relative to the repository's root.
+    default: CHANGELOG.md
+  notes:
+    description: The directory of the release notes, one `X.Y.Z.md` per version.
+    default: changelog
+  section:
+    description: >-
+      A Python regular expression for a released section's heading, with the named groups
+      `version` and `date` (YYYY-MM-DD). The default reads `## [X.Y.Z] - YYYY-MM-DD — <name> _(Released)_`.
+    default: '## \[(?P<version>[^\]]+)\] - (?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2}) — (?P<name>.+) _\(Released\)_'
+  token:
+    description: >-
+      A token that lists the repository's tags and releases, drafts included. GitHub lists drafts
+      only to a token with push access: the workflow's own, with `contents: write`.
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: The version the pull request releases, when the gate passes.
+    value: ${{ steps.gate.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    # The history must be there: check out with `fetch-depth: 0`.
+    - name: The release gate
+      id: gate
+      shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+        BASE_REF: ${{ inputs.base-ref }}
+        CHANGELOG: ${{ inputs.changelog }}
+        NOTES: ${{ inputs.notes }}
+        SECTION: ${{ inputs.section }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: >-
+        python3 "$GITHUB_ACTION_PATH/gate.py" --base "$BASE" --head "$HEAD" --base-ref "$BASE_REF"
+        --changelog "$CHANGELOG" --notes "$NOTES" --section "$SECTION"

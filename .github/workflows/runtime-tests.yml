@@ -2,27 +2,45 @@ name: runtime tests
 
 on:
   push:
-    branches: [main, "release/**"]     # a pull request's branch runs as a pull request, once
-    paths:
-      - "runtime/**"
-      - "core/**"
-      - "deploy/**"
-      - ".github/workflows/runtime-tests.yml"
+    branches: [main, "release/**", "[0-9]+.x"]     # a pull request's branch runs as a pull request, once
   pull_request:
-    paths:
-      - "runtime/**"
-      - "core/**"
-      - "deploy/**"
-      - ".github/workflows/runtime-tests.yml"
+  merge_group:
 
 # A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
-# branch or a tag, a run in progress is never cut short.
+# branch or a line's branch, a run in progress is never cut short.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # No `paths` filter: a check that GitHub never starts stays pending, and a pull request that needs
+  # it can never merge (ADR-009 §3.10). This job reads what changed; the jobs below are skipped
+  # when nothing they test did, which GitHub counts as passing, and the summary reports for them.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0               # the merge base of the change
+          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
+      - id: changes
+        uses: ./.github/actions/changes
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          # the runtime, the core it embeds, and its deployment
+          paths: |
+            runtime/**
+            core/**
+            deploy/**
+            .github/workflows/runtime-tests.yml
+
   test:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -59,3 +77,18 @@ jobs:
       - name: Run the test suite
         working-directory: runtime
         run: python -m unittest discover -s tests -v
+
+  # The one check the ruleset requires of this workflow, by a name no matrix changes: it fails when
+  # a job it needs failed or was cancelled, and passes when each passed or was skipped (§3.10).
+  summary:
+    name: runtime tests
+    if: always()
+    needs: [changes, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed, or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false ]

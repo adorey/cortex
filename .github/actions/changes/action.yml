@@ -1,0 +1,37 @@
+name: changes
+description: >-
+  Whether a change concerns a workflow's jobs: `run` is true when a file the change touches
+  matches one of `paths`, or when there is no base to compare with. A workflow that gates the
+  default branch starts with it instead of a `paths` filter, so that its checks always report
+  (ADR-009 §3.10).
+
+inputs:
+  base:
+    description: >-
+      The commit to compare with — a pull request's base, a merge group's, a push's `before`.
+      Empty, or all zeros: everything counts as changed.
+    default: ""
+  head:
+    description: The commit compared.
+    required: true
+  paths:
+    description: One glob per line — `*` within a directory, `**` across them.
+    required: true
+
+outputs:
+  run:
+    description: "`true` when the change concerns the jobs, `false` otherwise."
+    value: ${{ steps.changes.outputs.run }}
+
+runs:
+  using: composite
+  steps:
+    # The history must be there: check out with `fetch-depth: 0`.
+    - name: What the change touches
+      id: changes
+      shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+        PATHS: ${{ inputs.paths }}
+      run: python3 "$GITHUB_ACTION_PATH/changes.py" --base "$BASE" --head "$HEAD" --paths "$PATHS"

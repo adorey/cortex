@@ -1,0 +1,36 @@
+name: commit messages
+
+# Every commit a pull request brings, against CONTRIBUTING's convention (ADR-009 §3.8):
+# `<gitmoji> <type>(<scope>): <subject>`, with `#<issue>` before the subject for ADR work, the
+# subject within 72 characters, no body but a BREAKING CHANGE footer, no trailer. Merge commits are
+# GitHub's and are left out. Pull requests are checked, not history: a commit already on the base
+# is never checked again, and the pull request into main carries every commit of its stack.
+on:
+  pull_request:
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: commit messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0               # the commits between the base and the head
+          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
+
+      # The types are CONTRIBUTING's mapping table; a scope is lowercase. The subject ends with no
+      # period. `actions tests` checks that this pattern takes CONTRIBUTING's examples.
+      - uses: ./.github/actions/commit-messages
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          head: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          pattern: '(?P<emoji>\S+) (?:feat|fix|docs|refactor|style|perf|test|chore|ci|build|revert)(?:\([a-z0-9][a-z0-9./-]*\))?!?: (?:#[0-9]+ )?(?P<subject>\S(?:.*\S)?)(?<!\.)'
+          max-subject-length: "72"

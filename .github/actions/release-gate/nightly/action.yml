@@ -1,0 +1,23 @@
+name: release gate, nightly
+description: >-
+  Re-runs the release gate of every open pull request into the default branch or a line's branch
+  N.x, so that a date gone stale overnight turns red (ADR-009 §3.2). Run it on a schedule, just
+  after midnight UTC, where the repository has no merge queue to check the date at merge time.
+
+inputs:
+  workflow:
+    description: The file name of the workflow that runs the gate, as in `.github/workflows/`.
+    default: release-gate.yml
+  token:
+    description: "A token that lists pull requests and runs, and re-runs them: `actions: write`."
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: The release gate again, today
+      shell: bash
+      env:
+        WORKFLOW: ${{ inputs.workflow }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: python3 "$GITHUB_ACTION_PATH/nightly.py" --workflow "$WORKFLOW"

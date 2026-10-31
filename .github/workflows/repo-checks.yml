@@ -4,11 +4,12 @@ name: repo checks
 # LLM reads and the shell a host project runs — which had no automated check at all.
 on:
   push:
-    branches: [main, "release/**"]
+    branches: [main, "release/**", "[0-9]+.x"]
   pull_request:
+  merge_group:
 
 # A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
-# branch or a tag, a run in progress is never cut short.
+# branch or a line's branch, a run in progress is never cut short.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -200,3 +201,27 @@ jobs:
           printf '%s\n' "$out" | grep -qxF "  Project root:  $PWD"
           printf '%s\n' "$out" | grep -qxF "  Cortex dir:    $PWD"
           if printf '%s\n' "$out" | grep -q '── Scope:'; then echo "::error::the base was scanned as overlays"; exit 1; fi
+
+  # The scripts of bin/ that are more than shell: their logic, against a fake GitHub.
+  bin:
+    name: The scripts of bin/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: bin/tests
+        run: python3 -m unittest discover -s bin/tests -p 'test_*.py' -v
+
+  # The one check the ruleset requires of this workflow, by a name no matrix changes: it fails when
+  # a job it needs failed or was cancelled, and passes when each passed (ADR-009 §3.10).
+  summary:
+    name: repo checks
+    if: always()
+    needs: [language, shell, scaffold, self, bin]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed, or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false ]

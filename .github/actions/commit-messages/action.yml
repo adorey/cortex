@@ -1,0 +1,34 @@
+name: commit messages
+description: >-
+  Checks every commit a pull request brings against the repository's rules — a subject pattern, a
+  subject length, no body but a BREAKING CHANGE footer, no trailer — and lists every commit that
+  fails, with why. Merge commits are left out (ADR-009 §3.8).
+
+inputs:
+  base:
+    description: The commit the pull request starts from. Its commits, and those before it, are not checked.
+    required: true
+  head:
+    description: The pull request's head, or the merge group's.
+    required: true
+  pattern:
+    description: >-
+      A Python regular expression the whole subject line must match. Its named group `subject` is
+      the part whose length counts; a group named `emoji`, if any, must hold exactly one emoji.
+    required: true
+  max-subject-length:
+    description: The longest `subject` allowed, in characters.
+    default: "72"
+
+runs:
+  using: composite
+  steps:
+    # The history must be there: check out with `fetch-depth: 0`.
+    - name: The commit messages
+      shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+        PATTERN: ${{ inputs.pattern }}
+        MAX: ${{ inputs.max-subject-length }}
+      run: python3 "$GITHUB_ACTION_PATH/commit_messages.py" --base "$BASE" --head "$HEAD" --pattern "$PATTERN" --max-subject-length "$MAX"

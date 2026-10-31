@@ -436,3 +436,28 @@ Acceptance criteria:
 - [GitHub — Events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows) — no workflow runs when a draft release is created
 - [Semantic Versioning 2.0.0, §11](https://semver.org/#spec-item-11) — precedence
 - [Symfony — The Release Process](https://symfony.com/doc/current/contributing/community/releases.html), and the tags `v7.3.0-BETA1`, `v7.3.0-RC1` and `v7.3.0` on its `7.3` branch
+
+## 9. Amendments
+
+### Phase 1 — the checks on pull requests
+
+- **The merge queue has a ruleset of its own** (§3.10). GitHub refuses a merge queue in a ruleset whose branches are a pattern: *"Wildcard ref names are not supported when merge queue is enabled"*. `bin/setup-release.sh` therefore keeps two rulesets:
+  - `release cycle`, on the default branch and `*.x`, carries every other rule;
+  - `release cycle: merge queue` names the default branch and each line's branch that exists.
+
+  Cutting a new line means running the script again, and `--check` reports the line until then. Checked on a throwaway repository of the organisation: a first run sets every setting, `--check` then reports none, a second run changes nothing, a disabled ruleset is reported, and a direct push to `main` is refused with an administrator's token.
+- **The jobs that read the changes are an action too**, `changes` (§3.10). It answers whether a file the change touches matches a workflow's paths, against the change's merge base, and answers yes when there is no base to compare with. The nightly re-run of the gate is `release-gate/nightly`, kept under the gate so that it moves with it (§3.2). The actions share a `lib/`: SemVer, the changelog, the GitHub API. That makes seven directories under `.github/actions/`, where §3.9 lists five actions.
+- **The SemVer table lives with the actions**, `lib/tests/semver-cases.json`, since they are what moves out (§7). The CLI's tests read it from there.
+- **The actions run on the runner's own `python3`**, with no `setup-python`, and so do their tests. The tests run in one workflow, `actions tests`, on every pull request: they take seconds.
+- **The gate's job asks for `contents: write`**. GitHub lists a draft release only to a token with push access, and rule 4 must see drafts. The gate writes nothing.
+- **Every workflow that runs on pull requests also runs on the merge group**, the builds included, since the queue waits for every required check: a release is built once more as it merges.
+- **`bin/setup-release.sh` is a shell entry point to `bin/setup_release.py`**. Comparing a ruleset with the one wanted is JSON work. Its tests run in `repo checks`, against a fake GitHub that refuses what the real one refuses.
+- **The required checks** are the summary jobs:
+  - `repo checks`, `cli tests`, `core tests` and `runtime tests`;
+  - `builds`, for `binary.yml`;
+  - `actions tests`, `commit messages` and `release gate`.
+
+  None is a matrix job's name. A test reads the workflows: each summary runs whatever happened, needs every job a pull request runs, and fails on a failure or a cancellation.
+- **Another ruleset that requires checks is reported, and left.** GitHub requires the checks of every ruleset. Cortex's `Block default`, made by hand before the cycle, requires thirteen, ten of them matrix jobs' names. `bin/setup-release.sh` reports such a ruleset and exits non-zero, but removes nobody's ruleset: the maintainer removes it by hand, with the run that applies the settings.
+- **A fork's pull request does not see the drafts.** Its token is read-only, and GitHub lists drafts only to a token with push access: rule 4, and rule 3's check of a draft's name, pass blind on it. The merge queue's run uses the repository's token and sees them, so on Cortex the queue decides. A repository without a queue relies on its releases being proposed from its own branches, as the cycle proposes them.
+- **A line is cut at a commit the queue tested.** The ruleset requires its checks when a branch is created too (`do_not_enforce_on_create: false`), so a new `N.x` is accepted only at a commit that carries them. The queue's merge commits do, since every check runs on the merge group. Without a queue, the merge button's commit carries no `release gate` and no `commit messages`, so cutting a line there is likely refused. This was not checked live.
