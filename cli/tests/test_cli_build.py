@@ -121,8 +121,9 @@ class _FakeApi:
         self.server.server_close()
 
 
-def release(tag, *assets, draft=False, prerelease=False):
-    return {"tag_name": tag, "draft": draft, "prerelease": prerelease, "assets": [{"name": a} for a in assets]}
+def release(tag, *assets, draft=False, prerelease=False, immutable=False):
+    return {"tag_name": tag, "draft": draft, "prerelease": prerelease, "immutable": immutable,
+            "assets": [{"name": a} for a in assets]}
 
 
 class FetchKnownSpecsTests(unittest.TestCase):
@@ -141,8 +142,22 @@ class FetchKnownSpecsTests(unittest.TestCase):
                  ("1.0.0-rc.1", "SHA256SUMS"): f"{self.A}  cortex-spec.tar.gz\n".encode()}
         self.assertEqual(self.fetch(pages, files), {"1.1.0": self.B, "1.0.0": self.C})
 
+    def test_an_immutable_pre_release_is_known(self):
+        # Published since immutable releases, nothing can build it again under its tag (ADR-009 §3.7).
+        pages = [[release("1.3.0-rc.1", "SHA256SUMS", prerelease=True, immutable=True),
+                  release("1.3.0-beta.1", "SHA256SUMS", prerelease=True),
+                  release("1.2.2", "SHA256SUMS", immutable=True)]]
+        files = {("1.3.0-rc.1", "SHA256SUMS"): f"{self.A}  cortex-spec.tar.gz\n".encode(),
+                 ("1.3.0-beta.1", "SHA256SUMS"): f"{self.B}  cortex-spec.tar.gz\n".encode(),
+                 ("1.2.2", "SHA256SUMS"): f"{self.C}  cortex-spec.tar.gz\n".encode()}
+        self.assertEqual(self.fetch(pages, files), {"1.3.0-rc.1": self.A, "1.2.2": self.C})
+
+    def test_an_immutable_pre_release_without_its_archive_fails_the_build(self):
+        with self.assertRaisesRegex(build.KnownSpecsError, "release 1.3.0-rc.1 has no SHA256SUMS"):
+            self.fetch([[release("1.3.0-rc.1", prerelease=True, immutable=True)]], {})
+
     def test_drafts_pre_releases_and_tags_that_are_no_version_are_left_out(self):
-        # A pre-release is thrown away, or built again under its tag: a checksum kept for it would
+        # A mutable pre-release could be built again under its tag: a checksum kept for it would
         # have every binary built meanwhile refuse the new build.
         pages = [[release("1.2.0", draft=True), release("nightly", "SHA256SUMS"), release("0.9.0"),
                   release("1.2.0-rc.1", "SHA256SUMS", prerelease=True),
