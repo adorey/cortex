@@ -248,7 +248,7 @@ class LatestTests(unittest.TestCase):
         code, out = run(github, "4.0.0")
         self.assertEqual(code, 1)
         self.assertEqual(github.latest, "3.0.1")
-        self.assertIn("↺ latest was 4.0.0; it is 3.0.1 again, the highest version that passes, while 4.0.0 fails", out)
+        self.assertIn("↺ latest was 4.0.0; it is 3.0.1 again, the highest version with every asset expected, while 4.0.0 fails", out)
         self.assertIn("GitHub does not move it when the latest release is deleted", github.issues[0]["body"])
 
     def test_a_release_that_failed_never_takes_latest_back(self):

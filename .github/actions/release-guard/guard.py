@@ -4,14 +4,15 @@ For releases and pre-releases alike:
 
 1. the tag is a version: ``X.Y.Z`` or ``X.Y.Z-(alpha|beta|rc).N``;
 2. the build provenance of every asset names the tag's commit — its attestations, read through the
-   API, then ``gh attestation verify``, signed by the workflow that built it. An API that cannot
-   answer is no finding: the guard stops, and says nothing of the release;
+   API, then ``gh attestation verify``, signed by the workflow that built it. The API failing to
+   answer is no finding: the guard stops, and says nothing of the release. ``gh`` still fetches its
+   trust root over the network, and a failure there reads as one;
 3. the assets expected are there, no other, and ``SHA256SUMS`` matches them;
 4. the release is immutable;
 5. ``latest`` is the highest version without a suffix — among the releases that carry every asset
-   expected and are not marked pre-release: a release that fails its guard never stays ``latest``,
-   or ``releases/latest/download/…`` would serve it, and one that misses an asset never becomes it
-   again.
+   expected and are not marked pre-release: a release that fails its guard leaves ``latest`` to the
+   highest of them, or says none is left, since ``releases/latest/download/…`` would serve it; one
+   that misses an asset never becomes it again.
 
 It repairs item 5 only, since immutability locks everything else: when an older line, a
 pre-release or a release that fails took ``latest``, it moves it. On any other failure it fails, and opens one issue
@@ -158,9 +159,9 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
 
 
 def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None:
-    """5. ``latest`` on the highest version without a suffix that passes — the one thing the guard
-    repairs. A release missing an asset expected stays out, whichever guard runs: an earlier one
-    failed it. GitHub makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves
+    """5. ``latest`` on the highest version without a suffix that carries every asset expected — the
+    one thing the guard repairs. A release missing one stays out, whichever guard runs: it cannot
+    pass. GitHub makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves
     none at all: GitHub does not move it."""
     failing = report.tag if report.findings else None
     published = [r for r in github.releases() if not r.get("draft") and is_release(r.get("tag_name"))
@@ -176,11 +177,11 @@ def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None
             report.findings.append(f"latest stays on {failing}: no other release carries every asset expected")
         return
     if current == str(top):
-        report.passed.append(f"latest is {top}, the highest version" + (" that passes" if failing else ""))
+        report.passed.append(f"latest is {top}, the highest version" + (" with every asset expected" if failing else ""))
         return
     target = next(r for r in published if r["tag_name"] == str(top))
     github.request("PATCH", github.repo(f"/releases/{target['id']}"), body={"make_latest": "true"})
-    why = f"the highest version that passes, while {failing} fails" if failing and failing == current else "the highest version"
+    why = f"the highest version with every asset expected, while {failing} fails" if failing and failing == current else "the highest version"
     report.repaired.append(f"latest was {current or 'none'}; it is {top} again, {why}")
 
 
