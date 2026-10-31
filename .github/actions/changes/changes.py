@@ -61,6 +61,7 @@ def changed(base: str, head: str) -> Optional[List[str]]:
     except subprocess.CalledProcessError:
         return None    # a base git does not have, after a force push: compare with nothing
     # A path out of ASCII as it is named: git otherwise quotes it, "cli/caf\303\251.py", and no glob matches.
+    # A path with a quote, a backslash or a control character stays quoted: this repository has none.
     return [line for line in git("-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", merge_base, head).split("\n") if line]
 
 

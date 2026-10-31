@@ -89,6 +89,9 @@ def desired_ruleset(checks: Sequence[str]) -> Dict[str, Any]:
                     "required_approving_review_count": 0,
                     "required_review_thread_resolution": False}},
                 {"type": "required_status_checks", "parameters": {
+                    # Kept: a line's branch is then created only at a commit that carries the
+                    # checks — a merge of the queue. Without a queue, cutting a line is likely
+                    # refused; not checked live (ADR-009 §9).
                     "do_not_enforce_on_create": False,
                     "strict_required_status_checks_policy": True,
                     "required_status_checks": [{"context": c, "integration_id": GITHUB_ACTIONS} for c in sorted(checks)]}},
@@ -168,7 +171,11 @@ def ruleset_setting(gh: Gh, repository: str, name: str, desired: Dict[str, Any],
 
 
 def other_rulesets(gh: Gh, repository: str, found: List[Dict[str, Any]], default: str, lines: Sequence[str]) -> List[Setting]:
-    """Every other active ruleset that requires checks of the default branch or of a line's."""
+    """Every other active ruleset that requires checks of the default branch or of a line's.
+
+    Left as they are, since the only such ruleset is Cortex's own `Block default`: a pattern's
+    `exclude` is not read; `fnmatch`'s `*` crosses a `/`, where GitHub's does not; one page of
+    rulesets is read, and an organisation's are not listed."""
     refs = [f"refs/heads/{b}" for b in [default, "0.x", *lines]]
     result = []
     for summary in found:
