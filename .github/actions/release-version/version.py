@@ -79,15 +79,16 @@ def _own_or_refuse(state: State, version: str, target: str) -> Optional[int]:
     return own
 
 
-def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, state: State) -> Plan:
+def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, state: State, attempt: int = 1) -> Plan:
     line = line_of(ref)
     if ref != default_branch and line is None:
         raise Refused(f"a push to {ref} makes no release: only {default_branch} and a line's branch N.x do")
     published = {r["tag_name"] for r in state.releases if not r.get("draft")}
     released = set(state.tags) | published
     new = sorted({v for v in added if v not in released}, key=Version)
-    if not new and added:
-        # A re-run once the release is published: its note is the push's, and nothing is left to do.
+    if not new and added and attempt > 1:
+        # A second attempt, once the release is published, has nothing left to do. A first one whose notes
+        # are all released bypassed the gate — a carry-up with no note of its own, or a tag pushed by hand.
         raise Refused(f"{', '.join(sorted(set(added), key=Version))} is already released: a re-run changes nothing, "
                       f"and a new commit is a new version")
     if len(new) != 1:
@@ -202,7 +203,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             added = added_between(args.before, args.sha, args.notes)
             if added is None:
                 raise Refused("the push has no `before` to compare with: a new branch is no release")
-            plan = for_push(added, args.ref, default_branch, args.sha, state)
+            plan = for_push(added, args.ref, default_branch, args.sha, state,
+                            attempt=int(os.environ.get("GITHUB_RUN_ATTEMPT") or 1))
         else:
             plan = for_dispatch(args.version.strip(), args.ref, args.sha, state)
         note = show(args.sha, f"{args.notes.rstrip('/')}/{Version(plan.version).release}.md")

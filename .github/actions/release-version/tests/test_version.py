@@ -46,7 +46,7 @@ class PushTests(unittest.TestCase):
         # The push's note is 1.3.0's, published since: found by the end-to-end run, which said
         # "it bypassed the gate" here.
         with self.assertRaisesRegex(rv.Refused, "1.3.0 is already released: a re-run changes nothing"):
-            rv.for_push(["1.3.0"], "main", "main", AFTER, self.STATE)
+            rv.for_push(["1.3.0"], "main", "main", AFTER, self.STATE, attempt=2)
 
     def test_a_draft_of_another_commit_fails(self):
         repo = state("1.3.0", drafts=[release("1.4.0", draft=True, target=OTHER)])
@@ -72,6 +72,14 @@ class LineTests(unittest.TestCase):
     def test_another_major_on_a_line_fails(self):
         with self.assertRaisesRegex(rv.Refused, "2.1.0 is not a version of the 1.x line"):
             rv.for_push(["2.1.0"], "1.x", "main", AFTER, self.STATE)
+
+    def test_a_first_run_whose_notes_are_all_released_bypassed_the_gate(self):
+        # A carry-up from 1.x with no note of its own, or a tag pushed by hand before the merge: no
+        # re-run, so the alarm stands.
+        with self.assertRaisesRegex(rv.Refused, "the push adds no release note of a version with no release yet: it bypassed the gate"):
+            rv.for_push(["1.5.1"], "main", "main", AFTER, self.STATE)
+        with self.assertRaisesRegex(rv.Refused, "1.5.1 is already released: a re-run changes nothing"):
+            rv.for_push(["1.5.1"], "main", "main", AFTER, self.STATE, attempt=2)
 
     def test_a_carry_up_makes_the_draft_of_the_new_version_only(self):
         # The merge from 1.x brings 1.5.1's note, published, and adds 2.0.1's.
@@ -194,6 +202,17 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual((outputs["version"], outputs["prerelease"], outputs["latest"]), ("1.4.0", "false", "true"))
         self.assertEqual((self.out / "body.md").read_text(encoding="utf-8"), "# 1.4.0, the note")
+
+    def test_the_run_attempt_says_whether_a_released_note_is_a_re_run(self):
+        self.write("changelog/1.4.0.md", "# 1.4.0")
+        self.commit()
+        (self.out / "state.json").write_text(json.dumps({"tags": ["1.3.0", "1.4.0"], "releases": [release("1.3.0"), release("1.4.0")],
+                                                          "branches": ["main"]}), encoding="utf-8")
+        for attempt, said in (("1", "it bypassed the gate"), ("2", "1.4.0 is already released: a re-run changes nothing")):
+            with self.subTest(attempt=attempt), mock.patch.dict(os.environ, {"GITHUB_RUN_ATTEMPT": attempt}):
+                code, out, _ = self.run_version("--event", "push", "--ref", "main", "--before", self.before, "--sha", self.head())
+                self.assertEqual(code, 1)
+                self.assertIn(said, out)
 
     def test_a_push_with_no_note_fails(self):
         self.write("README.md", "x")
