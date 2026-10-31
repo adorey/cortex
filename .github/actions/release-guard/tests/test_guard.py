@@ -172,6 +172,16 @@ class LatestTests(unittest.TestCase):
         self.assertEqual(run(github, "2.1.0-rc.1")[0], 0)
         self.assertEqual(github.latest, "2.0.0")
 
+    def test_a_release_that_fails_never_stays_latest(self):
+        # Found by the end-to-end run: a 3.0.0 made by hand, with no asset, took latest as the highest
+        # version, and releases/latest/download/SHA256SUMS would have answered 404.
+        github = FakeGitHub([release("4.0.0", 1, {}), release("3.0.1", 2)], latest="4.0.0")
+        code, out = run(github, "4.0.0")
+        self.assertEqual(code, 1)
+        self.assertEqual(github.latest, "3.0.1")
+        self.assertIn("↺ latest was 4.0.0; it is 3.0.1 again, the highest version that passes, while 4.0.0 fails", out)
+        self.assertIn("GitHub does not move it when the latest release is deleted", github.issues[0]["body"])
+
     def test_latest_is_repaired_even_when_the_release_fails(self):
         github = FakeGitHub([release("1.5.1", 1, immutable=False), release("2.0.0", 2)], latest="1.5.1")
         self.assertEqual(run(github, "1.5.1")[0], 1)

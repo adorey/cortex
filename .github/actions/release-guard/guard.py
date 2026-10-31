@@ -7,10 +7,11 @@ For releases and pre-releases alike:
    by the workflow that built it;
 3. the assets expected are there, no other, and ``SHA256SUMS`` matches them;
 4. the release is immutable;
-5. ``latest`` is the highest version without a suffix.
+5. ``latest`` is the highest version without a suffix — among the releases that pass: a release
+   that fails its guard never stays ``latest``, or ``releases/latest/download/…`` would serve it.
 
-It repairs item 5 only, since immutability locks everything else: when an older line or a
-pre-release took ``latest``, it moves it back. On any other failure it fails, and opens one issue
+It repairs item 5 only, since immutability locks everything else: when an older line, a
+pre-release or a release that fails took ``latest``, it moves it. On any other failure it fails, and opens one issue
 naming what it found and the only fix: the release cannot be repaired, only deleted, and its
 version is spent; the next patch ships what it should have. Standard library only, and ``gh``.
 """
@@ -130,8 +131,11 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
 
 
 def keep_latest(github: GitHub, report: Report) -> None:
-    """5. ``latest`` on the highest version without a suffix — the one thing the guard repairs."""
-    published = [r for r in github.releases() if not r.get("draft") and is_release(r.get("tag_name"))]
+    """5. ``latest`` on the highest version without a suffix that passes — the one thing the guard
+    repairs. Deleting a release that was ``latest`` leaves none at all: GitHub does not move it."""
+    failing = report.tag if report.findings else None
+    published = [r for r in github.releases() if not r.get("draft") and is_release(r.get("tag_name"))
+                 and r.get("tag_name") != failing]
     top = highest(Version(r["tag_name"]) for r in published)
     if top is None:
         return
@@ -140,11 +144,12 @@ def keep_latest(github: GitHub, report: Report) -> None:
     except GitHubError:
         current = None
     if current == str(top):
-        report.passed.append(f"latest is {top}, the highest version")
+        report.passed.append(f"latest is {top}, the highest version" + (" that passes" if failing else ""))
         return
     target = next(r for r in published if r["tag_name"] == str(top))
     github.request("PATCH", github.repo(f"/releases/{target['id']}"), body={"make_latest": "true"})
-    report.repaired.append(f"latest was {current or 'none'}; it is {top} again, the highest version")
+    why = f"the highest version that passes, while {failing} fails" if failing == current else "the highest version"
+    report.repaired.append(f"latest was {current or 'none'}; it is {top} again, {why}")
 
 
 def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional[str]:
@@ -157,7 +162,9 @@ def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional
             + "".join(f"- {f}\n" for f in report.findings)
             + "\n**It cannot be repaired.** A published release is immutable: it can only be deleted, and its "
               f"version is spent — {report.tag} can never be used again. The next patch ships what this one "
-              "should have, through the release cycle.\n")
+              "should have, through the release cycle.\n\n"
+              f"The guard keeps `latest` off {report.tag}. If you delete it, check that `latest` still names a "
+              "release: GitHub does not move it when the latest release is deleted.\n")
     issue = github.request("POST", github.repo("/issues"), body={"title": title, "body": body, "labels": [label]})
     return issue.get("html_url")
 
