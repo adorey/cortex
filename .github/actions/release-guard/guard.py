@@ -196,11 +196,11 @@ def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional
             + "\n**It cannot be repaired.** A published release is immutable: it can only be deleted, and its "
               f"version is spent — {report.tag} can never be used again. The next patch ships what this one "
               "should have, through the release cycle.\n\n"
-              f"The guard moves `latest` off {report.tag} to the highest release that carries every asset expected, "
-              f"when there is one. A later guard keeps it off only while {report.tag} misses "
-              "an asset expected: one that has them all could take `latest` back, until it is deleted. If you "
-              "delete it, check that `latest` still names a release: GitHub does not move it when the latest "
-              "release is deleted.\n")
+              f"The guard moves `latest` off {report.tag} when it holds it, to the highest `X.Y.Z` release, not "
+              "marked pre-release, that carries every asset expected, if there is one: its run says whether it "
+              f"could. A later guard gives `latest` only to such a release: {report.tag}, if it is one, could take "
+              "it back until it is deleted. If you delete it, check that `latest` still names a "
+              "release: GitHub does not move it when the latest release is deleted.\n")
     issue = github.request("POST", github.repo("/issues"), body={"title": title, "body": body, "labels": [label]})
     return issue.get("html_url")
 

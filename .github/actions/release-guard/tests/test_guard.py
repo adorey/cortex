@@ -150,6 +150,12 @@ class PassingTests(unittest.TestCase):
         self.assertEqual(guard.tag_commit(github, "1.4.0"), COMMIT)
         self.assertEqual(run(github, "1.4.0")[0], 0)
 
+    def test_a_first_publication_as_a_pre_release_passes(self):
+        # No release yet, so no latest: nothing is left on a failing release.
+        github = FakeGitHub([release("0.1.0-rc.1", 1)], latest=None)
+        self.assertEqual(run(github, "0.1.0-rc.1")[0], 0)
+        self.assertEqual(github.issues, [])
+
     def test_a_pre_release_passes_and_leaves_latest_alone(self):
         github = FakeGitHub([release("1.4.0-rc.1", 1), release("1.3.0", 2)], latest="1.3.0")
         self.assertEqual(run(github, "1.4.0-rc.1")[0], 0)
@@ -190,7 +196,8 @@ class FailingTests(unittest.TestCase):
                           "the release is mutable: its assets could still be replaced")
 
     def test_a_tag_that_is_no_version(self):
-        self.assert_fails(FakeGitHub([release("nightly", 1)], None), "nightly", "the tag 'nightly' is no version")
+        out = self.assert_fails(FakeGitHub([release("nightly", 1)], None), "nightly", "the tag 'nightly' is no version")
+        self.assertNotIn("latest stays on", out)   # it never held latest
 
     def test_an_asset_with_no_attestation(self):
         github = FakeGitHub([release("1.4.0", 1)], "1.4.0", unattested=[assets()["cortex-spec.tar.gz"]])
