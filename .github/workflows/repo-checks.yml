@@ -202,12 +202,21 @@ jobs:
           printf '%s\n' "$out" | grep -qxF "  Cortex dir:    $PWD"
           if printf '%s\n' "$out" | grep -q '── Scope:'; then echo "::error::the base was scanned as overlays"; exit 1; fi
 
+  # The scripts of bin/ that are more than shell: their logic, against a fake GitHub.
+  bin:
+    name: The scripts of bin/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: bin/tests
+        run: python3 -m unittest discover -s bin/tests -p 'test_*.py' -v
+
   # The one check the ruleset requires of this workflow, by a name no matrix changes: it fails when
   # a job it needs failed or was cancelled, and passes when each passed (ADR-009 §3.10).
   summary:
     name: repo checks
     if: always()
-    needs: [language, shell, scaffold, self]
+    needs: [language, shell, scaffold, self, bin]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed, or was skipped
