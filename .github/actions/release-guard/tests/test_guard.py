@@ -214,9 +214,11 @@ class LatestTests(unittest.TestCase):
         self.assertIn("↺ latest was 1.5.1; it is 2.0.0 again, the highest version", out)
 
     def test_latest_on_a_pre_release_moves_back(self):
-        github = FakeGitHub([release("2.1.0-rc.1", 1), release("2.0.0", 2)], latest="2.1.0-rc.1")
-        self.assertEqual(run(github, "2.1.0-rc.1")[0], 0)
-        self.assertEqual(github.latest, "2.0.0")
+        # 2.1.0-rc.1 published without its "Set as a pre-release" box: GitHub made it latest.
+        github = FakeGitHub([release("2.1.0-rc.1", 1, prerelease=False), release("2.0.0", 2)], latest="2.1.0-rc.1")
+        code, out = run(github, "2.1.0-rc.1")
+        self.assertEqual((code, github.latest), (0, "2.0.0"), out)
+        self.assertIn("↺ latest was 2.1.0-rc.1; it is 2.0.0 again, the highest version\n", out)
 
     def test_a_release_that_fails_never_stays_latest(self):
         # Found by the end-to-end run: a 3.0.0 made by hand, with no asset, took latest as the highest
