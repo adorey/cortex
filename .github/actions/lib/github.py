@@ -7,6 +7,7 @@ drafts asks for ``contents: write``.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import urllib.error
@@ -16,8 +17,11 @@ from typing import Any, Dict, Iterator, List, Optional
 
 
 class GitHubError(Exception):
-    def __init__(self, status: int, message: str):
-        super().__init__(f"HTTP {status}: {message}")
+    """An answer other than a success, or no answer at all — a network error, whose ``status`` is
+    None. Either way the API said nothing an action may act on."""
+
+    def __init__(self, status: Optional[int], message: str):
+        super().__init__(f"HTTP {status}: {message}" if status is not None else f"no answer: {message}")
         self.status = status
 
 
@@ -50,6 +54,8 @@ class GitHub:
             except ValueError:
                 pass
             raise GitHubError(error.code, f"{method} {target}: {detail}") from None
+        except (OSError, http.client.HTTPException) as error:   # refused, reset, timed out, cut short
+            raise GitHubError(None, f"{method} {target}: {error}") from None
         return json.loads(raw) if raw else None
 
     def get(self, path: str) -> Any:
@@ -69,9 +75,17 @@ class GitHub:
             if error.code not in (301, 302, 303, 307, 308) or not error.headers.get("Location"):
                 raise GitHubError(error.code, f"GET {url}: {error.reason}") from None
             location = error.headers["Location"]
-        with urllib.request.urlopen(urllib.request.Request(location, headers={"User-Agent": "release-actions"}),
-                                    timeout=120) as response:
-            return response.read()
+        except (OSError, http.client.HTTPException) as error:
+            raise GitHubError(None, f"GET {url}: {error}") from None
+        storage = location.split("?", 1)[0]   # its query is a signature: kept out of the logs
+        try:
+            with urllib.request.urlopen(urllib.request.Request(location, headers={"User-Agent": "release-actions"}),
+                                        timeout=120) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            raise GitHubError(error.code, f"GET {storage}: {error.reason}") from None
+        except (OSError, http.client.HTTPException) as error:
+            raise GitHubError(None, f"GET {storage}: {error}") from None
 
     def paginate(self, path: str) -> Iterator[Dict[str, Any]]:
         separator = "&" if "?" in path else "?"

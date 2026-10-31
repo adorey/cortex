@@ -1,6 +1,7 @@
 """Downloading a release asset, against two local servers: the API, which redirects to its storage,
 and the storage, which refuses a request that carries the token."""
 
+import socket
 import sys
 import threading
 import unittest
@@ -50,7 +51,9 @@ def answer(handler, code, body=b"", location=None):
 class DownloadTests(unittest.TestCase):
     def setUp(self):
         def storage(handler):
-            if handler.headers.get("Authorization"):
+            if handler.path.startswith("/broken"):
+                answer(handler, 500, b"the storage is down")
+            elif handler.headers.get("Authorization"):
                 answer(handler, 400, b"the storage refuses a token")
             else:
                 answer(handler, 200, ASSET)
@@ -60,6 +63,8 @@ class DownloadTests(unittest.TestCase):
                 answer(handler, 404, b'{"message": "Not Found"}')
             elif handler.path.endswith("/direct"):
                 answer(handler, 200, ASSET)
+            elif handler.path.endswith("/broken"):
+                answer(handler, 302, location=f"{self.storage.url}/broken?sig=secret")
             else:
                 answer(handler, 302, location=f"{self.storage.url}/blob?sig=x")
 
@@ -88,6 +93,34 @@ class DownloadTests(unittest.TestCase):
             self.github.download(f"{self.api.url}/repos/o/r/releases/assets/missing")
         self.assertEqual(raised.exception.status, 404)
         self.assertEqual(self.storage.seen, [])
+
+    def test_the_storage_failing_is_a_github_error_that_keeps_its_signature_out(self):
+        with self.assertRaises(GitHubError) as raised:
+            self.github.download(f"{self.api.url}/repos/o/r/releases/assets/broken")
+        self.assertEqual(raised.exception.status, 500)
+        self.assertNotIn("secret", str(raised.exception))
+
+
+class NoAnswerTests(unittest.TestCase):
+    """A network error is a GitHubError with no status: the API said nothing an action may act on."""
+
+    def test_a_refused_connection(self):
+        with socket.socket() as free:
+            free.bind(("127.0.0.1", 0))
+            port = free.getsockname()[1]   # closed once the block ends: nothing listens there
+        github = GitHub("o/r", token="T", api=f"http://127.0.0.1:{port}")
+        for call in (lambda: github.get("/repos/o/r/releases"), lambda: github.download(f"http://127.0.0.1:{port}/a")):
+            with self.subTest(call=call), self.assertRaises(GitHubError) as raised:
+                call()
+            self.assertIsNone(raised.exception.status)
+            self.assertTrue(str(raised.exception).startswith("no answer: "))
+
+    def test_a_server_that_hangs_up(self):
+        server = Server(lambda handler: setattr(handler, "close_connection", True))
+        self.addCleanup(server.close)
+        with self.assertRaises(GitHubError) as raised:
+            GitHub("o/r", token="T", api=server.url).get("/repos/o/r/releases")
+        self.assertIsNone(raised.exception.status)
 
 
 if __name__ == "__main__":
