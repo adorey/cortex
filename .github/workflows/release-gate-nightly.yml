@@ -1,0 +1,29 @@
+name: release gate, nightly
+
+# The gate checks that a release is dated the day it merges, in UTC (ADR-009 §3.2): a gate that
+# passed yesterday would let a stale date merge today. Just after midnight UTC, every open pull
+# request into main or a line's branch gets its gate run again, and a stale date turns red.
+# Where the repository has a merge queue, the gate's run on the merge group decides at the moment
+# of merging; this run still shows a stale date the morning after, before anyone queues it.
+on:
+  schedule:
+    - cron: "7 0 * * *"   # GitHub may start a scheduled run some minutes late; it is still the new day
+  workflow_dispatch:
+
+permissions:
+  actions: write          # re-run the gate's runs
+  contents: read
+  pull-requests: read
+
+jobs:
+  again:
+    name: the release gate again, today
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
+
+      - uses: ./.github/actions/release-gate/nightly
+        with:
+          workflow: release-gate.yml
