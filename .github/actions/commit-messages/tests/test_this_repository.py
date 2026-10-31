@@ -47,7 +47,7 @@ class ThisRepositoryTests(unittest.TestCase):
                 self.assertEqual(cm.check_message(message, pattern, 72), [])
 
     def test_the_format_line_of_contributing_does_not(self):
-        # `<gitmoji> <type>(<scope>): <imperative subject>` is a template, not a commit.
+        # `<gitmoji> <type>(<scope>): <subject>` is a template, not a commit.
         self.assertNotEqual(cm.check_message("<gitmoji> <type>(<scope>): <subject>", workflow_pattern(), 72), [])
 
     def test_adr_work_names_its_issue(self):
