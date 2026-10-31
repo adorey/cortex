@@ -164,6 +164,10 @@ def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None
     pass. GitHub makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves
     none at all: GitHub does not move it."""
     failing = report.tag if report.findings else None
+    # Chosen by their assets, not by a guard of their own: 1.0.0 to 1.2.2 are signed by binary.yml, not
+    # release.yml, and would fail one, so `latest` could never come back to them. A release with every
+    # asset that fails any other check — provenance, SHA256SUMS, an extra asset, immutability — could
+    # take `latest` back until it is deleted: its issue says so (ADR-009 §9).
     published = [r for r in github.releases() if not r.get("draft") and is_release(r.get("tag_name"))
                  and r.get("tag_name") != failing and not r.get("prerelease")
                  and set(expected) <= {a["name"] for a in r.get("assets", [])}]
