@@ -18,6 +18,8 @@ COMMIT = "c" * 40
 SIX = ["SHA256SUMS", "cortex-linux-aarch64.tar.gz", "cortex-linux-x86_64.tar.gz", "cortex-macos-arm64.tar.gz",
        "cortex-spec.tar.gz", "cortex-windows-x86_64.zip"]
 SIGNER = "o/r/.github/workflows/release.yml"
+RELEASE_PREDICATE = "https://in-toto.io/attestation/release/v0.2"
+PROVENANCE = "https://slsa.dev/provenance/v1"
 
 
 def assets(drop=(), corrupt=()):
@@ -66,7 +68,10 @@ class FakeGitHub:
                 raise self.attestations_fail
             if digest in self.unattested:
                 raise GitHubError(404, "Not Found")
-            return {"attestations": [{"bundle": {"digest": digest}, "repository_id": 1}]}
+            # As GitHub answers for an immutable release: its own release attestation first, then the
+            # build provenance — the one gh must be handed.
+            return {"attestations": [{"bundle": {"digest": digest, "predicate": RELEASE_PREDICATE}, "repository_id": 1},
+                                     {"bundle": {"digest": digest, "predicate": PROVENANCE}, "repository_id": 1}]}
         if path.startswith("/repos/o/r/git/ref/tags/"):
             tag = path.rsplit("/", 1)[1]
             if self.tags_fail:
@@ -109,11 +114,12 @@ def release(tag, rid, files=None, immutable=True, prerelease=None, draft=False):
 
 
 def verify_names(commit):
-    """A verifier that passes the assets whose provenance names ``commit``, given the bundle the API
-    returned for them."""
+    """A verifier that passes the assets whose provenance names ``commit``, given every bundle the API
+    returned for them, one per line."""
     def verify(path, bundle, repo, wanted, signer):
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        assert json.loads(bundle.read_text(encoding="utf-8")) == {"digest": digest}, bundle
+        lines = [json.loads(line) for line in bundle.read_text(encoding="utf-8").splitlines()]
+        assert lines == [{"digest": digest, "predicate": RELEASE_PREDICATE}, {"digest": digest, "predicate": PROVENANCE}], bundle
         return None if wanted == commit and signer == SIGNER else "no attestation matches"
     return verify
 
