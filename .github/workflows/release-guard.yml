@@ -18,6 +18,13 @@ on:
         required: true
         type: string
 
+# One run per release at a time: a publication and a *Run workflow* of the same tag would each find
+# no issue open yet, and open two. A running guard is never cancelled: a run cut short checks
+# nothing. A pending one gives way to a newer run of the same tag, which checks the same.
+concurrency:
+  group: release guard ${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
 permissions:
   contents: write        # move `latest` back
   issues: write          # report what cannot be repaired
