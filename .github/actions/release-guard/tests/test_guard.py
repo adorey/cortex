@@ -219,7 +219,7 @@ class FailingTests(unittest.TestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("::error title=release guard::HTTP 503", out)
         self.assertEqual((github.issues, github.patched, github.latest), ([], [], "2.0.0"))
-        self.assertNotIn("What it found before", out)   # nothing was found yet
+        self.assertNotIn("What it found before", out)   # check() did not return: what it found is not printed
 
     def test_a_tag_that_does_not_exist(self):
         github = FakeGitHub([release("1.4.0", 1)], "1.4.0", tags={"1.3.0": COMMIT})

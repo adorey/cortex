@@ -162,20 +162,22 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
 
 def untick_pre_release(github: GitHub, release: Dict[str, Any], report: Report) -> None:
     """An ``X.Y.Z`` that passes, published with "Set as a pre-release" ticked: GitHub never makes it
-    ``latest``, so no install would reach it. The box stays editable on an immutable release, and the
-    guard unticks it; ``latest`` is then put right as for any release. One that fails keeps it."""
+    ``latest``, so the default install, ``releases/latest``, never reaches it. The box stays editable
+    on an immutable release, and the guard unticks it; ``latest`` is then put right as for any
+    release. One that fails keeps it."""
     tag = release["tag_name"]
     if report.findings or not is_release(tag) or not release.get("prerelease"):
         return
-    # `make_latest` false: GitHub would choose by itself, and keep_latest decides next.
+    # `make_latest` false: its default, true, would make it latest whatever its version; keep_latest decides next.
     github.request("PATCH", github.repo(f"/releases/{release['id']}"), body={"prerelease": False, "make_latest": "false"})
     report.repaired.append(f"{tag} was marked pre-release; it is a release again, as its version says")
 
 
 def keep_latest(github: GitHub, report: Report, expected: Sequence[str]) -> None:
     """5. ``latest`` on the highest version without a suffix that carries every asset expected, which
-    the guard repairs. A release missing one stays out, whichever guard runs: it cannot pass. GitHub makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves
-    none at all: GitHub does not move it."""
+    the guard repairs. A release missing one stays out, whichever guard runs: it cannot pass. GitHub
+    makes no pre-release ``latest``. Deleting a release that was ``latest`` leaves none at all:
+    GitHub does not move it."""
     failing = report.tag if report.findings else None
     # Chosen by their assets, not by a guard of their own: 1.0.0 to 1.2.2 are signed by binary.yml, not
     # release.yml, and would fail one, so `latest` could never come back to them. A release with every
