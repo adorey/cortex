@@ -1,4 +1,4 @@
-"""The version a release job makes from a push, on the default branch or a line (ADR-009 §3.3, §3.11)."""
+"""The version a release job makes: a push, a run started by hand, a line (ADR-009 §3.3, §3.7, §3.11)."""
 
 import io
 import json
@@ -24,8 +24,8 @@ def release(tag, draft=False, target="main", rid=None):
             "prerelease": "-" in tag, "target_commitish": target}
 
 
-def state(*tags, drafts=()):
-    return rv.State(tags=list(tags), releases=[release(t) for t in tags] + list(drafts))
+def state(*tags, drafts=(), branches=("main",)):
+    return rv.State(tags=list(tags), releases=[release(t) for t in tags] + list(drafts), branches=list(branches))
 
 
 class PushTests(unittest.TestCase):
@@ -33,7 +33,8 @@ class PushTests(unittest.TestCase):
 
     def test_a_push_that_adds_one_note_releases_it_as_latest(self):
         plan = rv.for_push(["1.4.0"], "main", "main", AFTER, self.STATE)
-        self.assertEqual((plan.version, plan.prerelease, plan.latest, plan.target), ("1.4.0", False, True, AFTER))
+        self.assertEqual((plan.version, plan.prerelease, plan.latest, plan.target, plan.own_draft),
+                         ("1.4.0", False, True, AFTER, None))
 
     def test_no_note_or_two_fail(self):
         for added, what in (([], "no release note"), (["1.4.0", "1.5.0"], "2 release notes (1.4.0, 1.5.0)")):
@@ -61,7 +62,7 @@ class PushTests(unittest.TestCase):
 
 
 class LineTests(unittest.TestCase):
-    STATE = state("1.5.0", "1.5.1", "2.0.0")
+    STATE = state("1.5.0", "1.5.1", "2.0.0", branches=("main", "1.x"))
 
     def test_a_push_to_a_line_releases_its_version_not_as_latest(self):
         plan = rv.for_push(["1.6.0"], "1.x", "main", AFTER, self.STATE)
@@ -77,13 +78,65 @@ class LineTests(unittest.TestCase):
         self.assertEqual((plan.version, plan.latest), ("2.0.1", True))
 
 
+class DispatchTests(unittest.TestCase):
+    STATE = state("1.2.2", "1.3.0-beta.1", branches=("main", "release/adr-009-release-cycle"))
+
+    def test_a_release_candidate_from_a_release_branch(self):
+        plan = rv.for_dispatch("1.3.0-rc.1", "release/adr-009-release-cycle", AFTER, self.STATE)
+        self.assertEqual((plan.version, plan.prerelease, plan.latest, plan.target), ("1.3.0-rc.1", True, False, AFTER))
+
+    def test_each_refusal(self):
+        cases = [
+            ("1.3.0-rc.1", "main", self.STATE, "a pre-release is cut from a release/\\*\\* branch, not from main"),
+            ("1.3.0-rc1", "release/x", self.STATE, "'1.3.0-rc1' is no pre-release as one is cut"),
+            ("1.3.0-alpha.1", "release/x", self.STATE, "1.3.0-alpha.1 is not higher than 1.3.0-beta.1, already cut for 1.3.0"),
+            ("1.2.2-rc.1", "release/x", self.STATE, "1.2.2 is not higher than 1.2.2, the highest release of 1.x"),
+            ("1.3.0-beta.1", "release/x", self.STATE, "is not higher than 1.3.0-beta.1"),
+        ]
+        for version, ref, repo, message in cases:
+            with self.subTest(version=version, ref=ref):
+                with self.assertRaisesRegex(rv.Refused, message):
+                    rv.for_dispatch(version, ref, AFTER, repo)
+
+    def test_a_beta_after_an_rc_fails(self):
+        repo = state("1.2.2", "1.3.0-rc.1")
+        with self.assertRaisesRegex(rv.Refused, "1.3.0-beta.2 is not higher than 1.3.0-rc.1"):
+            rv.for_dispatch("1.3.0-beta.2", "release/x", AFTER, repo)
+
+    def test_a_taken_number_fails(self):
+        repo = state("1.2.2", drafts=[release("1.3.0-rc.1", draft=True, target=OTHER)])
+        with self.assertRaisesRegex(rv.Refused, "a draft 1.3.0-rc.1 of another commit"):
+            rv.for_dispatch("1.3.0-rc.1", "release/x", AFTER, repo)
+
+    def test_a_draft_waiting_fails(self):
+        repo = state("1.2.2", drafts=[release("1.2.3", draft=True, target=OTHER)])
+        with self.assertRaisesRegex(rv.Refused, "a draft is waiting, 1.2.3"):
+            rv.for_dispatch("1.3.0-rc.1", "release/x", AFTER, repo)
+
+    def test_an_older_major_needs_its_line(self):
+        # 1.6.0-rc.1 while 2.0.0 is out: only from a world where 1.x exists.
+        without = state("1.5.0", "2.0.0")
+        with self.assertRaisesRegex(rv.Refused, "1.6.0 is not higher than 2.0.0, and no 1.x branch exists"):
+            rv.for_dispatch("1.6.0-rc.1", "release/1.6.0", AFTER, without)
+        self.assertTrue(rv.for_dispatch("1.6.0-rc.1", "release/1.6.0", AFTER,
+                                        state("1.5.0", "2.0.0", branches=("main", "1.x"))).prerelease)
+
+    def test_its_own_draft_is_made_again(self):
+        repo = state("1.2.2", drafts=[release("1.3.0-rc.1", draft=True, target=AFTER, rid=5)])
+        self.assertEqual(rv.for_dispatch("1.3.0-rc.1", "release/x", AFTER, repo).own_draft, 5)
+
+
 class BodyTests(unittest.TestCase):
     def test_a_release_is_its_note(self):
-        self.assertEqual(rv.body(rv.Plan("1.4.0", False, True, AFTER), "# note"), "# note")
+        self.assertEqual(rv.body(rv.Plan("1.4.0", False, True, AFTER), "# note", "unreleased"), "# note")
 
-    def test_a_missing_note_stops(self):
-        with self.assertRaisesRegex(rv.Refused, "the note of 1.4.0 is missing"):
-            rv.body(rv.Plan("1.4.0", False, True, AFTER), None)
+    def test_a_pre_release_opens_with_the_banner_over_the_note(self):
+        text = rv.body(rv.Plan("1.3.0-rc.1", True, False, AFTER), "# 1.3.0", "unreleased")
+        self.assertTrue(text.startswith("> [!WARNING]\n> **A pre-release of 1.3.0, not for production.**"))
+        self.assertTrue(text.endswith("\n# 1.3.0"))
+
+    def test_without_its_note_a_pre_release_takes_the_unreleased_section(self):
+        self.assertTrue(rv.body(rv.Plan("1.3.0-alpha.1", True, False, AFTER), None, "### Added\n- x").endswith("### Added\n- x"))
 
 
 @unittest.skipUnless(shutil.which("git"), "git is needed")
@@ -100,8 +153,8 @@ class HistoryTests(unittest.TestCase):
         self.write("changelog/1.3.0.md", "# 1.3.0")
         self.commit()
         self.before = self.head()
-        (self.out / "state.json").write_text(json.dumps({"tags": ["1.3.0"], "releases": [release("1.3.0")]}),
-                                             encoding="utf-8")
+        (self.out / "state.json").write_text(json.dumps({"tags": ["1.3.0"], "releases": [release("1.3.0")],
+                                                          "branches": ["main"]}), encoding="utf-8")
 
     def git(self, *args):
         return subprocess.run(["git", "-C", str(self.repo), *args], check=True, capture_output=True, text=True).stdout
@@ -153,6 +206,15 @@ class HistoryTests(unittest.TestCase):
         code, out, _ = self.run_version("--event", "push", "--ref", "main", "--before", "0" * 40, "--sha", self.head())
         self.assertEqual(code, 1)
         self.assertIn("no `before` to compare with", out)
+
+    def test_a_pre_release_by_hand_takes_the_unreleased_section(self):
+        code, out, outputs = self.run_version("--event", "workflow_dispatch", "--ref", "release/1.4.0",
+                                              "--version", "1.4.0-rc.1", "--sha", self.head())
+        self.assertEqual(code, 0, out)
+        self.assertEqual((outputs["version"], outputs["prerelease"], outputs["latest"]), ("1.4.0-rc.1", "true", "false"))
+        body = (self.out / "body.md").read_text(encoding="utf-8")
+        self.assertIn("A pre-release of 1.4.0", body)
+        self.assertTrue(body.endswith("### Added\n- a thing"))
 
 
 if __name__ == "__main__":

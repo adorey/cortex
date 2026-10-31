@@ -1,11 +1,12 @@
 name: release version
 description: >-
-  The version a release job makes, or why it makes none (ADR-009 §3.3, §3.11): the note a push to
-  the default branch or a line's branch N.x adds. Writes the release's body.
+  The version a release job makes, or why it makes none (ADR-009 §3.3, §3.7, §3.11): the note a
+  push to the default branch or a line's branch N.x adds, or the pre-release a run started by hand
+  on a release/** branch asks for. Writes the release's body.
 
 inputs:
   event:
-    description: "`push`."
+    description: "`push` or `workflow_dispatch`."
     required: true
   ref:
     description: The branch, as `github.ref_name`.
@@ -15,6 +16,9 @@ inputs:
     required: true
   before:
     description: A push's `before`.
+    default: ""
+  version:
+    description: The pre-release a run started by hand asks for, `X.Y.Z-(alpha|beta|rc).N`.
     default: ""
   changelog:
     description: The changelog, relative to the repository's root.
@@ -33,7 +37,7 @@ outputs:
     description: The version made.
     value: ${{ steps.version.outputs.version }}
   prerelease:
-    description: "`false`: a push makes a release."
+    description: "`true` for a pre-release."
     value: ${{ steps.version.outputs.prerelease }}
   latest:
     description: "`true` when the release is to be the latest: the highest version, on the default branch."
@@ -57,9 +61,10 @@ runs:
         REF: ${{ inputs.ref }}
         SHA: ${{ inputs.sha }}
         BEFORE: ${{ inputs.before }}
+        VERSION: ${{ inputs.version }}
         CHANGELOG: ${{ inputs.changelog }}
         NOTES: ${{ inputs.notes }}
         GITHUB_TOKEN: ${{ inputs.token }}
       run: >-
         python3 "$GITHUB_ACTION_PATH/version.py" --event "$EVENT" --ref "$REF" --sha "$SHA" --before "$BEFORE"
-        --changelog "$CHANGELOG" --notes "$NOTES" --body-file "$RUNNER_TEMP/release-body.md"
+        --version "$VERSION" --changelog "$CHANGELOG" --notes "$NOTES" --body-file "$RUNNER_TEMP/release-body.md"

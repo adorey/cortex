@@ -1,15 +1,20 @@
-"""The version a release job makes (ADR-009 §3.3, §3.11) — or why it makes none.
+"""The version a release job makes (ADR-009 §3.3, §3.7, §3.11) — or why it makes none.
 
-A push to the default branch, or to a line's branch ``N.x``, releases the version whose note it
-adds between ``before`` and ``after``, of a version with no release yet. Not exactly one: the push
-bypassed the gate, and the job fails, creating nothing. On ``N.x``, the version is ``N``'s, and
-never ``latest``.
+- **A push** to the default branch, or to a line's branch ``N.x``, releases the version whose note
+  it adds between ``before`` and ``after``, of a version with no release yet. Not exactly one: the
+  push bypassed the gate, and the job fails, creating nothing. On ``N.x``, the version is ``N``'s,
+  and never ``latest``.
+- **A run started by hand** cuts a pre-release, ``X.Y.Z-(alpha|beta|rc).N``, from a ``release/**``
+  branch. ``X.Y.Z`` is higher than every release of its major version — and than every release,
+  while no ``X.x`` branch exists — the pre-release higher than every pre-release of ``X.Y.Z``, its
+  name taken by nothing, and no draft waiting.
 
 A draft of the same version is the job's own when it targets the very commit the job releases: a
-run that failed left it, and the draft action makes it again. Of another commit, it stops the job,
-and so does a published release.
+run that failed left it, and the draft action makes it again. Of another commit, it stops the job.
 
-Writes the release's body: its note. Standard library only.
+Writes the release's body: its note, and for a pre-release a banner first, over the note of
+``X.Y.Z`` when the branch has it, else the ``[Unreleased]`` section of the changelog.
+Standard library only.
 """
 
 from __future__ import annotations
@@ -20,14 +25,14 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from changelog import note_version  # noqa: E402
+from changelog import note_version, section_text  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
-from semver import Version, highest, is_release  # noqa: E402
+from semver import Version, highest, is_prerelease, is_release  # noqa: E402
 
 LINE = re.compile(r"(0|[1-9][0-9]*)\.x")
 
@@ -40,6 +45,7 @@ class Refused(Exception):
 class State:
     tags: List[str]
     releases: List[Dict[str, Any]]      # tag_name, name, draft, prerelease, target_commitish, id
+    branches: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -95,10 +101,48 @@ def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, st
     return Plan(version, prerelease=False, latest=latest, target=after, own_draft=own)
 
 
-def body(plan: Plan, note: Optional[str]) -> str:
-    if note is None:
-        raise Refused(f"the note of {plan.version} is missing")
-    return note
+def for_dispatch(version: str, ref: str, sha: str, state: State) -> Plan:
+    if not ref.startswith("release/"):
+        raise Refused(f"a pre-release is cut from a release/** branch, not from {ref}")
+    if not is_prerelease(version):
+        raise Refused(f"{version!r} is no pre-release as one is cut: X.Y.Z-alpha.N, X.Y.Z-beta.N or X.Y.Z-rc.N")
+    candidate = Version(version)
+    release = candidate.release
+    releases = [Version(t) for t in state.tags if is_release(t)]
+    of_major = [r for r in releases if r.major == release.major]
+    top = highest(of_major)
+    if top is not None and not release > top:
+        raise Refused(f"{release} is not higher than {top}, the highest release of {release.major}.x")
+    if f"{release.major}.x" not in state.branches:
+        top_all = highest(releases)
+        if top_all is not None and not release > top_all:
+            raise Refused(f"{release} is not higher than {top_all}, and no {release.major}.x branch exists to release it on")
+    earlier = highest(v for v in (Version.parse(t) for t in state.tags) if v is not None and v.pre and v.release == release)
+    if earlier is not None and not candidate > earlier:
+        raise Refused(f"{version} is not higher than {earlier}, already cut for {release}")
+    if version in state.tags:
+        raise Refused(f"the tag {version} already exists")
+    own = _own_or_refuse(state, version, sha)
+    waiting = sorted(r.get("name") or r.get("tag_name") for r in state.releases
+                     if r.get("draft") and r.get("id") != own)
+    if waiting:
+        raise Refused(f"a draft is waiting, {', '.join(waiting)}: publish it or delete it — one release is in flight at a time")
+    return Plan(version, prerelease=True, latest=False, target=sha, own_draft=own)
+
+
+def banner(version: str) -> str:
+    release = Version(version).release
+    return (f"> [!WARNING]\n> **A pre-release of {release}, not for production.** Nothing installs `{version}` unless "
+            f"asked for it by its version, and it is never the latest release.\n")
+
+
+def body(plan: Plan, note: Optional[str], unreleased: Optional[str]) -> str:
+    if not plan.prerelease:
+        if note is None:
+            raise Refused(f"the note of {plan.version} is missing")
+        return note
+    text = note if note is not None else (unreleased or "")
+    return banner(plan.version) + ("\n" + text if text.strip() else "")
 
 
 # The repository, through git and the API.
@@ -123,17 +167,18 @@ def show(commit: str, path: str) -> Optional[str]:
 
 
 def fetch_state(github: GitHub) -> State:
-    return State(tags=github.tags(), releases=[
+    return State(tags=github.tags(), branches=github.branches(), releases=[
         {k: r.get(k) for k in ("id", "tag_name", "name", "draft", "prerelease", "target_commitish")}
         for r in github.releases()])
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--event", required=True, choices=["push"])
+    parser.add_argument("--event", required=True, choices=["push", "workflow_dispatch"])
     parser.add_argument("--ref", required=True, help="the branch, as github.ref_name")
     parser.add_argument("--sha", required=True, help="the commit the job builds: the push's `after`, the branch's head")
     parser.add_argument("--before", default="", help="a push's `before`")
+    parser.add_argument("--version", default="", help="the pre-release asked for, by a run started by hand")
     parser.add_argument("--changelog", default="CHANGELOG.md")
     parser.add_argument("--notes", default="changelog")
     parser.add_argument("--body-file", required=True, help="where the release's body is written")
@@ -145,15 +190,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         if args.state:
             raw = json.loads(Path(args.state).read_text(encoding="utf-8"))
-            state, default_branch = State(raw.get("tags", []), raw.get("releases", [])), args.default_branch
+            state, default_branch = State(raw.get("tags", []), raw.get("releases", []), raw.get("branches", [])), args.default_branch
         else:
             github = GitHub(args.repository)
             state, default_branch = fetch_state(github), args.default_branch or github.get(github.repo())["default_branch"]
-        added = added_between(args.before, args.sha, args.notes)
-        if added is None:
-            raise Refused("the push has no `before` to compare with: a new branch is no release")
-        plan = for_push(added, args.ref, default_branch, args.sha, state)
-        text = body(plan, show(args.sha, f"{args.notes.rstrip('/')}/{plan.version}.md"))
+        if args.event == "push":
+            added = added_between(args.before, args.sha, args.notes)
+            if added is None:
+                raise Refused("the push has no `before` to compare with: a new branch is no release")
+            plan = for_push(added, args.ref, default_branch, args.sha, state)
+        else:
+            plan = for_dispatch(args.version.strip(), args.ref, args.sha, state)
+        note = show(args.sha, f"{args.notes.rstrip('/')}/{Version(plan.version).release}.md")
+        changelog = show(args.sha, args.changelog) or ""
+        text = body(plan, note, section_text(changelog, "Unreleased"))
     except Refused as why:
         print(f"::error title=release version::{why}")
         _summary(f"No release: {why}.")
@@ -164,7 +214,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 2
 
     Path(args.body_file).write_text(text, encoding="utf-8")
-    kind = "release"
+    kind = "pre-release" if plan.prerelease else "release"
     own = f"; the draft {plan.own_draft} a failed run left is made again" if plan.own_draft else ""
     print(f"This run makes the {kind} {plan.version}, from {plan.target[:12]}, "
           f"{'the latest' if plan.latest else 'not the latest'}{own}.")

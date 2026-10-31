@@ -1,15 +1,24 @@
 name: release
 
-# Every merge into main, or into a line's branch N.x, is a release (ADR-009 §3.3, §3.11): this
-# workflow finds the version the push adds, builds it through binary.yml, and leaves it as a draft
-# with its six assets — a line's never the latest. The maintainer publishes it from the Releases
-# page; GitHub creates the tag then.
+# Every merge into main, or into a line's branch N.x, is a release (ADR-009 §3.3): this workflow
+# finds the version the push adds, builds it through binary.yml, and leaves it as a draft with its
+# six assets. The maintainer publishes it from the Releases page; GitHub creates the tag then.
+#
+# A pre-release is cut by hand (§3.7): *Run workflow* on a release/** branch, with the version.
+# *Run workflow* runs the workflow files of the branch it starts on, so a release candidate goes
+# through the pipeline that branch will ship.
 #
 # The draft is created last, once every asset is built and checked; a re-run of a run that failed
 # makes its own draft again, and a draft of another commit, or a published release, stops it.
 on:
   push:
     branches: [main, "[0-9]+.x"]   # no paths filter: every push there is a release
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The pre-release to cut from this release/** branch — X.Y.Z-alpha.N, X.Y.Z-beta.N or X.Y.Z-rc.N"
+        required: true
+        type: string
 
 # One release at a time: two would race for their version and for `latest`.
 concurrency:
@@ -43,6 +52,7 @@ jobs:
           ref: ${{ github.ref_name }}
           sha: ${{ github.sha }}
           before: ${{ github.event.before }}
+          version: ${{ inputs.version }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
