@@ -470,6 +470,7 @@ Acceptance criteria:
 
   No workflow starts on a tag any more: `binary.yml` lost its tag trigger and its publish job, and a test checks every workflow for it.
 - **A push with no `before`** — the first push of a branch — makes no release: nothing says what it adds.
+- **A merge's draft comes a quarter of an hour after the merge.** It is born once the four targets are built. A release pull request merged in that window passes rule 4, and two drafts then wait. `release.yml` runs one release at a time, and GitHub keeps one run waiting per group: a third merge's run cancels the second's while it waits, and that release is drafted only by running its run again. Neither is guarded against. Releases are hours apart, and a gate that counted the runs in progress as drafts would be one more dependency for a case not seen yet. The maintainer waits for a merge's draft before merging the next release, and this is to be revisited if releases ever come that close together.
 - **The draft action takes a directory and the names it must hold.** It checks them before it creates anything, uploads them, then reads them back by name and size. The version action writes the body.
 - **`make_latest` is set on the draft**:
   - `true` for the highest release of the default branch;
