@@ -24,7 +24,9 @@ def event_block(block, event):
 
 
 def push_without_branches(text):
-    """True when ``text`` runs on a push that names no branches, which runs on tags too."""
+    """True when ``text`` runs on a push that names no branches, which runs on tags too. The forms
+    read are `on: push`, `on: [push, …]` and a `push:` block; the block list `on:` / `- push` is not,
+    since no workflow here writes it."""
     if re.search(r"(?m)^on:[ \t]*(push[ \t]*$|\[[^\]]*\bpush\b)", text):
         return True
     push = event_block(triggers(text), "push")
