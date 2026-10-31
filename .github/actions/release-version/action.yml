@@ -1,7 +1,7 @@
 name: release version
 description: >-
-  The version a release job makes, or why it makes none (ADR-009 §3.3): the note a push to the
-  default branch adds. Writes the release's body.
+  The version a release job makes, or why it makes none (ADR-009 §3.3, §3.11): the note a push to
+  the default branch or a line's branch N.x adds. Writes the release's body.
 
 inputs:
   event:

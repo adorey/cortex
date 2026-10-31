@@ -1,8 +1,9 @@
-"""The version a release job makes (ADR-009 §3.3) — or why it makes none.
+"""The version a release job makes (ADR-009 §3.3, §3.11) — or why it makes none.
 
-A push to the default branch releases the version whose note it adds between ``before`` and
-``after``, of a version with no release yet. Not exactly one: the push bypassed the gate, and the
-job fails, creating nothing.
+A push to the default branch, or to a line's branch ``N.x``, releases the version whose note it
+adds between ``before`` and ``after``, of a version with no release yet. Not exactly one: the push
+bypassed the gate, and the job fails, creating nothing. On ``N.x``, the version is ``N``'s, and
+never ``latest``.
 
 A draft of the same version is the job's own when it targets the very commit the job releases: a
 run that failed left it, and the draft action makes it again. Of another commit, it stops the job,
@@ -28,6 +29,8 @@ from changelog import note_version  # noqa: E402
 from github import GitHub, GitHubError  # noqa: E402
 from semver import Version, highest, is_release  # noqa: E402
 
+LINE = re.compile(r"(0|[1-9][0-9]*)\.x")
+
 
 class Refused(Exception):
     """Why the job makes no release; it creates and changes nothing."""
@@ -48,6 +51,11 @@ class Plan:
     own_draft: Optional[int] = None
 
 
+def line_of(ref: str) -> Optional[int]:
+    match = LINE.fullmatch(ref)
+    return int(match.group(1)) if match else None
+
+
 def _named(state: State, version: str) -> List[Dict[str, Any]]:
     return [r for r in state.releases if r.get("tag_name") == version or r.get("name") == version]
 
@@ -66,8 +74,9 @@ def _own_or_refuse(state: State, version: str, target: str) -> Optional[int]:
 
 
 def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, state: State) -> Plan:
-    if ref != default_branch:
-        raise Refused(f"a push to {ref} makes no release: only {default_branch} does")
+    line = line_of(ref)
+    if ref != default_branch and line is None:
+        raise Refused(f"a push to {ref} makes no release: only {default_branch} and a line's branch N.x do")
     published = {r["tag_name"] for r in state.releases if not r.get("draft")}
     released = set(state.tags) | published
     new = sorted({v for v in added if v not in released}, key=Version)
@@ -77,10 +86,12 @@ def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, st
                       f"and nothing is released")
     version = new[0]
     candidate = Version(version)
+    if line is not None and candidate.major != line:
+        raise Refused(f"{version} is not a version of the {line}.x line")
     own = _own_or_refuse(state, version, after)
     top = highest(Version(r["tag_name"]) for r in state.releases
                   if not r.get("draft") and is_release(r.get("tag_name")))
-    latest = top is None or candidate > top
+    latest = line is None and (top is None or candidate > top)
     return Plan(version, prerelease=False, latest=latest, target=after, own_draft=own)
 
 

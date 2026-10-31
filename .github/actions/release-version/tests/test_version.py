@@ -1,4 +1,4 @@
-"""The version a release job makes from a push (ADR-009 §3.3)."""
+"""The version a release job makes from a push, on the default branch or a line (ADR-009 §3.3, §3.11)."""
 
 import io
 import json
@@ -56,8 +56,25 @@ class PushTests(unittest.TestCase):
         self.assertEqual(rv.for_push(["1.4.0"], "main", "main", AFTER, repo).own_draft, 77)
 
     def test_a_push_to_another_branch_makes_no_release(self):
-        with self.assertRaisesRegex(rv.Refused, "a push to release/1.4.0 makes no release: only main does"):
+        with self.assertRaisesRegex(rv.Refused, "a push to release/1.4.0 makes no release"):
             rv.for_push(["1.4.0"], "release/1.4.0", "main", AFTER, self.STATE)
+
+
+class LineTests(unittest.TestCase):
+    STATE = state("1.5.0", "1.5.1", "2.0.0")
+
+    def test_a_push_to_a_line_releases_its_version_not_as_latest(self):
+        plan = rv.for_push(["1.6.0"], "1.x", "main", AFTER, self.STATE)
+        self.assertEqual((plan.version, plan.latest), ("1.6.0", False))
+
+    def test_another_major_on_a_line_fails(self):
+        with self.assertRaisesRegex(rv.Refused, "2.1.0 is not a version of the 1.x line"):
+            rv.for_push(["2.1.0"], "1.x", "main", AFTER, self.STATE)
+
+    def test_a_carry_up_makes_the_draft_of_the_new_version_only(self):
+        # The merge from 1.x brings 1.5.1's note, published, and adds 2.0.1's.
+        plan = rv.for_push(["1.5.1", "2.0.1"], "main", "main", AFTER, self.STATE)
+        self.assertEqual((plan.version, plan.latest), ("2.0.1", True))
 
 
 class BodyTests(unittest.TestCase):
