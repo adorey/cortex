@@ -1,6 +1,7 @@
 """This repository's release jobs (ADR-009 §3.3, §3.4): a merge into main or a line releases, with
 no paths filter; a run started by hand cuts a pre-release; and no workflow starts on a tag, so a
-version tag pushed by hand releases nothing.
+version tag pushed by hand releases nothing. A push names its branches: one filtered on paths
+alone, or not at all, runs on tags too.
 
 Read as text: the runner's Python has no YAML parser. Skipped where the action runs elsewhere.
 """
@@ -22,6 +23,30 @@ def event_block(block, event):
     return match.group(1) if match else None
 
 
+def push_without_branches(text):
+    """True when ``text`` runs on a push that names no branches, which runs on tags too."""
+    if re.search(r"(?m)^on:[ \t]*(push[ \t]*$|\[[^\]]*\bpush\b)", text):
+        return True
+    push = event_block(triggers(text), "push")
+    return push is not None and not re.search(r"(?m)^\s+branches(-ignore)?:", push)
+
+
+class PushTests(unittest.TestCase):
+    def test_a_push_with_no_branches_is_found(self):
+        cases = [
+            ("on:\n  push:\n    paths:\n      - \"cli/**\"\n  pull_request:\n\njobs:\n", True),
+            ("on:\n  push:\n  pull_request:\n\njobs:\n", True),
+            ("on: push\n\njobs:\n", True),
+            ("on: [push, pull_request]\n\njobs:\n", True),
+            ("on:\n  push:\n    branches: [main]\n    paths: [\"cli/**\"]\n\njobs:\n", False),
+            ("on:\n  push:\n    branches-ignore: [\"wip/**\"]\n\njobs:\n", False),
+            ("on:\n  pull_request:\n\njobs:\n", False),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertIs(push_without_branches(text), expected)
+
+
 @unittest.skipUnless((WORKFLOWS / "release.yml").is_file(), "not in the repository that calls the actions")
 class ThisRepositoryTests(unittest.TestCase):
     def test_no_workflow_starts_on_a_tag(self):
@@ -30,6 +55,7 @@ class ThisRepositoryTests(unittest.TestCase):
             with self.subTest(workflow=path.name):
                 self.assertNotRegex(block, r"(?m)^\s+tags(-ignore)?:")
                 self.assertNotRegex(block, r"(?m)^  (create|release):")
+                self.assertFalse(push_without_branches(path.read_text(encoding="utf-8")))
 
     def test_a_merge_into_main_or_a_line_releases_whatever_it_changes(self):
         block = triggers((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
