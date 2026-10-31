@@ -55,6 +55,24 @@ class GitHub:
     def get(self, path: str) -> Any:
         return self.request("GET", path)
 
+    def download(self, url: str) -> bytes:
+        """A release asset, by its API url. GitHub answers with a redirect to its storage, which
+        refuses a request that still carries the token: the redirect is followed without it."""
+        headers = {"Accept": "application/octet-stream", "User-Agent": "release-actions"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        opener = urllib.request.build_opener(_NoRedirect)
+        try:
+            with opener.open(urllib.request.Request(url, headers=headers), timeout=120) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            if error.code not in (301, 302, 303, 307, 308) or not error.headers.get("Location"):
+                raise GitHubError(error.code, f"GET {url}: {error.reason}") from None
+            location = error.headers["Location"]
+        with urllib.request.urlopen(urllib.request.Request(location, headers={"User-Agent": "release-actions"}),
+                                    timeout=120) as response:
+            return response.read()
+
     def paginate(self, path: str) -> Iterator[Dict[str, Any]]:
         separator = "&" if "?" in path else "?"
         page = 1
@@ -80,6 +98,11 @@ class GitHub:
 
     def branches(self) -> List[str]:
         return [branch["name"] for branch in self.paginate(self.repo("/branches"))]
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102 - hand the redirect back
+        return None
 
 
 def quote(text: str) -> str:
