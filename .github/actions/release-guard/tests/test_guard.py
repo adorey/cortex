@@ -1,4 +1,4 @@
-"""The guard, against a fake GitHub (ADR-009 §3.5): what passes, and what fails."""
+"""The guard, against a fake GitHub (ADR-009 §3.5): what passes, and what fails and opens one issue."""
 
 import copy
 import hashlib
@@ -106,6 +106,7 @@ class PassingTests(unittest.TestCase):
                      f"the provenance of every asset names {COMMIT[:12]}, signed by {SIGNER}",
                      "the release is immutable"):
             self.assertIn(f"✓ {line}", out)
+        self.assertEqual(github.issues, [])
 
     def test_a_pre_release_passes(self):
         github = FakeGitHub([release("1.4.0-rc.1", 1), release("1.3.0", 2)], latest="1.3.0")
@@ -117,7 +118,12 @@ class FailingTests(unittest.TestCase):
         code, out = run(github, tag, verify)
         self.assertEqual(code, 1, out)
         self.assertIn(f"✗ {expected}", out)
-        self.assertIn(f"{tag} fails its guard.", out)
+        self.assertEqual(len(github.issues), 1)
+        issue = github.issues[0]
+        self.assertEqual((issue["title"], issue["labels"]), (f"Release {tag} failed its guard", ["type:infra"]))
+        self.assertIn(expected, issue["body"])
+        self.assertIn("It cannot be repaired.", issue["body"])
+        self.assertIn(f"{tag} can never be used again", issue["body"])
         return out
 
     def test_a_missing_asset(self):
@@ -142,6 +148,12 @@ class FailingTests(unittest.TestCase):
 
     def test_a_tag_that_is_no_version(self):
         self.assert_fails(FakeGitHub([release("nightly", 1)], None), "nightly", "the tag 'nightly' is no version")
+
+    def test_one_issue_per_release(self):
+        github = FakeGitHub([release("1.4.0", 1, immutable=False)], "1.4.0")
+        run(github, "1.4.0")
+        run(github, "1.4.0")
+        self.assertEqual(len(github.issues), 1)
 
 
 class GhVerifyTests(unittest.TestCase):

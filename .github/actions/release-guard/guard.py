@@ -8,7 +8,9 @@ For releases and pre-releases alike:
 3. the assets expected are there, no other, and ``SHA256SUMS`` matches them;
 4. the release is immutable.
 
-On any failure it fails, naming what it found. Standard library only, and ``gh``.
+On any failure it fails, and opens one issue naming what it found and the only fix: the release
+cannot be repaired, only deleted, and its version is spent; the next patch ships what it should
+have. Standard library only, and ``gh``.
 """
 
 from __future__ import annotations
@@ -124,12 +126,28 @@ def check(github: GitHub, release: Dict[str, Any], expected: Sequence[str], sign
     return report
 
 
+def open_issue(github: GitHub, report: Report, label: str, url: str) -> Optional[str]:
+    """One issue per release: none is opened when one is open already."""
+    title = f"Release {report.tag} failed its guard"
+    for issue in github.paginate(github.repo(f"/issues?state=open&labels={quote(label)}")):
+        if issue.get("title") == title:
+            return issue.get("html_url")
+    body = (f"The guard found what [{report.tag}]({url}) should not have:\n\n"
+            + "".join(f"- {f}\n" for f in report.findings)
+            + "\n**It cannot be repaired.** A published release is immutable: it can only be deleted, and its "
+              f"version is spent — {report.tag} can never be used again. The next patch ships what this one "
+              "should have, through the release cycle.\n")
+    issue = github.request("POST", github.repo("/issues"), body={"title": title, "body": body, "labels": [label]})
+    return issue.get("html_url")
+
+
 def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
          verify: Callable[[Path, str, str, str], Optional[str]] = gh_verify) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--tag", required=True)
     parser.add_argument("--expected", default="", help="the names of the assets, one per line")
     parser.add_argument("--signer-workflow", required=True, help="OWNER/REPO/.github/workflows/FILE that builds releases")
+    parser.add_argument("--label", default="type:infra")
     parser.add_argument("--repository", default=os.environ.get("GITHUB_REPOSITORY"))
     args = parser.parse_args(argv)
     github = github or GitHub(args.repository)
@@ -141,12 +159,14 @@ def main(argv: Optional[Sequence[str]] = None, github: Optional[GitHub] = None,
             return 2
         with tempfile.TemporaryDirectory(prefix="release-guard-") as tmp:
             report = check(github, release, expected, args.signer_workflow, Path(tmp), verify)
+        issue = open_issue(github, report, args.label, release.get("html_url", "")) if report.findings else None
     except GitHubError as error:
         print(f"::error title=release guard::{error}")
         return 2
 
     lines = [f"- ✓ {p}" for p in report.passed] + [f"- ✗ {f}" for f in report.findings]
-    verdict = f"{args.tag} passes its guard." if not report.findings else f"{args.tag} fails its guard."
+    verdict = (f"{args.tag} passes its guard." if not report.findings
+               else f"{args.tag} fails its guard: it cannot be repaired, only deleted, and its version is spent. {issue or ''}")
     print(verdict + "\n" + "\n".join(lines))
     for finding in report.findings:
         print(f"::error title=release guard::{finding}")
