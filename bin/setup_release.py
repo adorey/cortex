@@ -229,11 +229,11 @@ def main(argv: Optional[Sequence[str]] = None, gh: Optional[Gh] = None) -> int:
         print(f"✗ {setting.name}")
         for line in setting.drift:
             print(f"    {line}")
+    if not any(s.name.startswith(f"the ruleset {QUEUE_RULESET!r}") for s in found):
+        print("No merge queue: GitHub offers it to repositories of organisations. The gate runs again each night instead.")
     if args.check:
         print(f"{len(drifted)} setting(s) differ." if drifted else "Every setting holds.")
         return 1 if drifted else 0
-    if not any(s.name.startswith(f"the ruleset {QUEUE_RULESET!r}") for s in found):
-        print("No merge queue: GitHub offers it to repositories of organisations. The gate runs again each night instead.")
     by_hand = [s for s in drifted if s.apply is None]
     for setting in drifted:
         if setting.apply is None:

@@ -131,7 +131,9 @@ class SetupReleaseTests(unittest.TestCase):
         code, out = run(gh)
         self.assertIn("No merge queue: GitHub offers it to repositories of organisations.", out)
         self.assertEqual(list(self.rulesets(gh)), ["release cycle"])
-        self.assertEqual(run(gh, "--check")[0], 0)
+        code, out = run(gh, "--check")
+        self.assertEqual(code, 0)
+        self.assertIn("No merge queue: GitHub offers it to repositories of organisations.", out)
 
     def test_no_required_check_is_a_matrix_job(self):
         for name in sr.DEFAULT_CHECKS:
