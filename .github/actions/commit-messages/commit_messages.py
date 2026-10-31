@@ -34,12 +34,12 @@ REGIONAL_INDICATORS = range(0x1F1E6, 0x1F200)
 def is_one_emoji(text: str) -> bool:
     """``text`` is a single emoji: one pictograph, with its presentation selector, its skin tone,
     or the zero-width joins of one sequence — or a flag, two regional indicators."""
-    text = text.replace("️", "").replace("︎", "")
+    text = text.replace("\ufe0f", "").replace("\ufe0e", "")
     if not text:
         return False
     if len(text) == 2 and all(ord(c) in REGIONAL_INDICATORS for c in text):
         return True
-    for part in text.split("‍"):
+    for part in text.split("\u200d"):
         if not part:
             return False
         base, rest = part[0], part[1:]
