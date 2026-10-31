@@ -46,10 +46,14 @@ class PushTests(unittest.TestCase):
         with self.assertRaisesRegex(rv.Refused, "no release note"):
             rv.for_push(["1.3.0"], "main", "main", AFTER, self.STATE)
 
-    def test_a_draft_of_the_version_fails(self):
+    def test_a_draft_of_another_commit_fails(self):
         repo = state("1.3.0", drafts=[release("1.4.0", draft=True, target=OTHER)])
-        with self.assertRaisesRegex(rv.Refused, "a draft 1.4.0 is waiting: a draft is never rebuilt"):
+        with self.assertRaisesRegex(rv.Refused, f"a draft 1.4.0 of another commit, {OTHER[:12]}, is waiting"):
             rv.for_push(["1.4.0"], "main", "main", AFTER, repo)
+
+    def test_its_own_draft_is_made_again(self):
+        repo = state("1.3.0", drafts=[release("1.4.0", draft=True, target=AFTER, rid=77)])
+        self.assertEqual(rv.for_push(["1.4.0"], "main", "main", AFTER, repo).own_draft, 77)
 
     def test_a_push_to_another_branch_makes_no_release(self):
         with self.assertRaisesRegex(rv.Refused, "a push to release/1.4.0 makes no release: only main does"):

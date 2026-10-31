@@ -1,4 +1,4 @@
-"""The draft: created last, with its assets, and never over a release of its name (ADR-009 §3.3)."""
+"""The draft: created last, never rebuilt from another commit, its own made again (ADR-009 §3.3)."""
 
 import io
 import shutil
@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import draft as rd  # noqa: E402
+from github import GitHubError  # noqa: E402
 
 TARGET = "a" * 40
 SIX = ["SHA256SUMS", "cortex-linux-aarch64.tar.gz", "cortex-linux-x86_64.tar.gz", "cortex-macos-arm64.tar.gz",
@@ -17,9 +18,11 @@ SIX = ["SHA256SUMS", "cortex-linux-aarch64.tar.gz", "cortex-linux-x86_64.tar.gz"
 
 
 class FakeGitHub:
-    def __init__(self, releases=()):
+    def __init__(self, releases=(), fail_upload_after=None):
         self.releases_ = {r["id"]: dict(r, assets=list(r.get("assets", []))) for r in releases}
         self.calls = []
+        self.fail_upload_after = fail_upload_after
+        self.uploads = 0
 
     def repo(self, suffix=""):
         return f"/repos/o/r{suffix}"
@@ -42,6 +45,9 @@ class FakeGitHub:
                                        html_url=f"https://github.com/o/r/releases/tag/untagged-{rid}")
             return self.releases_[rid]
         if method == "POST" and url:
+            if self.fail_upload_after is not None and self.uploads >= self.fail_upload_after:
+                raise GitHubError(502, "upload cut")
+            self.uploads += 1
             rid = int(url.split("https://uploads/")[1].split("/")[0])
             self.releases_[rid]["assets"].append({"name": url.split("name=")[1], "size": len(data)})
             return {}
@@ -97,11 +103,24 @@ class DraftTests(unittest.TestCase):
         self.assertEqual((code, github.calls), (1, []))
         self.assertIn("1.4.0 is already published: nothing is changed", out)
 
-    def test_a_draft_of_the_version_changes_nothing(self):
+    def test_a_draft_of_another_commit_changes_nothing(self):
         github = FakeGitHub([{"id": 9, "tag_name": "1.4.0", "draft": True, "target_commitish": "b" * 40}])
         code, out = self.run_draft(github)
         self.assertEqual((code, github.calls), (1, []))
-        self.assertIn("a draft 1.4.0 is waiting: nothing is changed", out)
+        self.assertIn("a draft 1.4.0 of another commit", out)
+
+    def test_a_run_cut_while_uploading_then_its_re_run_leave_one_complete_draft(self):
+        github = FakeGitHub(fail_upload_after=3)
+        code, out = self.run_draft(github)
+        self.assertEqual(code, 2)
+        (half,) = github.releases()
+        self.assertEqual((half["draft"], len(half["assets"])), (True, 3))
+        github.fail_upload_after = None
+        code, out = self.run_draft(github)
+        self.assertEqual(code, 0, out)
+        self.assertIn("left by a run that failed, is made again", out)
+        (release,) = github.releases()
+        self.assertEqual(sorted(a["name"] for a in release["assets"]), SIX)
 
 
 if __name__ == "__main__":

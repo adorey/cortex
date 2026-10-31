@@ -4,8 +4,8 @@ name: release
 # builds it through binary.yml, and leaves it as a draft with its six assets. The maintainer
 # publishes it from the Releases page; GitHub creates the tag then.
 #
-# The draft is created last, once every asset is built and checked; a release of the same name,
-# published or draft, stops it.
+# The draft is created last, once every asset is built and checked; a re-run of a run that failed
+# makes its own draft again, and a draft of another commit, or a published release, stops it.
 on:
   push:
     branches: [main]   # no paths filter: every push there is a release

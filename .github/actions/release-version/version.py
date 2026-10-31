@@ -2,7 +2,11 @@
 
 A push to the default branch releases the version whose note it adds between ``before`` and
 ``after``, of a version with no release yet. Not exactly one: the push bypassed the gate, and the
-job fails, creating nothing. A release of the same name, published or draft, stops it too.
+job fails, creating nothing.
+
+A draft of the same version is the job's own when it targets the very commit the job releases: a
+run that failed left it, and the draft action makes it again. Of another commit, it stops the job,
+and so does a published release.
 
 Writes the release's body: its note. Standard library only.
 """
@@ -41,17 +45,24 @@ class Plan:
     prerelease: bool
     latest: bool
     target: str
+    own_draft: Optional[int] = None
 
 
 def _named(state: State, version: str) -> List[Dict[str, Any]]:
     return [r for r in state.releases if r.get("tag_name") == version or r.get("name") == version]
 
 
-def _refuse_taken(state: State, version: str) -> None:
+def _own_or_refuse(state: State, version: str, target: str) -> Optional[int]:
+    """The id of the job's own draft of ``version``, if any; refused for anything else of that name."""
+    own = None
     for release in _named(state, version):
         if not release.get("draft"):
             raise Refused(f"{version} is already published: a new commit is a new version")
-        raise Refused(f"a draft {version} is waiting: a draft is never rebuilt")
+        if release.get("target_commitish") != target:
+            raise Refused(f"a draft {version} of another commit, {str(release.get('target_commitish'))[:12]}, "
+                          f"is waiting: a draft is never rebuilt from another commit")
+        own = release.get("id")
+    return own
 
 
 def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, state: State) -> Plan:
@@ -66,11 +77,11 @@ def for_push(added: Sequence[str], ref: str, default_branch: str, after: str, st
                       f"and nothing is released")
     version = new[0]
     candidate = Version(version)
-    _refuse_taken(state, version)
+    own = _own_or_refuse(state, version, after)
     top = highest(Version(r["tag_name"]) for r in state.releases
                   if not r.get("draft") and is_release(r.get("tag_name")))
     latest = top is None or candidate > top
-    return Plan(version, prerelease=False, latest=latest, target=after)
+    return Plan(version, prerelease=False, latest=latest, target=after, own_draft=own)
 
 
 def body(plan: Plan, note: Optional[str]) -> str:
@@ -143,7 +154,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     Path(args.body_file).write_text(text, encoding="utf-8")
     kind = "release"
-    own = ""
+    own = f"; the draft {plan.own_draft} a failed run left is made again" if plan.own_draft else ""
     print(f"This run makes the {kind} {plan.version}, from {plan.target[:12]}, "
           f"{'the latest' if plan.latest else 'not the latest'}{own}.")
     _summary(f"This run makes the **{kind} {plan.version}**, from `{plan.target[:12]}`, "

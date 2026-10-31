@@ -4,8 +4,11 @@ The draft is titled after its version, its body the note the version action wrot
 very commit the job built — never a branch, which may move — and it has no tag until someone
 publishes it. Its assets are every file of one directory, which must be exactly the ones expected.
 
-If a release of the same version exists, published or draft, the job stops and changes nothing:
-a new commit is a new version.
+A draft is never rebuilt from another commit. If a release of the same version exists:
+
+- published: the job stops and changes nothing — a new commit is a new version;
+- a draft of another commit: the job stops and changes nothing;
+- a draft of this very commit is the job's own, left by a run that failed: deleted, made again.
 
 Once uploaded, the assets are read back, by name and size. Standard library only.
 """
@@ -48,7 +51,11 @@ def draft(github: GitHub, version: str, target: str, body: str, prerelease: bool
     if found is not None:
         if not found.get("draft"):
             raise Refused(f"{version} is already published: nothing is changed")
-        raise Refused(f"a draft {version} is waiting: nothing is changed")
+        if found.get("target_commitish") != target:
+            raise Refused(f"a draft {version} of another commit, {str(found.get('target_commitish'))[:12]}, is waiting: "
+                          f"nothing is changed")
+        print(f"The draft {version} of this commit, left by a run that failed, is made again.")
+        github.request("DELETE", github.repo(f"/releases/{found['id']}"))
 
     release = github.request("POST", github.repo("/releases"), body={
         "tag_name": version, "target_commitish": target, "name": version, "body": body, "draft": True,
@@ -62,7 +69,8 @@ def draft(github: GitHub, version: str, target: str, body: str, prerelease: bool
     assets = {a["name"]: a["size"] for a in github.get(github.repo(f"/releases/{release['id']}/assets?per_page=100"))}
     wrong = [p.name for p in files if assets.get(p.name) != p.stat().st_size]
     if wrong or len(assets) != len(files):
-        raise Refused(f"the draft {version} does not hold its assets as built: {wrong or sorted(assets)}")
+        raise Refused(f"the draft {version} does not hold its assets as built: {wrong or sorted(assets)} — "
+                      f"run the job again: the draft is its own, and is made again")
     return release
 
 
