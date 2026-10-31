@@ -461,3 +461,21 @@ Acceptance criteria:
 - **Another ruleset that requires checks is reported, and left.** GitHub requires the checks of every ruleset. Cortex's `Block default`, made by hand before the cycle, requires thirteen, ten of them matrix jobs' names. `bin/setup-release.sh` reports such a ruleset and exits non-zero, but removes nobody's ruleset: the maintainer removes it by hand, with the run that applies the settings.
 - **A fork's pull request does not see the drafts.** Its token is read-only, and GitHub lists drafts only to a token with push access: rule 4, and rule 3's check of a draft's name, pass blind on it. The merge queue's run uses the repository's token and sees them, so on Cortex the queue decides. A repository without a queue relies on its releases being proposed from its own branches, as the cycle proposes them.
 - **A line is cut at a commit the queue tested.** The ruleset requires its checks when a branch is created too (`do_not_enforce_on_create: false`), so a new `N.x` is accepted only at a commit that carries them. The queue's merge commits do, since every check runs on the merge group. Without a queue, the merge button's commit carries no `release gate` and no `commit messages`, so cutting a line there is likely refused. This was not checked live.
+
+### Phase 2 — the draft
+
+- **The release job is a workflow of its own, `release.yml`**, and `binary.yml` only builds. `release.yml` calls it (`workflow_call`) with the version to stamp, so pull requests, integration branches and releases share one definition of the build. `release.yml` runs:
+  - on a push to `main` or to `N.x`, with no `paths` filter;
+  - by *Run workflow*, with the pre-release's version.
+
+  No workflow starts on a tag any more: `binary.yml` lost its tag trigger and its publish job, and a test checks every workflow for it.
+- **A push with no `before`** — the first push of a branch — makes no release: nothing says what it adds.
+- **A merge's draft comes a quarter of an hour after the merge.** It is born once the four targets are built. A release pull request merged in that window passes rule 4, and two drafts then wait. `release.yml` runs one release at a time, and GitHub keeps one run waiting per group: a third merge's run cancels the second's while it waits, and that release is drafted only by running its run again. Neither is guarded against. Releases are hours apart, and a gate that counted the runs in progress as drafts would be one more dependency for a case not seen yet. The maintainer waits for a merge's draft before merging the next release, and this is to be revisited if releases ever come that close together.
+- **The draft action takes a directory and the names it must hold.** It checks them before it creates anything, uploads them, then reads them back by name and size. The version action writes the body.
+- **`make_latest` is set on the draft**:
+  - `true` for the highest release of the default branch;
+  - `false` for a line's release and for a pre-release.
+
+  The guard (phase 3) still puts `latest` right, whatever was ticked when publishing.
+- **A pre-release's body opens with a GitHub `[!WARNING]` alert** naming the release it prepares.
+- **The version job asks for `contents: write`**, like the gate: it must see drafts.

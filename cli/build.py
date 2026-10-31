@@ -88,8 +88,9 @@ def fetch_known_specs(repository: str, api: str = "https://api.github.com") -> D
     """``{version: sha256}`` of the spec archive of every published release of ``repository``,
     from each release's ``SHA256SUMS``. A release before 1.0.0 may have none; one from 1.0.0 on
     that has none is refused — a binary built without it would check that version against its
-    ``SHA256SUMS`` alone, in silence. A pre-release is left out: it is thrown away, or built again
-    under its tag, and a binary that kept its checksum would refuse the new build."""
+    ``SHA256SUMS`` alone, in silence. A pre-release counts once it is immutable (ADR-009 §3.7):
+    nothing can build it again under its tag. A mutable one is left out — it could be rebuilt, and
+    a binary that kept its checksum would refuse the new build."""
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "cortex-build"}
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
@@ -107,7 +108,9 @@ def fetch_known_specs(repository: str, api: str = "https://api.github.com") -> D
             return known
         for release in releases:
             tag = release["tag_name"]
-            if release.get("draft") or release.get("prerelease") or not is_version(tag):
+            if release.get("draft") or not is_version(tag):
+                continue
+            if release.get("prerelease") and release.get("immutable") is not True:
                 continue
             served = Version(tag) >= FIRST_SPEC_ARCHIVE
             sums = next((a for a in release.get("assets", []) if a["name"] == "SHA256SUMS"), None)

@@ -1,0 +1,58 @@
+name: release draft
+description: >-
+  The draft release, created last from the assets the calling job built and checked: its note, its
+  target commit, its pre-release and latest flags. A draft is never rebuilt from another commit;
+  the job's own, left by a run that failed, is made again (ADR-009 §3.3, §3.7).
+
+inputs:
+  version:
+    description: The version, as the version action gave it.
+    required: true
+  target:
+    description: The commit the job built.
+    required: true
+  body-file:
+    description: The release's body.
+    required: true
+  assets:
+    description: The directory of the assets — every file in it is uploaded.
+    required: true
+  expected:
+    description: The names of the assets, one per line. The directory must hold exactly these.
+    default: ""
+  prerelease:
+    description: "`true` for a pre-release."
+    default: "false"
+  latest:
+    description: "`true` to make it the latest release once published."
+    default: "false"
+  token:
+    description: "A token that creates releases: `contents: write`."
+    default: ${{ github.token }}
+
+outputs:
+  id:
+    description: The draft's id.
+    value: ${{ steps.draft.outputs.id }}
+  url:
+    description: The draft's page, where it is published.
+    value: ${{ steps.draft.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    - name: The release draft
+      id: draft
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        TARGET: ${{ inputs.target }}
+        BODY_FILE: ${{ inputs.body-file }}
+        ASSETS: ${{ inputs.assets }}
+        EXPECTED: ${{ inputs.expected }}
+        PRERELEASE: ${{ inputs.prerelease }}
+        LATEST: ${{ inputs.latest }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: >-
+        python3 "$GITHUB_ACTION_PATH/draft.py" --version "$VERSION" --target "$TARGET" --body-file "$BODY_FILE"
+        --assets "$ASSETS" --expected "$EXPECTED" --prerelease "$PRERELEASE" --latest "$LATEST"

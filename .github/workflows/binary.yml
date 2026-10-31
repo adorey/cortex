@@ -4,24 +4,23 @@ name: binary
 # built with PyInstaller, then checked through itself — the CLI's suite replayed through the
 # built binary, with no Python on its PATH.
 #
-# Pushing a version's tag builds the same binaries from it and releases them: the release is made
-# a draft, from changelog/X.Y.Z.md, gets its assets — one archive per target, the spec archive, SHA256SUMS over them,
-# and a build-provenance attestation for each (`gh attestation verify`) — and is published only
-# then. Released the other way round, `releases/latest/download/…` would name a release without
-# assets for as long as the build ran, and for good when a target failed.
+# It builds; it releases nothing. A release is a merge into main or into a line's branch, and
+# release.yml makes its draft (ADR-009 §3.3): it calls this workflow with the version to stamp,
+# then gathers the assets. No tag starts anything: a version tag pushed by hand builds nothing and
+# releases nothing, and the gate refuses the version it names.
 #
-# The actions are pinned by commit, not by tag: this workflow publishes what users install.
+# The actions are pinned by commit, not by tag: this workflow builds what users install.
 #
 # The binaries are built where code integrates, not on every pull request: the phases of a stack
 # get the tests from source, fast, and the build runs when the stack lands on its release branch,
 # on the pull request from it to main or to a line's branch N.x — every one, whatever it changes:
-# each is a release — on the merge group, which decides at the moment of merging, and on main, on
-# a tag, or by hand (workflow_dispatch) on any branch. The `builds` job is the check the ruleset
-# requires: a matrix job's name changes with its matrix, and a skipped one reports unexpanded.
+# each is a release — on the merge group, which decides at the moment of merging, when release.yml
+# calls it, or by hand (workflow_dispatch) on any branch. The `builds` job is the check the
+# ruleset requires: a matrix job's name changes with its matrix, and a skipped one reports
+# unexpanded.
 on:
   push:
-    branches: [main, "release/**"]
-    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
+    branches: ["release/**"]
     paths:
       - "cli/**"
       - "core/**"
@@ -32,9 +31,15 @@ on:
     branches: [main, "[0-9]+.x"]
   merge_group:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: The version to stamp, as release-version gave it. Empty, a build of no release.
+        type: string
+        default: ""
 
-# A pull request's run is moot once its branch is pushed again: it is cancelled. On main, a release
-# branch or a tag, a run in progress is never cut short.
+# A pull request's run is moot once its branch is pushed again: it is cancelled. On a release
+# branch, or called by a release, a run in progress is never cut short.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -83,27 +88,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      # A release is built at the version of its tag, which CHANGELOG.md and changelog/ must
-      # already carry — they stay the one source of versions. A pre-release — X.Y.Z-something,
-      # the throwaway kind that tests this workflow — is in neither. Anything else is a build of
+      # A release is built at the version release.yml gives: release-version checked it against
+      # the changelog, the notes and the releases (ADR-009 §3.3, §3.7). Anything else is a build of
       # no release.
       - name: The version to stamp
         id: version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          case "$GITHUB_REF" in
-            refs/tags/*)
-              version="$GITHUB_REF_NAME"
-              if printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+'; then
-                :
-              elif printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'; then
-                grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
-                test -f "changelog/$version.md" || { echo "::error::changelog/$version.md is missing"; exit 1; }
-              else
-                echo "::error::tag $version is no X.Y.Z version"; exit 1
-              fi
-              ;;
-            *) version="0.0.0-dev.$GITHUB_RUN_NUMBER" ;;
-          esac
+          version="${RELEASE_VERSION:-0.0.0-dev.$GITHUB_RUN_NUMBER}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       # The checksum of every spec archive released so far, which the binary embeds: a release
@@ -237,95 +230,3 @@ jobs:
         run: |
           echo "$RESULTS"
           [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false ]
-
-  publish:
-    name: release
-    # A tag's push releases; a run started by hand on a tag builds it and stops there.
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-    needs: [build, floor]
-    runs-on: ubuntu-latest
-    # One release at a time: two tags pushed together would race for "latest". GitHub keeps one
-    # run waiting per group, and cancels it when a third comes: push one tag at a time, and re-run
-    # the workflow of a tag whose publish was cancelled (CONTRIBUTING).
-    concurrency:
-      group: release
-      cancel-in-progress: false
-    permissions:
-      contents: write        # the release and its assets
-      id-token: write        # sign the attestations
-      attestations: write    # store them
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-    # Assets and binaries are gathered outside the checkout, in $RUNNER_TEMP: its own assets/ — the
-    # README's logo — would otherwise ship with the release (found by the pre-release 0.0.0-test.1).
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false   # nothing here pushes: the token stays out of .git/config
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: ${{ runner.temp }}/release-assets
-          pattern: cortex-*
-          merge-multiple: true
-
-      # The spec of the release, from the tag's tree — what `cortex sync` downloads for a project
-      # pinned to this version by a newer binary (ADR-008 §3.3).
-      - name: The spec archive
-        run: python3 cli/build.py --spec-archive "$RUNNER_TEMP/release-assets"
-
-      # Asset names carry no version, so that releases/latest/download/<asset> always names the
-      # latest release's: the release itself is the version.
-      - name: SHA256SUMS
-        run: python3 cli/build.py --checksums "$RUNNER_TEMP/release-assets"
-
-      # The archives, and the binaries inside them: `gh attestation verify ~/.cortex/bin/cortex
-      # --repo xod-labs/cortex` then checks the installed file itself.
-      - name: The binaries inside the archives
-        run: |
-          for archive in "$RUNNER_TEMP/release-assets"/cortex-linux-*.tar.gz "$RUNNER_TEMP/release-assets"/cortex-macos-*.tar.gz; do
-            target="$(basename "$archive" .tar.gz)"
-            mkdir -p "$RUNNER_TEMP/release-binaries/$target" && tar -xzf "$archive" -C "$RUNNER_TEMP/release-binaries/$target" cortex
-          done
-          for archive in "$RUNNER_TEMP/release-assets"/cortex-*.zip; do
-            target="$(basename "$archive" .zip)"
-            mkdir -p "$RUNNER_TEMP/release-binaries/$target" && unzip -q "$archive" cortex.exe -d "$RUNNER_TEMP/release-binaries/$target"
-          done
-          ls -l "$RUNNER_TEMP/release-assets" "$RUNNER_TEMP/release-binaries"/*
-
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: |
-            ${{ runner.temp }}/release-assets/*
-            ${{ runner.temp }}/release-binaries/*/cortex*
-
-      # A draft first, published once every asset is on it. A release already published is never
-      # touched again: its assets are what users have installed and verified.
-      - name: The release, drafted, filled, then published
-        run: |
-          tag="$GITHUB_REF_NAME"
-          case "$tag" in *-*) prerelease=true ;; *) prerelease=false ;; esac
-          if draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)"; then
-            [ "$draft" = true ] || { echo "::error::release $tag is already published: its assets are not replaced"; exit 1; }
-          elif [ "$prerelease" = true ]; then
-            gh release create "$tag" --draft --verify-tag --prerelease --title "$tag" \
-              --notes "A pre-release, built from $tag — not a version of Cortex."
-          else
-            gh release create "$tag" --draft --verify-tag --title "$tag" --notes-file "changelog/$tag.md"
-          fi
-          gh release upload "$tag" "$RUNNER_TEMP/release-assets"/* --clobber
-          # "latest" is the highest version released, not the last one: a patch of an older line,
-          # 1.0.3 after 1.1.0, is published without taking it.
-          # Unlisted, every release would look older than this one: stop rather than guess.
-          released="$(gh release list --exclude-drafts --exclude-pre-releases --limit 1000 --json tagName --jq '.[].tagName')" ||
-            { echo "::error::could not list the releases: $tag is left a draft"; exit 1; }
-          highest="$({ printf '%s\n' "$released"; echo "$tag"; } | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
-          if [ "$prerelease" = true ]; then
-            gh release edit "$tag" --draft=false --prerelease --latest=false
-          elif [ "$highest" = "$tag" ]; then
-            gh release edit "$tag" --draft=false --latest
-          else
-            echo "$highest is higher: $tag is published, not made the latest"
-            gh release edit "$tag" --draft=false --latest=false
-          fi
