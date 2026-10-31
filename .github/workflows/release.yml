@@ -20,7 +20,10 @@ on:
         required: true
         type: string
 
-# One release at a time: two would race for their version and for `latest`.
+# One release at a time: two would race for their version and for `latest`. GitHub keeps one run
+# waiting per group: a third merge's run cancels the second's while it waits, and that release is
+# drafted only by running its run again. Releases are hours apart; wait for a merge's draft before
+# merging the next release (ADR-009 §9).
 concurrency:
   group: release cycle
   cancel-in-progress: false
